@@ -5,6 +5,19 @@
 // Callers draw in CSS pixels and may scale the context however they like (for devicePixelRatio): the
 // cache reads the context's current scale to pick its resolution, it never sets a transform.
 // The module touches no DOM at import time, so it loads in Node; canvases are created lazily.
+//
+// Notes for the caller (all within the SPEC section 7 signatures; every opt is optional):
+// - Tiles are opaque and complete: 'bud', 'root', 'gate', 'puddle', 'bridge' and 'hush' paint their
+//   own floor. Draw tiles first (any order), then the lantern, creatures and Wren (top row first
+//   looks best), then drawDarkness over the lot.
+// - `neighbors` is used by 'wall', 'puddle', 'bridge' and 'hush'. For walls, count off-board as wall.
+// - `seed` (any number or string, for example y * w + x) picks one of a few floor / rock variants.
+// - `accent` (any CSS colour) tints a Glowbud, or a root / gate channel. Channels default to amber
+//   (A), teal (B), rose (C); the circle / triangle / square mark is what really tells them apart.
+// - drawCreature: `hidden` (whelk) and `awake` (stumpcap) fall back to `lit` when left out.
+// - drawWren accepts one extra opt, `smothered: true`, to show the carried lantern gone dark.
+// - Sprites may reach a little outside their tile (shadows, glows, sleepy z's): up to a quarter tile.
+// - Dev gallery: dev/sprites.html (see dev/sprites-shot.cjs).
 
 const TAU = Math.PI * 2;
 const NONE = Object.freeze({});
@@ -789,9 +802,9 @@ function paintPuddle(g, nb, v) {
   K(g, rgba('#9cbad0', 0.45), 0.016);
   ell(g, 0.66, 0.4, 0.014, 0.012);
   F(g, rgba(CREAM, 0.85));
-  // near-bank reflection
+  // a pale shoreline where the water meets the bank (it reads as liquid even without colour)
   closed(g, hole);
-  K(g, rgba('#6f8cab', 0.28), 0.045);
+  K(g, rgba('#9fc0d6', 0.5), 0.05);
   g.restore();
   closed(g, hole);
   K(g, rgba(INK, 0.8), 0.026);
@@ -1694,7 +1707,7 @@ function paintStump(g, dir, awake, f) {
     return [cx + x * cs - yy * sn, cy + x * sn + yy * cs + (lift || 0)];
   };
   const at = (pts, lift) => pts.map((p) => R(p[0], p[1], lift));
-  const ext = awake ? 0.335 : 0.29; // how far the head reaches out
+  const ext = awake ? 0.335 : 0.3; // how far the head reaches out
   const capL = [[-0.29, -0.3], [0.29, -0.3], [0.29, 0.13], [-0.29, 0.13]];
   const bodyL = [[-0.2, -0.2], [0.2, -0.2], [0.2, ext], [-0.2, ext]];
   const footprint = [[-0.29, -0.3], [0.29, -0.3], [0.29, 0.13], [0.2, ext], [-0.2, ext], [-0.29, 0.13]];
@@ -1739,7 +1752,7 @@ function paintStump(g, dir, awake, f) {
       ell(g, e[0] - 0.016, e[1] - 0.018, 0.016, 0.016);
       F(g, '#ffffff');
     } else {
-      const e = R(sx * 0.098, ext - 0.085);
+      const e = R(sx * 0.098, ext - 0.078);
       g.beginPath();
       g.arc(e[0], e[1], 0.046, th + 0.1, th + Math.PI - 0.1);
       K(g, INK, 0.036);
@@ -2255,20 +2268,24 @@ export function drawIcon(ctx, name, px, py, size) {
 // ---------------------------------------------------------------------------
 
 const DK = 12; // the light mask is computed at this many pixels per tile, then scaled up softly
-const GUT = 2; // spare columns between the two halves of the mask
+const GUT = 2; // spare columns between the two layers
 const NIGHT = [33, 23, 47];
 const WARM = [255, 190, 104];
 const MAX_SIDE = 4096;
 const MAX_AREA = 8e6;
 
-// One cached canvas at device resolution holds both layers side by side: the plum darkness (left)
-// and the lantern's warm bloom, already cut to the lit tiles (right). It is rebuilt only when the
-// lit tiles, the board or tile size, the source (to a tenth of a tile) or highContrast change;
-// every other frame is two plain blits.
+// Far from the light the darkness is one flat colour, so only the lit tiles and a one-tile border
+// around them need a picture. That region is kept in ONE cached canvas at device resolution, two
+// layers side by side: the plum darkness with its soft edge (left) and the lantern's warm bloom,
+// already cut to the lit tiles (right). It is rebuilt only when the lit tiles, the board or tile
+// size, the source (to a tenth of a tile) or highContrast change. A frame is then four flat fills
+// around the region and two plain blits.
 const dark = {
   c: null, g: null, low: null, lg: null, img: null,
-  w: 0, h: 0, P: 0, sx: 0, sy: 0, sr: 0, hc: -1,
-  lit: null, mixed: null, any: false, gx: 0, gy: 0, gw: 0, gh: 0, valid: false,
+  w: 0, h: 0, P: 0, sx: 0, sy: 0, sr: 0, hc: -1, fill: '',
+  lit: null, mixed: null, any: false, valid: false,
+  rx: 0, ry: 0, rw: 0, rh: 0, // region, in tiles
+  gx: 0, gy: 0, gw: 0, gh: 0, // where the bloom is not empty, in cache pixels inside the region
 };
 
 function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
@@ -2281,23 +2298,8 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
     dark.lg = dark.low.getContext('2d');
     dark.img = dark.lg.createImageData(AW, LH);
   }
-  // layout: [1px bleed | board | 1px bleed] gutter [board], the left part being the darkness
-  // (tiles bleed one device pixel past the board, so the dark must too) and the right the bloom
-  const BW = w * P;
-  const BH = h * P;
-  const GX = BW + 2 + GUT;
-  const CW = GX + BW;
-  const CH = BH + 2;
-  if (!dark.c) {
-    dark.c = makeCanvas(CW, CH);
-    if (!dark.c) return false;
-    dark.g = dark.c.getContext('2d');
-  } else if (dark.c.width !== CW || dark.c.height !== CH) {
-    dark.c.width = CW;
-    dark.c.height = CH;
-  }
 
-  // copy the lit map, find its bounding box and which tiles sit on a lit/unlit border
+  // copy the lit map and find its bounding box
   const n = w * h;
   if (!dark.lit || dark.lit.length !== n) {
     dark.lit = new Uint8Array(n);
@@ -2322,183 +2324,7 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
     }
   }
   const any = bx1 >= 0;
-  const base = hc ? 0.3 : 0.6;
-  const g = dark.g;
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-  g.clearRect(0, 0, CW, CH);
-  g.fillStyle = 'rgba(' + NIGHT[0] + ',' + NIGHT[1] + ',' + NIGHT[2] + ',' + base + ')';
-  g.fillRect(0, 0, BW + 2, CH);
-
-  let gx = 0;
-  let gy = 0;
-  let gw = 0;
-  let gh = 0;
-  if (any) {
-    let rx0 = 0;
-    let ry0 = 0;
-    let rx1 = 0;
-    let ry1 = 0;
-    // only the lit tiles and a one-tile border around them need the soft mask
-    rx0 = Math.max(0, bx0 - 1);
-    ry0 = Math.max(0, by0 - 1);
-    rx1 = Math.min(w, bx1 + 2);
-    ry1 = Math.min(h, by1 + 2);
-    for (let y = ry0; y < ry1; y++) {
-      for (let x = rx0; x < rx1; x++) {
-        const own = m[y * w + x];
-        let mix = 0;
-        for (let oy = -1; oy <= 1 && !mix; oy++) {
-          const yy = y + oy;
-          if (yy < 0 || yy >= h) continue;
-          for (let ox = -1; ox <= 1; ox++) {
-            const xx = x + ox;
-            if (xx >= 0 && xx < w && m[yy * w + xx] !== own) {
-              mix = 1;
-              break;
-            }
-          }
-        }
-        mixed[y * w + x] = mix;
-      }
-    }
-    const d = dark.img.data;
-    const baseA = Math.round(base * 255);
-    const cxs = hasSource ? sx / 10 + 0.5 : (bx0 + bx1 + 1) / 2;
-    const cys = hasSource ? sy / 10 + 0.5 : (by0 + by1 + 1) / 2;
-    const reach = (hasSource ? sr / 10 : Math.max(bx1 - bx0, by1 - by0) / 2 + 0.5) + 0.9;
-    const i0 = Math.max(0, rx0 * DK - 1);
-    const i1 = Math.min(LW, rx1 * DK + 1);
-    const j0 = Math.max(0, ry0 * DK - 1);
-    const j1 = Math.min(LH, ry1 * DK + 1);
-    for (let j = j0; j < j1; j++) {
-      const v0 = (j + 0.5) / DK;
-      const wobX = 0.028 * Math.sin(v0 * 5.3 + 0.7);
-      const row = j * AW * 4;
-      for (let i = i0; i < i1; i++) {
-        const u0 = (i + 0.5) / DK;
-        // a slightly wandering sample point gives the light a hand-painted edge
-        const u = u0 + wobX;
-        const v = v0 + 0.028 * Math.sin(u0 * 4.7 + 1.9);
-        let tx = Math.floor(u);
-        let ty = Math.floor(v);
-        tx = tx < 0 ? 0 : tx >= w ? w - 1 : tx;
-        ty = ty < 0 ? 0 : ty >= h ? h - 1 : ty;
-        const own = m[ty * w + tx];
-        let s = own;
-        if (mixed[ty * w + tx]) {
-          // signed distance to the nearest tile of the other kind: light keeps the shape of its tiles
-          const fx = u - tx;
-          const fy = v - ty;
-          let best = 9;
-          for (let oy = -1; oy <= 1; oy++) {
-            const yy = ty + oy;
-            if (yy < 0 || yy >= h) continue;
-            const ddy = oy < 0 ? fy : oy > 0 ? 1 - fy : 0;
-            for (let ox = -1; ox <= 1; ox++) {
-              const xx = tx + ox;
-              if (xx < 0 || xx >= w || m[yy * w + xx] === own) continue;
-              const ddx = ox < 0 ? fx : ox > 0 ? 1 - fx : 0;
-              const dd = ddx * ddx + ddy * ddy;
-              if (dd < best) best = dd;
-            }
-          }
-          const sd = own ? Math.sqrt(best) : -Math.sqrt(best);
-          s = (sd + 0.15) / 0.2;
-          s = s < 0 ? 0 : s > 1 ? 1 : s;
-          s = s * s * (3 - 2 * s);
-        }
-        let aDark = baseA;
-        let aGlow = 0;
-        if (s > 0) {
-          const dx = u0 - cxs;
-          const dy = v0 - cys;
-          const far = Math.min(1, Math.sqrt(dx * dx + dy * dy) / reach);
-          const near = 1 - far;
-          aDark = baseA * (1 - s) + s * 30 * far * far;
-          aGlow = s * (20 + 76 * near * Math.sqrt(near));
-        }
-        const di = row + i * 4;
-        const gi = row + (LW + GUT + i) * 4;
-        d[di] = NIGHT[0];
-        d[di + 1] = NIGHT[1];
-        d[di + 2] = NIGHT[2];
-        d[di + 3] = aDark;
-        d[gi] = WARM[0];
-        d[gi + 1] = WARM[1];
-        d[gi + 2] = WARM[2];
-        d[gi + 3] = aGlow;
-      }
-      // gutter: repeat the neighbouring columns so scaling never bleeds one layer into the other
-      const a = row + (LW - 1) * 4;
-      const g0 = row + LW * 4;
-      const b = row + (LW + GUT) * 4;
-      for (let c = 0; c < 4; c++) {
-        d[g0 + c] = d[a + c];
-        d[g0 + 4 + c] = d[b + c];
-      }
-    }
-    dark.lg.putImageData(dark.img, 0, 0);
-    // scale the mask up into the cache (bilinear filtering is what makes the edges soft)
-    const sxl = rx0 * DK;
-    const syl = ry0 * DK;
-    const swl = (rx1 - rx0) * DK;
-    const shl = (ry1 - ry0) * DK;
-    const dx = rx0 * P;
-    const dy = ry0 * P;
-    const dw = (rx1 - rx0) * P;
-    const dh = (ry1 - ry0) * P;
-    // where the region touches the board's edge, stretch it one pixel over the bleed
-    const e0 = rx0 === 0 ? 1 : 0;
-    const e1 = ry0 === 0 ? 1 : 0;
-    const e2 = rx1 === w ? 1 : 0;
-    const e3 = ry1 === h ? 1 : 0;
-    g.imageSmoothingEnabled = true;
-    g.clearRect(1 + dx - e0, 1 + dy - e1, dw + e0 + e2, dh + e1 + e3);
-    g.drawImage(dark.low, sxl, syl, swl, shl, 1 + dx - e0, 1 + dy - e1, dw + e0 + e2, dh + e1 + e3);
-    g.drawImage(dark.low, LW + GUT + sxl, syl, swl, shl, GX + dx, dy, dw, dh);
-    // the bloom only needs blitting where it is not empty: the lit tiles plus their soft edge
-    gx = Math.max(0, Math.floor((bx0 - 0.25) * P));
-    gy = Math.max(0, Math.floor((by0 - 0.25) * P));
-    gw = Math.min(BW, Math.ceil((bx1 + 1.25) * P)) - gx;
-    gh = Math.min(BH, Math.ceil((by1 + 1.25) * P)) - gy;
-
-    if (hc) {
-      // high contrast: a crisp line around the lit tiles
-      g.lineCap = 'round';
-      g.beginPath();
-      for (let y = by0; y <= by1; y++) {
-        for (let x = bx0; x <= bx1; x++) {
-          if (!m[y * w + x]) continue;
-          if (y === 0 || !m[(y - 1) * w + x]) {
-            g.moveTo(1 + x * P, 1 + y * P);
-            g.lineTo(1 + (x + 1) * P, 1 + y * P);
-          }
-          if (y === h - 1 || !m[(y + 1) * w + x]) {
-            g.moveTo(1 + x * P, 1 + (y + 1) * P);
-            g.lineTo(1 + (x + 1) * P, 1 + (y + 1) * P);
-          }
-          if (x === 0 || !m[y * w + x - 1]) {
-            g.moveTo(1 + x * P, 1 + y * P);
-            g.lineTo(1 + x * P, 1 + (y + 1) * P);
-          }
-          if (x === w - 1 || !m[y * w + x + 1]) {
-            g.moveTo(1 + (x + 1) * P, 1 + y * P);
-            g.lineTo(1 + (x + 1) * P, 1 + (y + 1) * P);
-          }
-        }
-      }
-      g.strokeStyle = INK;
-      g.lineWidth = Math.max(3, P * 0.1);
-      g.stroke();
-      g.strokeStyle = '#fff3d6';
-      g.lineWidth = Math.max(1.5, P * 0.045);
-      g.stroke();
-      // the stroke's round caps may poke into the gutter: wipe it
-      g.clearRect(BW + 2, 0, GUT, CH);
-    }
-  }
+  const baseA = Math.round((hc ? 0.3 : 0.6) * 255);
   dark.w = w;
   dark.h = h;
   dark.P = P;
@@ -2506,17 +2332,194 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
   dark.sy = sy;
   dark.sr = sr;
   dark.hc = hc;
+  dark.fill = 'rgba(' + NIGHT[0] + ',' + NIGHT[1] + ',' + NIGHT[2] + ',' + baseA / 255 + ')';
   dark.any = any;
-  dark.gx = gx;
-  dark.gy = gy;
-  dark.gw = gw;
-  dark.gh = gh;
   dark.valid = true;
+  if (!any) return true;
+
+  // the region: the lit tiles and one tile around them
+  const rx0 = Math.max(0, bx0 - 1);
+  const ry0 = Math.max(0, by0 - 1);
+  const rx1 = Math.min(w, bx1 + 2);
+  const ry1 = Math.min(h, by1 + 2);
+  for (let y = ry0; y < ry1; y++) {
+    for (let x = rx0; x < rx1; x++) {
+      const own = m[y * w + x];
+      let mix = 0;
+      for (let oy = -1; oy <= 1 && !mix; oy++) {
+        const yy = y + oy;
+        if (yy < 0 || yy >= h) continue;
+        for (let ox = -1; ox <= 1; ox++) {
+          const xx = x + ox;
+          if (xx >= 0 && xx < w && m[yy * w + xx] !== own) {
+            mix = 1;
+            break;
+          }
+        }
+      }
+      mixed[y * w + x] = mix;
+    }
+  }
+
+  // the mask, at low resolution (one pixel of margin so scaling never reads stale pixels)
+  const d = dark.img.data;
+  const cxs = hasSource ? sx / 10 + 0.5 : (bx0 + bx1 + 1) / 2;
+  const cys = hasSource ? sy / 10 + 0.5 : (by0 + by1 + 1) / 2;
+  const reach = (hasSource ? sr / 10 : Math.max(bx1 - bx0, by1 - by0) / 2 + 0.5) + 0.9;
+  const i0 = Math.max(0, rx0 * DK - 1);
+  const i1 = Math.min(LW, rx1 * DK + 1);
+  const j0 = Math.max(0, ry0 * DK - 1);
+  const j1 = Math.min(LH, ry1 * DK + 1);
+  for (let j = j0; j < j1; j++) {
+    const v0 = (j + 0.5) / DK;
+    const wobX = 0.028 * Math.sin(v0 * 5.3 + 0.7);
+    const row = j * AW * 4;
+    for (let i = i0; i < i1; i++) {
+      const u0 = (i + 0.5) / DK;
+      // a slightly wandering sample point gives the light a hand-painted edge
+      const u = u0 + wobX;
+      const v = v0 + 0.028 * Math.sin(u0 * 4.7 + 1.9);
+      let tx = Math.floor(u);
+      let ty = Math.floor(v);
+      tx = tx < 0 ? 0 : tx >= w ? w - 1 : tx;
+      ty = ty < 0 ? 0 : ty >= h ? h - 1 : ty;
+      const own = m[ty * w + tx];
+      let s = own;
+      if (mixed[ty * w + tx]) {
+        // signed distance to the nearest tile of the other kind: light keeps the shape of its tiles
+        const fx = u - tx;
+        const fy = v - ty;
+        let best = 9;
+        for (let oy = -1; oy <= 1; oy++) {
+          const yy = ty + oy;
+          if (yy < 0 || yy >= h) continue;
+          const ddy = oy < 0 ? fy : oy > 0 ? 1 - fy : 0;
+          for (let ox = -1; ox <= 1; ox++) {
+            const xx = tx + ox;
+            if (xx < 0 || xx >= w || m[yy * w + xx] === own) continue;
+            const ddx = ox < 0 ? fx : ox > 0 ? 1 - fx : 0;
+            const dd = ddx * ddx + ddy * ddy;
+            if (dd < best) best = dd;
+          }
+        }
+        const sd = own ? Math.sqrt(best) : -Math.sqrt(best);
+        s = (sd + 0.15) / 0.2;
+        s = s < 0 ? 0 : s > 1 ? 1 : s;
+        s = s * s * (3 - 2 * s);
+      }
+      let aDark = baseA;
+      let aGlow = 0;
+      if (s > 0) {
+        const dx = u0 - cxs;
+        const dy = v0 - cys;
+        const far = Math.min(1, Math.sqrt(dx * dx + dy * dy) / reach);
+        const near = 1 - far;
+        aDark = baseA * (1 - s) + s * 30 * far * far;
+        aGlow = s * (20 + 76 * near * Math.sqrt(near));
+      }
+      const di = row + i * 4;
+      const gi = row + (LW + GUT + i) * 4;
+      d[di] = NIGHT[0];
+      d[di + 1] = NIGHT[1];
+      d[di + 2] = NIGHT[2];
+      d[di + 3] = aDark;
+      d[gi] = WARM[0];
+      d[gi + 1] = WARM[1];
+      d[gi + 2] = WARM[2];
+      d[gi + 3] = aGlow;
+    }
+    // gutter: repeat the neighbouring columns so scaling never bleeds one layer into the other
+    const a = row + (LW - 1) * 4;
+    const g0 = row + LW * 4;
+    const b = row + (LW + GUT) * 4;
+    for (let c = 0; c < 4; c++) {
+      d[g0 + c] = d[a + c];
+      d[g0 + 4 + c] = d[b + c];
+    }
+  }
+  dark.lg.putImageData(dark.img, 0, 0);
+
+  // scale the region up into the cache (bilinear filtering is what makes the edges soft)
+  const RW = (rx1 - rx0) * P;
+  const RH = (ry1 - ry0) * P;
+  const CW = RW * 2 + GUT;
+  if (!dark.c) {
+    dark.c = makeCanvas(CW, RH);
+    if (!dark.c) return false;
+    dark.g = dark.c.getContext('2d');
+  } else if (dark.c.width < CW || dark.c.height < RH || dark.c.width > CW * 2 || dark.c.height > RH * 2) {
+    dark.c.width = CW;
+    dark.c.height = RH;
+  }
+  const g = dark.g;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.imageSmoothingEnabled = true;
+  g.clearRect(0, 0, CW, RH);
+  const sxl = rx0 * DK;
+  const syl = ry0 * DK;
+  const swl = (rx1 - rx0) * DK;
+  const shl = (ry1 - ry0) * DK;
+  g.drawImage(dark.low, sxl, syl, swl, shl, 0, 0, RW, RH);
+  g.drawImage(dark.low, LW + GUT + sxl, syl, swl, shl, RW + GUT, 0, RW, RH);
+
+  if (hc) {
+    // high contrast: a crisp line around the lit tiles
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, RW, RH);
+    g.clip();
+    g.lineCap = 'round';
+    g.beginPath();
+    for (let y = by0; y <= by1; y++) {
+      for (let x = bx0; x <= bx1; x++) {
+        if (!m[y * w + x]) continue;
+        const X = (x - rx0) * P;
+        const Y = (y - ry0) * P;
+        if (y === 0 || !m[(y - 1) * w + x]) {
+          g.moveTo(X, Y);
+          g.lineTo(X + P, Y);
+        }
+        if (y === h - 1 || !m[(y + 1) * w + x]) {
+          g.moveTo(X, Y + P);
+          g.lineTo(X + P, Y + P);
+        }
+        if (x === 0 || !m[y * w + x - 1]) {
+          g.moveTo(X, Y);
+          g.lineTo(X, Y + P);
+        }
+        if (x === w - 1 || !m[y * w + x + 1]) {
+          g.moveTo(X + P, Y);
+          g.lineTo(X + P, Y + P);
+        }
+      }
+    }
+    g.strokeStyle = INK;
+    g.lineWidth = Math.max(3, P * 0.1);
+    g.stroke();
+    g.strokeStyle = '#fff3d6';
+    g.lineWidth = Math.max(1.5, P * 0.045);
+    g.stroke();
+    g.restore();
+  }
+
+  dark.rx = rx0;
+  dark.ry = ry0;
+  dark.rw = rx1 - rx0;
+  dark.rh = ry1 - ry0;
+  // the bloom only needs blitting where it is not empty: the lit tiles plus their soft edge
+  dark.gx = Math.max(0, Math.floor((bx0 - 0.25 - rx0) * P));
+  dark.gy = Math.max(0, Math.floor((by0 - 0.25 - ry0) * P));
+  dark.gw = Math.min(RW, Math.ceil((bx1 + 1.25 - rx0) * P)) - dark.gx;
+  dark.gh = Math.min(RH, Math.ceil((by1 + 1.25 - ry0) * P)) - dark.gy;
   return true;
 }
 
 // Paints the dark over a fully lit board whose top-left is (ox, oy).
 // opts: { ox, oy, size, w, h, lit, source: { x, y, radius } | null, t, highContrast }
+// `lit` is the engine's array (index y * w + x). `source.x/y` are tile coordinates like the
+// lantern's (3 means the middle of column 3), fractions allowed. No source: everything is dark.
 export function drawDarkness(ctx, opts) {
   const o = opts || NONE;
   const w = o.w | 0;
@@ -2526,13 +2529,30 @@ export function drawDarkness(ctx, opts) {
   const ox = o.ox || 0;
   const oy = o.oy || 0;
   const src = o.source || null;
-  const lit = src ? o.lit : null; // no source (smothered): everything is dark
+  const lit = src ? o.lit : null;
   const hc = o.highContrast ? 1 : 0;
   const sx = src ? Math.round((+src.x || 0) * 10) : -99999;
   const sy = src ? Math.round((+src.y || 0) * 10) : -99999;
   const sr = src ? Math.round((src.radius > 0 ? src.radius : 1) * 10) : 0;
-  // device pixels per tile, kept within a sane canvas size
-  let P = Math.round(size * ctxScale(ctx));
+
+  // The context's scale and offset, read once per frame: the cache is kept at device resolution,
+  // and the region's edges are snapped to whole device pixels so the fills meet it without a seam.
+  let a = 0;
+  let e = 0;
+  let f = 0;
+  let snap = false;
+  if (typeof ctx.getTransform === 'function') {
+    const tm = ctx.getTransform();
+    if (tm.b === 0 && tm.c === 0 && tm.a > 0 && tm.a === tm.d) {
+      a = tm.a;
+      e = tm.e;
+      f = tm.f;
+      snap = true;
+    }
+  }
+  if (!snap) a = ctxScale(ctx);
+
+  let P = Math.round(size * a);
   const cap = Math.min(Math.floor((MAX_SIDE - GUT) / (2 * w)), Math.floor(MAX_SIDE / h), Math.floor(Math.sqrt(MAX_AREA / (2 * w * h))));
   if (P > cap) P = cap;
   if (P < 4) P = 4;
@@ -2549,22 +2569,50 @@ export function drawDarkness(ctx, opts) {
   }
   if (dirty && !rebuildDark(w, h, P, lit, !!src, sx, sy, sr, hc)) return;
 
-  const BW = w * P;
-  const BH = h * P;
-  const e = size / P; // one cache pixel, in the caller's units
+  // the board, plus the one device pixel that tiles bleed past it
+  const px1 = 1 / a;
+  const bx0 = ox - px1;
+  const by0 = oy - px1;
+  const bx1 = ox + w * size + px1;
+  const by1 = oy + h * size + px1;
+  const fs = ctx.fillStyle;
+  ctx.fillStyle = dark.fill;
+  if (!dark.any) {
+    ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+    ctx.fillStyle = fs;
+    return;
+  }
+  let x0 = ox + dark.rx * size;
+  let y0 = oy + dark.ry * size;
+  let x1 = x0 + dark.rw * size;
+  let y1 = y0 + dark.rh * size;
+  if (snap) {
+    x0 = (Math.round(x0 * a + e) - e) / a;
+    x1 = (Math.round(x1 * a + e) - e) / a;
+    y0 = (Math.round(y0 * a + f) - f) / a;
+    y1 = (Math.round(y1 * a + f) - f) / a;
+  }
+  if (y0 > by0) ctx.fillRect(bx0, by0, bx1 - bx0, y0 - by0);
+  if (by1 > y1) ctx.fillRect(bx0, y1, bx1 - bx0, by1 - y1);
+  if (x0 > bx0) ctx.fillRect(bx0, y0, x0 - bx0, y1 - y0);
+  if (bx1 > x1) ctx.fillRect(x1, y0, bx1 - x1, y1 - y0);
+  ctx.fillStyle = fs;
+
+  const RW = dark.rw * P;
+  const RH = dark.rh * P;
+  const kx = (x1 - x0) / RW;
+  const ky = (y1 - y0) / RH;
   const smooth = ctx.imageSmoothingEnabled;
   if (smooth === false) ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(dark.c, 0, 0, BW + 2, BH + 2, ox - e, oy - e, (BW + 2) * e, (BH + 2) * e);
-  if (dark.any) {
-    const t = o.t || 0;
-    const al = ctx.globalAlpha;
-    const op = ctx.globalCompositeOperation;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = al * (0.84 + 0.16 * flicker(t * 0.8));
-    ctx.drawImage(dark.c, BW + 2 + GUT + dark.gx, dark.gy, dark.gw, dark.gh, ox + dark.gx * e, oy + dark.gy * e, dark.gw * e, dark.gh * e);
-    ctx.globalAlpha = al;
-    ctx.globalCompositeOperation = op;
-  }
+  ctx.drawImage(dark.c, 0, 0, RW, RH, x0, y0, x1 - x0, y1 - y0);
+  const t = o.t || 0;
+  const al = ctx.globalAlpha;
+  const op = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = al * (0.84 + 0.16 * flicker(t * 0.8));
+  ctx.drawImage(dark.c, RW + GUT + dark.gx, dark.gy, dark.gw, dark.gh, x0 + dark.gx * kx, y0 + dark.gy * ky, dark.gw * kx, dark.gh * ky);
+  ctx.globalAlpha = al;
+  ctx.globalCompositeOperation = op;
   if (smooth === false) ctx.imageSmoothingEnabled = false;
 }
 
@@ -2668,7 +2716,6 @@ export function drawBackdrop(ctx, width, height, opts) {
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
     g.imageSmoothingEnabled = true;
-    g.imageSmoothingQuality = 'high';
     g.drawImage(low, 0, 0, cw, ch);
     stampGrain(g, cw, ch, 0.16, 9, Math.max(1, cw / Math.max(1, width)));
     back.w = bw;

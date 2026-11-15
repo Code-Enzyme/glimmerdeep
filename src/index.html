@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2B1E3A">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>Glimmerdeep</title>
+<style>/*__CSS__*/</style>
+</head>
+<body>
+<div id="app" class="app" data-screen="map">
+
+  <!-- Map: the home screen -->
+  <main id="screen-map" class="screen map">
+    <header class="map-head">
+      <h1 class="title">Glimmerdeep</h1>
+      <p class="subtitle">A lamplighter's field journal</p>
+    </header>
+
+    <div id="chapters" class="chapters"></div>
+
+    <div id="confirm" class="confirm paper" role="alertdialog" aria-labelledby="confirm-text" hidden>
+      <p id="confirm-text">Rub out every star moss and best score in the journal?</p>
+      <div class="buttons">
+        <button id="confirm-yes" class="btn warn" type="button" aria-label="Erase all progress">Erase</button>
+        <button id="confirm-no" class="btn" type="button" aria-label="Keep my progress">Keep</button>
+      </div>
+    </div>
+
+    <nav class="bar settings" aria-label="Settings">
+      <button id="set-sound" class="tool" type="button" aria-pressed="true" aria-label="Sound">
+        <span class="ico" data-icon="sound"></span><span class="lbl">Sound</span><span class="val">on</span>
+      </button>
+      <button id="set-contrast" class="tool" type="button" aria-pressed="false" aria-label="High contrast">
+        <span class="ico" data-icon="contrast"></span><span class="lbl">Contrast</span><span class="val">off</span>
+      </button>
+      <button id="set-unlock" class="tool" type="button" aria-pressed="false" aria-label="Unlock all levels">
+        <span class="ico" data-icon="lock"></span><span class="lbl">Unlock all</span><span class="val">off</span>
+      </button>
+      <button id="set-reset" class="tool" type="button" aria-label="Reset progress">
+        <span class="ico" data-icon="restart"></span><span class="lbl">Reset</span><span class="val">progress</span>
+      </button>
+    </nav>
+  </main>
+
+  <!-- Level: top bar, board, thumb bar -->
+  <section id="screen-level" class="screen level" hidden>
+    <div class="level-head">
+      <header class="topbar">
+        <button id="back" class="round" type="button" aria-label="Back to map"><span class="ico" data-icon="map"></span></button>
+        <div class="heading">
+          <span id="level-id" class="kicker"></span>
+          <h2 id="level-name"></h2>
+        </div>
+        <div id="counter" class="counter" role="status" aria-label="Moves"></div>
+      </header>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </div>
+
+    <div id="stage" class="stage">
+      <canvas id="board" role="img" aria-label="The cave board. Swipe to walk, tap Wren to use the lantern."></canvas>
+    </div>
+
+    <nav class="bar tools" aria-label="Actions">
+      <button id="btn-undo" class="tool" type="button" aria-label="Undo">
+        <span class="ico" data-icon="undo"></span><span class="lbl">Undo</span>
+      </button>
+      <button id="btn-restart" class="tool" type="button" aria-label="Restart level">
+        <span class="ico" data-icon="restart"></span><span class="lbl">Restart</span>
+      </button>
+      <button id="btn-wait" class="tool" type="button" aria-label="Wait one turn">
+        <span class="ico" data-icon="wait"></span><span class="lbl">Wait</span>
+      </button>
+      <button id="btn-lantern" class="tool lantern" type="button" aria-label="Plant the lantern">
+        <span class="ico" data-icon="lantern"></span><span class="lbl">Plant</span>
+      </button>
+      <button id="btn-hint" class="tool" type="button" aria-label="Hint">
+        <span class="ico" data-icon="hint"></span><span class="lbl">Hint</span>
+      </button>
+    </nav>
+
+    <div id="scrim" class="scrim" hidden></div>
+
+    <aside id="card" class="sheet paper card" role="dialog" aria-modal="true" aria-labelledby="card-title" hidden>
+      <div class="card-top">
+        <span id="card-art" class="card-art" aria-hidden="true"></span>
+        <div>
+          <span class="kicker ink">Field note</span>
+          <h3 id="card-title"></h3>
+        </div>
+      </div>
+      <p id="card-text"></p>
+      <div class="buttons">
+        <button id="card-close" class="btn primary" type="button" aria-label="Close field note">Got it</button>
+      </div>
+    </aside>
+
+    <aside id="result" class="sheet paper result" role="dialog" aria-modal="true" aria-labelledby="result-name" hidden>
+      <span id="result-id" class="kicker ink"></span>
+      <h3 id="result-name"></h3>
+      <p id="result-moves" class="result-moves"></p>
+      <ul id="result-marks" class="marks"></ul>
+      <p id="result-best" class="result-best"></p>
+      <div class="buttons">
+        <button id="result-next" class="btn primary" type="button" aria-label="Next level">Next level</button>
+        <button id="result-replay" class="btn" type="button" aria-label="Replay this level">Replay</button>
+        <button id="result-map" class="btn" type="button" aria-label="Back to map">Map</button>
+      </div>
+    </aside>
+  </section>
+</div>
+<noscript><p style="color:#F4EAD5;font:16px Georgia,serif;padding:24px">Glimmerdeep needs JavaScript to light its lantern.</p></noscript>
+<script>/*__JS__*/</script>
+</body>
+</html>

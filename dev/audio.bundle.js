@@ -72,7 +72,7 @@ var GAudio = (() => {
   var LAYER_FADE = 1;
   var BUD_TOP = 10;
   var LEVELS = {
-    step: 0.32,
+    step: 0.24,
     blocked: 0.225,
     plant: 0.4,
     pickup: 0.25,
@@ -1125,9 +1125,6 @@ var GAudio = (() => {
           voices: mu.voices.size,
           gains: layerFaders.map(function(f) {
             return faderValue(f, now);
-          }),
-          live: layers.map(function(g) {
-            return g.gain.value;
           }),
           bus: faderValue(musicFader, now)
         },

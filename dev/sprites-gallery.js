@@ -407,6 +407,46 @@ async function measure() {
     out['cold first frame (all sprites painted), 43px, dpr3'] = { ms: +(performance.now() - t0).toFixed(1) };
   }
   run('board+darkness, 40px, dpr1 (300 frames)', 40, 1, 300, board);
+  {
+    // a full-size 9 x 11 level (99 tiles, 8 creatures), the most the game ever draws
+    const rows = ['#########', '#G..~H..#', '#.#.=H#.#', '#.......#', '#a..#A..#', '#....G..#', '#..b....#', '#.#B#.~.#', '#...c.C.#', '#G......#', '#########'];
+    const big = {
+      rows,
+      wren: { x: 3, y: 6, dir: 'S' },
+      lantern: { x: 3, y: 5, carried: false },
+      creatures: [
+        { type: 'S', x: 2, y: 3 }, { type: 'T', x: 1, y: 6, dir: 'E' }, { type: 'M', x: 4, y: 6 }, { type: 'M', x: 7, y: 1 },
+        { type: 'S', x: 6, y: 8 }, { type: 'T', x: 7, y: 3, dir: 'S' }, { type: 'T', x: 2, y: 9, dir: 'N' }, { type: 'M', x: 6, y: 5 },
+      ],
+    };
+    const bigLit = floodLight(big);
+    const bigFrame = (ctx, t, W, H, size) => {
+      S.drawBackdrop(ctx, W, H, { t });
+      drawBoard(ctx, big, 20, 20, size, t, bigLit);
+      S.drawDarkness(ctx, { ox: 20, oy: 20, size, w: 9, h: 11, lit: bigLit, source: { x: 3, y: 5, radius: 2 }, t });
+    };
+    const runBig = (label, scale) => {
+      const size = 40;
+      const c = document.createElement('canvas');
+      const W = 9 * size + 40;
+      const H = 11 * size + 40;
+      c.width = Math.round(W * scale);
+      c.height = Math.round(H * scale);
+      const ctx = c.getContext('2d');
+      ctx.scale(scale, scale);
+      for (let i = 0; i < 12; i++) bigFrame(ctx, i / 60, W, H, size);
+      ctx.getImageData(0, 0, 1, 1);
+      const t0 = performance.now();
+      for (let i = 0; i < 300; i++) {
+        bigFrame(ctx, 1 + i / 60, W, H, size);
+        ctx.getImageData(0, 0, 1, 1);
+      }
+      out[label] = { msPerFrameFlushedEachFrame: +((performance.now() - t0) / 300).toFixed(3) };
+    };
+    runBig('9x11 level: backdrop+99 tiles+8 creatures+darkness, 40px, dpr1', 1);
+    runBig('9x11 level, dpr2', 2);
+    runBig('9x11 level, dpr3', 3);
+  }
   run('backdrop+board+darkness, 40px, dpr1', 40, 1, 300, full);
   run('backdrop+board+darkness, 40px, dpr3', 40, 3, 300, full);
   run('same, lantern moving every frame, dpr3', 40, 3, 300, moving);

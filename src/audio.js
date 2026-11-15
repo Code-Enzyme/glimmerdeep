@@ -43,10 +43,11 @@ const LAYER3_AT = 0.65; // celesta joins above this (so 2 of 3 Glowbuds already 
 const LAYER_FADE = 1; // seconds for a layer to fade in or out
 const BUD_TOP = 10; // highest step of the Glowbud scale walk (two octaves)
 
-// Final level of each one-shot, set from the measurements in dev/audio-check.cjs so that the
-// quiet foley sits well under the musical feedback.
+// Final level of each one-shot, set from the measurements in dev/audio-check.cjs (run it with
+// --levels after changing a sound). Foley peaks around 0.1 to 0.3, the Glowbud note at 0.3 and
+// the solve phrase at 0.4, before the master chain.
 const LEVELS = {
-  step: 0.32, blocked: 0.225, plant: 0.4, pickup: 0.25, wait: 0.11, moth: 0.1, settle: 0.3,
+  step: 0.24, blocked: 0.225, plant: 0.4, pickup: 0.25, wait: 0.11, moth: 0.1, settle: 0.3,
   whelkMove: 0.12, whelkHide: 0.15, whelkEmerge: 0.18, stumpStep: 0.195, stumpBump: 0.28,
   stumpWake: 0.1, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
   undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185,
@@ -1193,7 +1194,6 @@ export function createAudioEngine(ctx, options) {
         running: mu.running, playing: st.playing, intensity: st.intensity, chapter: st.chapter,
         layers: mu.on.slice(), voices: mu.voices.size,
         gains: layerFaders.map(function (f) { return faderValue(f, now); }),
-        live: layers.map(function (g) { return g.gain.value; }),
         bus: faderValue(musicFader, now),
       },
       counts: Object.assign({}, counts),

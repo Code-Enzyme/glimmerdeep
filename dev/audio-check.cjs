@@ -359,6 +359,7 @@ function pageLib() {
         centroids: list.map(function (m) { return Math.round(m.centroid); }),
         pitches: list.map(function (m) { return Math.round(m.dominant); }),
         durs: list.map(function (m) { return Math.round(m.dur * 1000); }),
+        peaks: list.map(function (m) { return m.peak; }),
         centroidSpread: spread('centroid'),
         pitchSpread: spread('dominant'),
         durSpread: spread('dur'),
@@ -469,6 +470,15 @@ function pageLib() {
       const d = describe(res.x, 2 * SR, 10 * SR, 8192);
       out.chapters.push({ chapter, dominant: d.dominant, centroid: d.centroid, rms: d.rms, peak: d.peak });
     }
+    // A rough cost figure: the full bed plus a busy turn every second, timed.
+    const busy = [[0, function (e) { e.setMusic({ playing: true, intensity: 1, chapter: 1 }); }]];
+    for (let t = 1; t < 20; t += 1) {
+      busy.push([t, function (e) { ['step', 'moth', 'moth', 'whelkMove', 'stumpStep', 'gateOpen', 'budOn'].forEach(function (n) { e.play(n); }); }]);
+    }
+    const t0 = performance.now();
+    const load = await runEngine(20, busy);
+    out.cost = { ms: performance.now() - t0, seconds: 20, peak: peakOf(load.x, 0, load.x.length), errors: load.errors };
+
     // Layers fading: all on, then intensity drops to 0 at 8 s, back to 0.5 at 12 s. A steady probe
     // tone is fed through each layer's gain, so the fade is measured on the output itself.
     const probes = [9000, 10500, 12000];
@@ -712,7 +722,8 @@ async function offline(page) {
   const v = await page.evaluate(() => window.Lab.variation());
   for (const r of v) {
     check((r.centroidSpread > 0.03 || r.pitchSpread > 0.03) && r.durSpread > 0.03 && r.repeatable, r.name + ' varies in pitch and length from play to play',
-      'centroid ' + r.centroids.join(' ') + ' Hz, strongest ' + r.pitches.join(' ') + ' Hz, length ' + r.durs.join(' ') + ' ms');
+      'centroid ' + r.centroids.join(' ') + ' Hz, strongest ' + r.pitches.join(' ') + ' Hz, length ' + r.durs.join(' ') + ' ms, peak ' +
+      r.peaks.map((v) => v.toFixed(2)).join(' '));
   }
 
   head('4. Glowbud scale walk (through the engine, chapter 1: D E F# A B)');
@@ -782,6 +793,10 @@ async function offline(page) {
   check(l0.counts.kalimba === 0 && l0.counts.celesta === 0 && l5.counts.kalimba > 0 && l5.counts.celesta === 0 &&
     l1.counts.kalimba > 0 && l1.counts.celesta > 0, 'layers: pad only, then kalimba, then celesta');
   check(m.levels.every((r) => r.errors.length === 0), 'no exceptions');
+
+  check(m.cost.ms < m.cost.seconds * 1000 / 10 && m.cost.peak < PEAK_LIMIT && m.cost.errors.length === 0,
+    'full bed plus a 7-sound turn every second renders far faster than real time',
+    m.cost.seconds + ' s of audio in ' + Math.round(m.cost.ms) + ' ms on this machine (' + Math.round(m.cost.seconds * 1000 / m.cost.ms) + 'x), peak ' + f3(m.cost.peak));
 
   head('   Chapters (intensity 1)');
   table([
