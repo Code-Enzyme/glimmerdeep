@@ -422,13 +422,29 @@ function pageLib() {
     ]);
     const f = describe(flood.x);
     const counts = flood.eng.debug().counts;
+    // order does not matter inside a frame, but a player action in the next frame does not wait
+    let log2 = null;
+    const next = await runEngine(3, [
+      [0.5, function (e) { ['moth', 'step', 'ui', 'whelkMove', 'stumpStep', 'whelkHide', 'stumpBump'].forEach(function (n) { e.play(n); }); }],
+      [0.6, function (e) { e.play('step'); e.play('moth'); log2 = e.debug().log; }],
+    ]);
+    const firstFrame = log2.filter(function (l) { return l.action === 'play' && l.at < 0.55; });
+    const gaps2 = [];
+    for (let i = 1; i < firstFrame.length; i++) gaps2.push(firstFrame[i].start - firstFrame[i - 1].start);
+    const laterStep = log2.filter(function (l) { return l.at > 0.55 && l.name === 'step'; })[0];
+    const laterMoth = log2.filter(function (l) { return l.at > 0.55 && l.name === 'moth'; })[0];
+    const lastOfFirst = firstFrame[firstFrame.length - 1];
     return {
       asked: names.length,
       played: played.map(function (p) { return p.name + '@' + Math.round((p.start - 0.5) * 1000); }),
       dropped: log.filter(function (l) { return l.action === 'drop'; }).map(function (l) { return l.name; }),
       gaps, most, peak: d.peak, rms: d.rms,
       floodPeak: f.peak, floodPlayed: counts.played, floodDropped: counts.dropped, floodStolen: counts.stolen,
-      errors: res.errors.concat(flood.errors),
+      gaps2,
+      stepDelay: laterStep.start - laterStep.at,
+      mothAfter: laterMoth.start - Math.max(lastOfFirst.start, laterStep.start),
+      queueEnd: lastOfFirst.start - 0.5,
+      errors: res.errors.concat(flood.errors, next.errors),
     };
   }
 
@@ -730,6 +746,10 @@ async function offline(page) {
   console.log('        dropped: ' + (b.dropped.join(' ') || 'none'));
   check(b.gaps.every((g) => g >= 0.04 - 1e-9 && g <= 0.07 + 1e-9), 'same-frame sounds are staggered 40 to 70 ms apart',
     b.gaps.map((g) => Math.round(g * 1000)).join(' ') + ' ms');
+  check(b.gaps2.length >= 4 && b.gaps2.every((g) => g >= 0.04 - 1e-9 && g <= 0.07 + 1e-9), 'in any order (moth, step, ui, ...)',
+    b.gaps2.map((g) => Math.round(g * 1000)).join(' ') + ' ms');
+  check(b.stepDelay < 0.03 && b.mothAfter >= 0.04 - 1e-9, "a 'step' in the next frame answers at once; its creatures queue behind",
+    'step after ' + Math.round(b.stepDelay * 1000) + ' ms while the last turn runs to ' + Math.round(b.queueEnd * 1000) + ' ms; moth ' + Math.round(b.mothAfter * 1000) + ' ms later');
   check(b.most <= 6, 'never more than 6 one-shots at once', 'most at once: ' + b.most);
   check(b.played.some((p) => p.startsWith('solve@')) && b.played.some((p) => p.startsWith('budOn@')), "'budOn' and 'solve' are never dropped");
   check(b.peak < PEAK_LIMIT, 'busy turn stays under the peak limit', 'peak ' + f3(b.peak) + ', rms ' + f3(b.rms));

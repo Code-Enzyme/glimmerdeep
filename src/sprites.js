@@ -544,7 +544,7 @@ const K_WREN = 10, K_LANTERN = 11, K_MOTH = 12, K_WHELK = 13, K_STUMP = 14, K_ZE
 // Tile painters
 // ---------------------------------------------------------------------------
 
-const FLOOR_BASE = ['#7a5c58', '#7e6059', '#765856', '#7b5d5b'];
+const FLOOR_BASE = ['#7a5c58', '#80625a', '#755755', '#7c5f5c'];
 
 function paintFloor(g, v) {
   const rnd = rng(9001 + v * 131);
@@ -591,6 +591,8 @@ function paintFloor(g, v) {
     K(g, rgba('#35242f', 0.5), 0.016);
   };
   const moss = (x, y, n) => {
+    blob(g, x, y, 0.15, 0.085, rnd, 0.18, 9);
+    F(g, rgba('#4c8f7f', 0.3));
     for (let i = 0; i < n; i++) {
       blob(g, x + (rnd() - 0.5) * 0.2, y + (rnd() - 0.5) * 0.11, 0.028 + rnd() * 0.03, 0.02 + rnd() * 0.018, rnd, 0.15, 6);
       F(g, i % 3 ? rgba('#4c8f7f', 0.85) : rgba('#79bfaa', 0.85));
@@ -681,7 +683,7 @@ function paintWall(g, nb, v) {
   }
   // top face: dusky plum stone, chiselled into a few planes
   topPath();
-  F(g, '#493850');
+  F(g, '#44344c');
   g.save();
   topPath();
   g.clip();
@@ -690,7 +692,7 @@ function paintWall(g, nb, v) {
     const y = rnd() * topH;
     const a = rnd() * TAU;
     wline(g, x - Math.cos(a) * 0.3, y - Math.sin(a) * 0.3, x + Math.cos(a) * 0.3, y + Math.sin(a) * 0.3, rnd, 0.04, 3);
-    K(g, rgba(i % 2 ? '#5c4869' : '#3a2b44', 0.34), 0.08 + rnd() * 0.12);
+    K(g, rgba(i % 2 ? '#574464' : '#35273f', 0.34), 0.08 + rnd() * 0.12);
   }
   for (let i = 0; i < 3; i++) {
     const x = 0.12 + rnd() * 0.76;
@@ -719,6 +721,19 @@ function paintWall(g, nb, v) {
   for (let i = 0; i < 4; i++) {
     blob(g, 0.1 + rnd() * 0.8, (0.08 + rnd() * 0.84) * topH, 0.012 + rnd() * 0.016, 0.01 + rnd() * 0.01, rnd, 0.2, 6);
     F(g, rgba(i % 2 ? '#7c6689' : '#2a1d33', 0.55));
+  }
+  // knuckles of rock: a short shadow with a catch of light above it
+  for (let i = 0; i < 2; i++) {
+    const x = 0.16 + rnd() * 0.68;
+    const y = (0.2 + rnd() * 0.6) * topH;
+    const r = 0.06 + rnd() * 0.06;
+    const tilt = (rnd() - 0.5) * 0.9;
+    g.beginPath();
+    g.ellipse(x, y, r, r * 0.55, tilt, 0.05 * Math.PI, 0.8 * Math.PI);
+    K(g, rgba('#1f1527', 0.6), 0.024);
+    g.beginPath();
+    g.ellipse(x, y - 0.014, r, r * 0.55, tilt, 1.1 * Math.PI, 1.7 * Math.PI);
+    K(g, rgba('#927a9f', 0.5), 0.02);
   }
   // lit rim along the open edges
   closed(g, block);
@@ -1543,8 +1558,13 @@ function paintWhelk(g, hidden, f) {
   const rnd = rng(640);
   if (hidden) {
     // shut tight: a squat, flat-footed block of shell
-    ell(g, 0.5, 0.885, 0.335, 0.062);
-    F(g, rgba(INK, 0.5));
+    ell(g, 0.5, 0.89, 0.37, 0.066);
+    F(g, rgba(INK, 0.55));
+    for (let sx = -1; sx <= 1; sx += 2) {
+      g.beginPath();
+      g.arc(0.5 + sx * 0.4, 0.86, 0.05, sx < 0 ? 0.55 * Math.PI : 0.05 * Math.PI, sx < 0 ? 0.95 * Math.PI : 0.45 * Math.PI);
+      K(g, rgba(INK, 0.7), 0.022);
+    }
     const shell = [[0.2, 0.8], [0.8, 0.8], [0.84, 0.5], [0.68, 0.24], [0.32, 0.24], [0.16, 0.5]];
     poly(g, shell, 0.11);
     K(g, INK, 0.065);
@@ -1562,17 +1582,17 @@ function paintWhelk(g, hidden, f) {
     K(g, SHELL_BAND, 0.046);
     g.restore();
     // thick foot-plate with the door pulled shut
-    const lipPts = [[0.17, 0.72], [0.83, 0.72], [0.815, 0.845], [0.185, 0.845]];
+    const lipPts = [[0.14, 0.7], [0.86, 0.7], [0.845, 0.855], [0.155, 0.855]];
     poly(g, lipPts, 0.045);
     K(g, INK, 0.06);
     F(g, '#ecd2ba');
-    ell(g, 0.5, 0.785, 0.1, 0.036);
+    ell(g, 0.5, 0.78, 0.11, 0.04);
     K(g, INK, 0.03);
     F(g, '#8c5564');
     g.beginPath();
-    g.moveTo(0.42, 0.785);
-    g.lineTo(0.58, 0.785);
-    K(g, INK, 0.016);
+    g.moveTo(0.41, 0.78);
+    g.lineTo(0.59, 0.78);
+    K(g, INK, 0.018);
     return;
   }
   // out and about: a tilted shell, a soft foot, two shy eye stalks
@@ -1654,7 +1674,7 @@ const CAP_HI = '#efb8ba';
 const CAP_DK = '#9a4d61';
 const STUMP_BODY = '#f1e2c8';
 const STUMP_SIDE = '#c6ab8c';
-const STUMP_FOOT = '#6a4450';
+const STUMP_FOOT = '#d6bd9b';
 
 // Stumpcap, seen mostly from above: a blocky spotted cap, a pale block of a head poking out in
 // front of it with the eyes on top, two stubby feet beside the head, and a chevron on the cap.
@@ -1674,7 +1694,7 @@ function paintStump(g, dir, awake, f) {
     return [cx + x * cs - yy * sn, cy + x * sn + yy * cs + (lift || 0)];
   };
   const at = (pts, lift) => pts.map((p) => R(p[0], p[1], lift));
-  const ext = awake ? 0.335 : 0.255; // how far the head reaches out
+  const ext = awake ? 0.335 : 0.29; // how far the head reaches out
   const capL = [[-0.29, -0.3], [0.29, -0.3], [0.29, 0.13], [-0.29, 0.13]];
   const bodyL = [[-0.2, -0.2], [0.2, -0.2], [0.2, ext], [-0.2, ext]];
   const footprint = [[-0.29, -0.3], [0.29, -0.3], [0.29, 0.13], [0.2, ext], [-0.2, ext], [-0.29, 0.13]];
@@ -1685,22 +1705,22 @@ function paintStump(g, dir, awake, f) {
   // stubby feet: mid-stride when awake, tucked under the cap when asleep
   const foot = (x, y0, y1) => {
     const lift = H * 0.6;
-    poly(g, at([[x - 0.058, y0], [x + 0.058, y0], [x + 0.058, y1], [x - 0.058, y1]], lift), 0.045);
-    K(g, INK, 0.05);
+    poly(g, at([[x - 0.062, y0], [x + 0.062, y0], [x + 0.062, y1], [x - 0.062, y1]], lift), 0.05);
+    K(g, INK, 0.055);
     F(g, STUMP_FOOT);
-    const a = R(x - 0.025, y1 - 0.035, lift);
-    const b = R(x + 0.025, y1 - 0.035, lift);
+    const a = R(x - 0.028, y1 - 0.04, lift);
+    const b = R(x + 0.028, y1 - 0.04, lift);
     g.beginPath();
     g.moveTo(a[0], a[1]);
     g.lineTo(b[0], b[1]);
-    K(g, rgba('#a27886', 0.9), 0.02);
+    K(g, rgba('#fff3dc', 0.75), 0.022);
   };
   if (awake) {
-    foot(-0.262, f ? -0.1 : 0.06, f ? 0.2 : 0.36);
-    foot(0.262, f ? 0.06 : -0.1, f ? 0.36 : 0.2);
+    foot(-0.275, f ? -0.04 : 0.1, f ? 0.25 : 0.42);
+    foot(0.275, f ? 0.1 : -0.04, f ? 0.42 : 0.25);
   } else {
-    foot(-0.262, -0.05, 0.175);
-    foot(0.262, -0.05, 0.175);
+    foot(-0.275, -0.04, 0.205);
+    foot(0.275, -0.04, 0.205);
   }
 
   // the body block: its side, swept down to the ground, then its top with the face
@@ -1719,10 +1739,10 @@ function paintStump(g, dir, awake, f) {
       ell(g, e[0] - 0.016, e[1] - 0.018, 0.016, 0.016);
       F(g, '#ffffff');
     } else {
-      const e = R(sx * 0.098, ext - 0.075);
+      const e = R(sx * 0.098, ext - 0.085);
       g.beginPath();
-      g.arc(e[0], e[1], 0.044, th + 0.15, th + Math.PI - 0.15);
-      K(g, INK, 0.03);
+      g.arc(e[0], e[1], 0.046, th + 0.1, th + Math.PI - 0.1);
+      K(g, INK, 0.036);
     }
   }
   const m0 = R(-0.03, ext - 0.03);
@@ -2248,7 +2268,7 @@ const MAX_AREA = 8e6;
 const dark = {
   c: null, g: null, low: null, lg: null, img: null,
   w: 0, h: 0, P: 0, sx: 0, sy: 0, sr: 0, hc: -1,
-  lit: null, mixed: null, any: false, rx: 0, ry: 0, rw: 0, rh: 0, valid: false,
+  lit: null, mixed: null, any: false, gx: 0, gy: 0, gw: 0, gh: 0, valid: false,
 };
 
 function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
@@ -2261,9 +2281,13 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
     dark.lg = dark.low.getContext('2d');
     dark.img = dark.lg.createImageData(AW, LH);
   }
+  // layout: [1px bleed | board | 1px bleed] gutter [board], the left part being the darkness
+  // (tiles bleed one device pixel past the board, so the dark must too) and the right the bloom
   const BW = w * P;
-  const CW = BW * 2 + GUT;
-  const CH = h * P;
+  const BH = h * P;
+  const GX = BW + 2 + GUT;
+  const CW = GX + BW;
+  const CH = BH + 2;
   if (!dark.c) {
     dark.c = makeCanvas(CW, CH);
     if (!dark.c) return false;
@@ -2305,13 +2329,17 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
   g.globalCompositeOperation = 'source-over';
   g.clearRect(0, 0, CW, CH);
   g.fillStyle = 'rgba(' + NIGHT[0] + ',' + NIGHT[1] + ',' + NIGHT[2] + ',' + base + ')';
-  g.fillRect(0, 0, BW, CH);
+  g.fillRect(0, 0, BW + 2, CH);
 
-  let rx0 = 0;
-  let ry0 = 0;
-  let rx1 = 0;
-  let ry1 = 0;
+  let gx = 0;
+  let gy = 0;
+  let gw = 0;
+  let gh = 0;
   if (any) {
+    let rx0 = 0;
+    let ry0 = 0;
+    let rx1 = 0;
+    let ry1 = 0;
     // only the lit tiles and a one-tile border around them need the soft mask
     rx0 = Math.max(0, bx0 - 1);
     ry0 = Math.max(0, by0 - 1);
@@ -2421,10 +2449,20 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
     const dy = ry0 * P;
     const dw = (rx1 - rx0) * P;
     const dh = (ry1 - ry0) * P;
+    // where the region touches the board's edge, stretch it one pixel over the bleed
+    const e0 = rx0 === 0 ? 1 : 0;
+    const e1 = ry0 === 0 ? 1 : 0;
+    const e2 = rx1 === w ? 1 : 0;
+    const e3 = ry1 === h ? 1 : 0;
     g.imageSmoothingEnabled = true;
-    g.clearRect(dx, dy, dw, dh);
-    g.drawImage(dark.low, sxl, syl, swl, shl, dx, dy, dw, dh);
-    g.drawImage(dark.low, LW + GUT + sxl, syl, swl, shl, BW + GUT + dx, dy, dw, dh);
+    g.clearRect(1 + dx - e0, 1 + dy - e1, dw + e0 + e2, dh + e1 + e3);
+    g.drawImage(dark.low, sxl, syl, swl, shl, 1 + dx - e0, 1 + dy - e1, dw + e0 + e2, dh + e1 + e3);
+    g.drawImage(dark.low, LW + GUT + sxl, syl, swl, shl, GX + dx, dy, dw, dh);
+    // the bloom only needs blitting where it is not empty: the lit tiles plus their soft edge
+    gx = Math.max(0, Math.floor((bx0 - 0.25) * P));
+    gy = Math.max(0, Math.floor((by0 - 0.25) * P));
+    gw = Math.min(BW, Math.ceil((bx1 + 1.25) * P)) - gx;
+    gh = Math.min(BH, Math.ceil((by1 + 1.25) * P)) - gy;
 
     if (hc) {
       // high contrast: a crisp line around the lit tiles
@@ -2434,20 +2472,20 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
         for (let x = bx0; x <= bx1; x++) {
           if (!m[y * w + x]) continue;
           if (y === 0 || !m[(y - 1) * w + x]) {
-            g.moveTo(x * P, y * P);
-            g.lineTo((x + 1) * P, y * P);
+            g.moveTo(1 + x * P, 1 + y * P);
+            g.lineTo(1 + (x + 1) * P, 1 + y * P);
           }
           if (y === h - 1 || !m[(y + 1) * w + x]) {
-            g.moveTo(x * P, (y + 1) * P);
-            g.lineTo((x + 1) * P, (y + 1) * P);
+            g.moveTo(1 + x * P, 1 + (y + 1) * P);
+            g.lineTo(1 + (x + 1) * P, 1 + (y + 1) * P);
           }
           if (x === 0 || !m[y * w + x - 1]) {
-            g.moveTo(x * P, y * P);
-            g.lineTo(x * P, (y + 1) * P);
+            g.moveTo(1 + x * P, 1 + y * P);
+            g.lineTo(1 + x * P, 1 + (y + 1) * P);
           }
           if (x === w - 1 || !m[y * w + x + 1]) {
-            g.moveTo((x + 1) * P, y * P);
-            g.lineTo((x + 1) * P, (y + 1) * P);
+            g.moveTo(1 + (x + 1) * P, 1 + y * P);
+            g.lineTo(1 + (x + 1) * P, 1 + (y + 1) * P);
           }
         }
       }
@@ -2457,8 +2495,8 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
       g.strokeStyle = '#fff3d6';
       g.lineWidth = Math.max(1.5, P * 0.045);
       g.stroke();
-      // the stroke's round caps may poke a pixel or two into the gutter: wipe it
-      g.clearRect(BW, 0, GUT, CH);
+      // the stroke's round caps may poke into the gutter: wipe it
+      g.clearRect(BW + 2, 0, GUT, CH);
     }
   }
   dark.w = w;
@@ -2469,10 +2507,10 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
   dark.sr = sr;
   dark.hc = hc;
   dark.any = any;
-  dark.rx = rx0;
-  dark.ry = ry0;
-  dark.rw = rx1 - rx0;
-  dark.rh = ry1 - ry0;
+  dark.gx = gx;
+  dark.gy = gy;
+  dark.gw = gw;
+  dark.gh = gh;
   dark.valid = true;
   return true;
 }
@@ -2512,16 +2550,18 @@ export function drawDarkness(ctx, opts) {
   if (dirty && !rebuildDark(w, h, P, lit, !!src, sx, sy, sr, hc)) return;
 
   const BW = w * P;
+  const BH = h * P;
+  const e = size / P; // one cache pixel, in the caller's units
   const smooth = ctx.imageSmoothingEnabled;
   if (smooth === false) ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(dark.c, 0, 0, BW, h * P, ox, oy, w * size, h * size);
+  ctx.drawImage(dark.c, 0, 0, BW + 2, BH + 2, ox - e, oy - e, (BW + 2) * e, (BH + 2) * e);
   if (dark.any) {
     const t = o.t || 0;
     const al = ctx.globalAlpha;
     const op = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = al * (0.84 + 0.16 * flicker(t * 0.8));
-    ctx.drawImage(dark.c, BW + GUT + dark.rx * P, dark.ry * P, dark.rw * P, dark.rh * P, ox + dark.rx * size, oy + dark.ry * size, dark.rw * size, dark.rh * size);
+    ctx.drawImage(dark.c, BW + 2 + GUT + dark.gx, dark.gy, dark.gw, dark.gh, ox + dark.gx * e, oy + dark.gy * e, dark.gw * e, dark.gh * e);
     ctx.globalAlpha = al;
     ctx.globalCompositeOperation = op;
   }
@@ -2559,12 +2599,12 @@ function buildBackdrop(bw, bh) {
   g.fillStyle = PALETTE.plum;
   g.fillRect(0, 0, bw, bh);
   // a faint breath of lighter air in the middle of the cave
-  g.fillStyle = radial(g, bw * 0.5, bh * 0.44, big * 0.62, [0, 'rgba(74,54,98,0.6)', 1, 'rgba(74,54,98,0)']);
+  g.fillStyle = radial(g, bw * 0.5, bh * 0.44, big * 0.62, [0, 'rgba(70,50,94,0.5)', 1, 'rgba(70,50,94,0)']);
   g.fillRect(0, 0, bw, bh);
   // mottled washes
-  for (let i = 0; i < 16; i++) {
-    blob(g, rnd() * bw, rnd() * bh, big * (0.08 + rnd() * 0.16), big * (0.06 + rnd() * 0.12), rnd, 0.2, 9);
-    F(g, i % 2 ? 'rgba(66,47,90,0.14)' : 'rgba(24,16,36,0.16)');
+  for (let i = 0; i < 12; i++) {
+    blob(g, rnd() * bw, rnd() * bh, big * (0.12 + rnd() * 0.2), big * (0.09 + rnd() * 0.14), rnd, 0.2, 9);
+    F(g, i % 2 ? 'rgba(66,47,90,0.1)' : 'rgba(24,16,36,0.12)');
   }
   // rock shapes hanging at the top and heaped at the bottom
   const ridge = (y0, dirY, col, amp, seed) => {
@@ -2582,17 +2622,17 @@ function buildBackdrop(bw, bh) {
     g.closePath();
     F(g, col);
   };
-  ridge(0, 1, 'rgba(24,16,36,0.5)', bh * 0.09, 11);
-  ridge(0, 1, 'rgba(18,12,28,0.55)', bh * 0.05, 12);
-  ridge(bh, -1, 'rgba(24,16,36,0.5)', bh * 0.08, 13);
-  ridge(bh, -1, 'rgba(18,12,28,0.55)', bh * 0.045, 14);
+  ridge(0, 1, 'rgba(22,14,33,0.55)', bh * 0.1, 11);
+  ridge(0, 1, 'rgba(16,10,25,0.6)', bh * 0.055, 12);
+  ridge(bh, -1, 'rgba(22,14,33,0.55)', bh * 0.09, 13);
+  ridge(bh, -1, 'rgba(16,10,25,0.6)', bh * 0.05, 14);
   // vignette
   const vg = g.createRadialGradient(bw / 2, bh / 2, big * 0.25, bw / 2, bh / 2, big * 0.78);
   vg.addColorStop(0, 'rgba(14,9,22,0)');
   vg.addColorStop(1, 'rgba(14,9,22,0.82)');
   g.fillStyle = vg;
   g.fillRect(0, 0, bw, bh);
-  stampGrain(g, bw, bh, 0.35, 5, 1);
+  stampGrain(g, bw, bh, 0.16, 5, 1);
   return c;
 }
 
@@ -2630,7 +2670,7 @@ export function drawBackdrop(ctx, width, height, opts) {
     g.imageSmoothingEnabled = true;
     g.imageSmoothingQuality = 'high';
     g.drawImage(low, 0, 0, cw, ch);
-    stampGrain(g, cw, ch, 0.22, 9, Math.max(1, cw / Math.max(1, width)));
+    stampGrain(g, cw, ch, 0.16, 9, Math.max(1, cw / Math.max(1, width)));
     back.w = bw;
     back.h = bh;
     back.cw = cw;

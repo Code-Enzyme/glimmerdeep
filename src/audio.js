@@ -46,8 +46,8 @@ const BUD_TOP = 10; // highest step of the Glowbud scale walk (two octaves)
 // Final level of each one-shot, set from the measurements in dev/audio-check.cjs so that the
 // quiet foley sits well under the musical feedback.
 const LEVELS = {
-  step: 0.26, blocked: 0.225, plant: 0.4, pickup: 0.25, wait: 0.11, moth: 0.1, settle: 0.3,
-  whelkMove: 0.12, whelkHide: 0.15, whelkEmerge: 0.18, stumpStep: 0.22, stumpBump: 0.28,
+  step: 0.32, blocked: 0.225, plant: 0.4, pickup: 0.25, wait: 0.11, moth: 0.1, settle: 0.3,
+  whelkMove: 0.12, whelkHide: 0.15, whelkEmerge: 0.18, stumpStep: 0.195, stumpBump: 0.28,
   stumpWake: 0.1, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
   undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185,
 };
@@ -57,6 +57,13 @@ const FOLEY = {
   step: 1, wait: 1, moth: 1, whelkMove: 1, whelkHide: 1, whelkEmerge: 1, stumpStep: 1,
   stumpBump: 1, stumpWake: 1,
 };
+
+// What the player's own finger did. These answer at once, even while the creatures of the
+// previous turn are still sounding off.
+const ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1 };
+
+// Repeated foley that gets a few milliseconds of loose timing when it is not already staggered.
+const LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1 };
 
 // Major pentatonic. Each chapter keeps the same five-note shape and moves the drone under it,
 // which changes the mode: 1 is plain major, 2 is the relative minor, 3 hangs suspended.
@@ -372,18 +379,18 @@ const SOUNDS = Object.create(null);
 // Wren's soft footfall: a light pat of sole on stone with a small heel. Feet alternate.
 SOUNDS.step = function (k, t, p) {
   const v = (1 + (k.r() - 0.5) * 0.2) * (p.alt ? 0.88 : 1);
-  const d = 0.055 + k.r() * 0.03;
-  hiss(k, 'lowpass', 900 * v, 4, t, 0.5, 0.004, d);
-  const heel = tone(k, 'sine', 215 * v, t, 0.3, 0.003, d * 0.8);
-  heel.frequency.exponentialRampToValueAtTime(140 * v, t + 0.04);
+  const d = 0.15 + k.r() * 0.06;
+  hiss(k, 'lowpass', 760 * v, 3, t, 0.5, 0.008, d);
+  const heel = tone(k, 'sine', 215 * v, t, 0.3, 0.006, d * 0.7);
+  heel.frequency.exponentialRampToValueAtTime(140 * v, t + 0.06);
 };
 
 // Walking into something: one dull, muffled tap with no ring.
 SOUNDS.blocked = function (k, t) {
   const lp = filt(k, 'lowpass', 640, 0);
   lp.connect(k.out);
-  const o = tone(k, 'triangle', 262, t, 1, 0.003, 0.09, lp);
-  o.frequency.exponentialRampToValueAtTime(186, t + 0.05);
+  const o = tone(k, 'triangle', 262, t, 1, 0.003, 0.12, lp);
+  o.frequency.exponentialRampToValueAtTime(186, t + 0.06);
   hiss(k, 'lowpass', 380, 0, t, 0.14, 0.002, 0.03);
 };
 
@@ -539,11 +546,11 @@ SOUNDS.whelkEmerge = function (k, t) {
 // Stumpcap marching: a heavy woody thump, slower and deeper than Wren's step.
 SOUNDS.stumpStep = function (k, t) {
   const v = 1 + (k.r() - 0.5) * 0.24;
-  const d = 0.17 + k.r() * 0.07;
+  const d = 0.22 + k.r() * 0.08;
   const o = tone(k, 'sine', 128 * v, t, 1, 0.005, d);
   o.frequency.exponentialRampToValueAtTime(74 * v, t + 0.11);
-  tone(k, 'triangle', 286 * v, t, 0.4 + k.r() * 0.2, 0.002, 0.09);
-  tone(k, 'sine', 790 * v, t, 0.14, 0.0015, 0.04);
+  tone(k, 'triangle', 286 * v, t, 0.6 + k.r() * 0.2, 0.002, 0.1);
+  tone(k, 'sine', 790 * v, t, 0.2, 0.0015, 0.045);
   hiss(k, 'bandpass', 520 * v, 1.5, t, 0.08, 0.002, 0.03);
 };
 
@@ -833,7 +840,7 @@ export function createAudioEngine(ctx, options) {
 
   const st = {
     muted: false, hidden: false, playing: false, intensity: 0, chapter: 1,
-    bud: 0, foot: false, lastStart: -1, queuedWhileStopped: 0,
+    bud: 0, foot: false, lastStart: -1, lastAsk: -1e9, queuedWhileStopped: 0,
   };
   let voices = []; // one-shots: { name, start, kit, foley }
   const log = []; // recent play() decisions, for the check script
@@ -859,6 +866,21 @@ export function createAudioEngine(ctx, options) {
       const p = ctx.resume();
       if (p && typeof p.catch === 'function') p.catch(noop);
     } catch (e) { /* not allowed yet: the next gesture tries again */ }
+  }
+
+  // "Now" for telling one frame of requests from the next, in milliseconds.
+  function frameClock() {
+    if (manual || typeof performance === 'undefined') return ctx.currentTime * 1000;
+    return performance.now();
+  }
+
+  // Stop a kit before its time. Browsers fire `ended` for sources that were stopped before they
+  // started; the timer is a safety net for any that do not, so the nodes are always let go.
+  function endEarly(k, when, fade) {
+    stopKit(k, when, fade);
+    if (!manual && !k.done) {
+      setTimeout(function () { releaseKit(k); }, Math.max(0, when - ctx.currentTime) * 1000 + 400);
+    }
   }
 
   function note(name, start, action, kit) {
@@ -905,9 +927,15 @@ export function createAudioEngine(ctx, options) {
     const foley = FOLEY[name] === 1;
 
     // Sounds asked for in the same frame are spread out, 40 to 70 ms apart, in the order asked.
+    // A player action in a new frame does not queue behind the last turn's creatures.
+    const clock = frameClock();
+    const sameFrame = clock - st.lastAsk < 12;
+    st.lastAsk = clock;
     let start = Math.max(now + 0.005, born + 0.02);
-    if (st.lastStart + STAGGER_MAX > now) {
+    if (st.lastStart + STAGGER_MAX > now && (sameFrame || ACTIONS[name] !== 1)) {
       start = Math.max(start, st.lastStart + STAGGER_MIN + r() * (STAGGER_MAX - STAGGER_MIN));
+    } else if (LOOSE[name] === 1) {
+      start += r() * 0.012;
     }
     if (foley && start - now > MAX_BACKLOG) {
       counts.dropped++;
@@ -936,7 +964,7 @@ export function createAudioEngine(ctx, options) {
       for (let i = 0; i < alive.length && !victim; i++) if (alive[i].foley) victim = alive[i];
       for (let i = 0; i < alive.length && !victim; i++) if (alive[i].name !== 'solve') victim = alive[i];
       if (victim) {
-        stopKit(victim.kit, start + 0.03, 0.03);
+        endEarly(victim.kit, start + 0.03, 0.03);
         counts.stolen++;
       }
     }
@@ -946,7 +974,7 @@ export function createAudioEngine(ctx, options) {
     const k = makeKit(ctx, sfx, level, r);
     fn(k, start, p);
     voices.push({ name, start, kit: k, foley });
-    st.lastStart = start;
+    st.lastStart = Math.max(st.lastStart, start);
     counts.played++;
     note(name, start, 'play', k);
   }
@@ -1080,7 +1108,7 @@ export function createAudioEngine(ctx, options) {
   }
 
   function stopMusicVoices(when, fade) {
-    mu.voices.forEach(function (k) { stopKit(k, when, fade); });
+    mu.voices.forEach(function (k) { endEarly(k, when, fade); });
     mu.voices.clear();
   }
 

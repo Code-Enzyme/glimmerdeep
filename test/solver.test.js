@@ -43,6 +43,9 @@ const HAND_MADE = {
   plant: { map: ['W.~G'], shortest: 2 },
   // Level 1-1: the moth bridges the puddle on turn 1, Wren walks five tiles.
   firstLight: { map: firstLight.map, shortest: 5 },
+  // The buds are six tiles apart, so no lantern position lights both: bloom the west one from 1,0
+  // (W, W), then walk to 5,0 for the east one (E, E, E, E).
+  twoFarBuds: { map: ['G..W..G'], shortest: 6 },
   // Wren cannot move until the moth has flown two tiles and settled in the puddle: Z, Z, E, E.
   waitForMoth: { map: ['W~.G', '#.##', '#M##'], shortest: 4 },
   // The moth bridges the first puddle (E, E, E); the second one needs the planted lantern (L).
@@ -307,6 +310,32 @@ test('checkLevel: necessity must be proven by an exhaustive search', () => {
   assert.deepEqual(capped.featureOk, { L: false });
   assert.equal(capped.ok, false);
   assert.match(capped.problems.join('; '), /maxStates/);
+});
+
+// The top row is level 1-1 again. Below it lies a big open room that has nothing to do with the solution
+// but can be wandered through with four creatures in it: 208,090 positions once the moth is taken out.
+const SPRAWL = ['W..~..G##', '.##M#####', '.........', '..>...S..', '....a....', '.<..A..^.', '.........', '.........'];
+
+test('checkLevel: flags a search that explores more than 150,000 positions (SPEC section 5)', () => {
+  const result = checkLevel(def(SPRAWL, { feature: 'M', par: 5 }));
+  assert.equal(result.shortest, 5);
+  assert.ok(result.explored < 1000, 'the solution itself is found quickly');
+  assert.deepEqual(result.featureOk, { M: true }, 'the moth is proven necessary...');
+  assert.equal(result.ok, false, '...but only by a search that is too big');
+  assert.equal(result.problems.length, 1);
+  assert.match(result.problems[0], /too big/);
+  assert.match(result.problems[0], /208090/);
+  assert.match(result.problems[0], /150000/);
+});
+
+test('checkLevel: the size limit also applies to the search for the solution; exactly 150,000 is allowed', () => {
+  // The same room with neither moth nor a way to the bud: the main search runs until maxStates stops it.
+  const level = def(SPRAWL.map((row) => row.replace('M', '.')), { feature: 'L', par: 5 });
+  const atLimit = checkLevel(level, { maxStates: 150000 });
+  assert.equal(atLimit.explored, 150000);
+  assert.doesNotMatch(atLimit.problems.join('; '), /too big/);
+  const over = checkLevel(level, { maxStates: 150001 });
+  assert.match(over.problems.join('; '), /too big.*150001/);
 });
 
 test('checkLevel: the search options are passed on', () => {

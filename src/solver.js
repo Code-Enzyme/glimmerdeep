@@ -51,6 +51,10 @@ export function nextMove(state, opts) {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+// SPEC section 5: no search of a level, or of a feature-removed variant of it, may explore more positions
+// than this, so that hints stay instant on a phone.
+const SIZE_LIMIT = 150000;
+
 const SPECIES = {
   M: { chars: 'M', name: 'Fluffmoth' },
   S: { chars: 'S', name: 'Shellwhelk' },
@@ -71,9 +75,10 @@ function withoutSpecies(levelDef, species) {
   return { ...levelDef, map, under };
 }
 
-// Checks one level definition (SPEC.md section 6).
+// Checks one level definition (SPEC.md sections 5 and 6).
 // -> { id, ok, par, shortest, explored, searched, featureOk, problems }
-//    ok:        solvable, shortest === par, does not start solved, and every listed feature is proven necessary.
+//    ok:        solvable, shortest === par, does not start solved, every listed feature is proven necessary,
+//               and no search explored more than 150,000 positions.
 //    explored:  positions reached by the search for the shortest solution.
 //    searched:  positions reached by all searches together, the necessity searches included.
 //    featureOk: one entry per character of `feature`; true only when the level without that feature was
@@ -102,10 +107,16 @@ export function checkLevel(levelDef, opts) {
     return result;
   }
   if (start.solved) problems.push('the level starts solved');
+  const checkSize = (search, what) => {
+    if (search.explored > SIZE_LIMIT) {
+      problems.push(`too big: the search ${what} explored ${search.explored} positions, the limit is ${SIZE_LIMIT}`);
+    }
+  };
 
   const main = solve(start, options);
   result.explored = main.explored;
   result.searched = main.explored;
+  checkSize(main, 'for the shortest solution');
   if (main.solved) {
     result.shortest = main.moves.length;
     if (result.shortest !== levelDef.par) {
@@ -141,6 +152,7 @@ export function checkLevel(levelDef, opts) {
       continue;
     }
     result.searched += without.explored;
+    checkSize(without, `without ${what}`);
     if (without.solved) {
       problems.push(`feature '${f}' is not necessary: solvable in ${plural(without.moves.length, 'move')} without ${what} (${without.moves.join('')})`);
     } else if (!without.exhausted) {

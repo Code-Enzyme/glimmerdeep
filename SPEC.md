@@ -157,7 +157,8 @@ feature-removed variants) must stay under 150,000 positions, so that hints are i
   par: 5,               // the exact length of the shortest solution, found by the solver
   map: [ '#########', '#W..~..G#', '####M####', '#########' ],   // all rows the same length
   under: { '3,4': 'a' },  // optional: the terrain under whatever the map shows at x,y (default is floor)
-  note: 'One sentence: what the player learns or the trick.',
+  note: 'One sentence: what the player learns or the trick.',   // for designers; never shown to players
+  tip: 'Swipe to walk.',  // optional: one short player-facing line shown when the level opens (no spoilers)
 }
 ```
 

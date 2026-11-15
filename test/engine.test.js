@@ -77,6 +77,7 @@ test('parseLevel: extracts terrain and puts floor under Wren and the creatures',
   assert.deepEqual(s.wren, { x: 1, y: 1 });
   assert.deepEqual(s.lantern, { x: 1, y: 1, carried: true });
   assert.deepEqual(s.buds, [{ x: 4, y: 1 }]);
+  assert.deepEqual(s.bloom, [0]);
   assert.deepEqual(s.bridges, []);
   assert.equal(s.turn, 0);
   assert.equal(s.solved, false);
@@ -87,7 +88,8 @@ test('parseLevel: extracts terrain and puts floor under Wren and the creatures',
 test('parseLevel: the state has exactly the documented fields and is plain JSON data', () => {
   const s = parse(['W.M', 'aA.']);
   assert.deepEqual(Object.keys(s).sort(), [
-    'bridges', 'buds', 'creatures', 'events', 'gates', 'h', 'lantern', 'lit', 'solved', 'tiles', 'turn', 'w', 'wren',
+    'bloom', 'bridges', 'buds', 'creatures', 'events', 'gates', 'h', 'lantern', 'lit', 'solved', 'tiles', 'turn', 'w',
+    'wren',
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(s)), s);
   assert.deepEqual(Object.keys(s.creatures[0]).sort(), ['dir', 'id', 'type', 'x', 'y']);
@@ -198,8 +200,17 @@ test('parseLevel: runs light, gates and goal once at turn 0', () => {
 
   // A bud next to Wren's carried lantern is lit, so this (invalid) level starts solved.
   const solved = parse(['WG']);
+  assert.deepEqual(solved.bloom, [1]);
   assert.equal(solved.solved, true);
   assert.deepEqual(solved.events, []);
+});
+
+test('parseLevel: bloom is parallel to buds (reading order); a bud lit at the start is already in bloom', () => {
+  const s = parse(['G.W', '..G', 'G..']);   // Wren's carried light reaches only the bud at 2,1
+  assert.deepEqual(s.buds, [{ x: 0, y: 0 }, { x: 2, y: 1 }, { x: 0, y: 2 }]);
+  assert.deepEqual(s.bloom, [0, 1, 0]);
+  assert.equal(s.solved, false);
+  assert.deepEqual(parse(['W.']).bloom, [], 'no buds, no bloom flags');
 });
 
 // ---------------------------------------------------------------- accessors
@@ -469,8 +480,9 @@ test('an illegal action returns null and step never mutates its input', () => {
 });
 
 test('step never mutates: a long walk in which every state is deep-frozen', () => {
+  // The bud at 3,0 blooms during the walk; the one in the corner can never be lit, so the walk never ends.
   let s = deepFreeze(parse([
-    '#######',
+    'G##G###',
     '#W.~.H#',
     '#.M.S.#',
     '#a>.A.#',
@@ -492,6 +504,7 @@ test('step never mutates: a long walk in which every state is deep-frozen', () =
     }
   }
   assert.ok(moves > 150, `the walk should mostly be legal moves, got ${moves}`);
+  assert.deepEqual(s.bloom, [0, 1]);
 });
 
 test('step accepts a state that went through JSON (saved games)', () => {
@@ -544,15 +557,43 @@ test('wait: Z is always legal, spends a turn and moves nothing', () => {
 
 // ---------------------------------------------------------------- the goal
 
-test('goal: solved only when every Glowbud is lit at the same time', () => {
+test('goal: a Glowbud lit in Light B comes into bloom; the level is solved when every bud is in bloom', () => {
   const s = parse(['G.W.G']);
-  assert.equal(s.solved, false);
-  const oneLit = step(s, 'W');   // Wren at 1,0: only the west bud is in the light
-  assert.deepEqual(light(oneLit), ['11100']);
-  assert.equal(oneLit.solved, false);
-  const both = step(s, 'L');     // planted at 2,0: radius 2 reaches both buds
-  assert.deepEqual(light(both), ['11111']);
+  assert.deepEqual(s.bloom, [0, 0]);
+  const west = step(s, 'W');   // Wren at 1,0: only the west bud is in the light
+  assert.deepEqual(light(west), ['11100']);
+  assert.deepEqual(west.bloom, [1, 0]);
+  assert.equal(west.solved, false, 'one bud of two');
+  assert.deepEqual(s.bloom, [0, 0], 'the earlier state keeps its own flags');
+  const both = step(s, 'L');   // planted at 2,0: radius 2 reaches both buds in one turn
+  assert.deepEqual(both.bloom, [1, 1]);
   assert.equal(both.solved, true);
+});
+
+test('goal: a bud stays in bloom after the light leaves', () => {
+  const s = run(parse(['G.W.G']), ['W', 'E']);   // light the west bud, then step back
+  assert.equal(isLit(s, 0, 0), false);
+  assert.deepEqual(s.bloom, [1, 0]);
+  const later = run(s, ['Z', 'Z', 'Z']);
+  assert.deepEqual(later.bloom, [1, 0]);
+  assert.equal(later.solved, false);
+});
+
+test('goal: buds far apart are solved by visiting each; solved fires on the turn the last one blooms', () => {
+  // Six tiles apart: no lantern position lights both, which made this unsolvable under "all lit at once".
+  const s = parse(['G..W..G']);
+  const west = run(s, ['W', 'W']);            // Wren at 1,0
+  assert.deepEqual(west.bloom, [1, 0]);
+  assert.equal(west.solved, false);
+  const nearly = run(west, ['E', 'E', 'E']);   // Wren at 4,0, the east bud still two tiles away
+  assert.deepEqual(nearly.bloom, [1, 0]);
+  assert.equal(nearly.solved, false);
+  const done = step(nearly, 'E');              // Wren at 5,0
+  assert.equal(isLit(done, 0, 0), false, 'the west bud is long out of the light');
+  assert.deepEqual(done.bloom, [1, 1]);
+  assert.equal(done.solved, true);
+  assert.deepEqual(done.events, [wrenMove(4, 0, 5, 0), { type: 'bud', x: 6, y: 0, lit: true }, { type: 'solved' }]);
+  for (const a of ACTIONS) assert.equal(step(done, a), null, a);
 });
 
 test('goal: a level without a Glowbud is never solved', () => {
@@ -962,10 +1003,12 @@ test('goal: uses Light B, the light after the creatures have moved', () => {
   const n = step(parse(['W.G', '#M.']), 'L');
   assert.deepEqual(where(n), ['M@1,0']);
   assert.deepEqual(light(n), ['110', '100']);
+  assert.deepEqual(n.bloom, [0], 'lit only in Light A: no bloom');
   assert.equal(n.solved, false);
   // The other way round: the Stumpcap shades the bud in Light A and walks out of the way: solved.
   const t = step(parse(['LvG', 'W..']), 'Z');
   assert.deepEqual(where(t), ['TS@1,1']);
+  assert.deepEqual(t.bloom, [1]);
   assert.equal(t.solved, true);
 });
 
@@ -1022,17 +1065,20 @@ test('events: a bud lighting and solved', () => {
   ]);
 });
 
-test('events: buds going on and off, and two buds lighting at once', () => {
+test('events: a bud event is emitted once, on the turn the bud comes into bloom', () => {
   const s = parse(['G.W.G']);
   const west = step(s, 'W');
   assert.deepEqual(west.events, [wrenMove(2, 0, 1, 0), { type: 'bud', x: 0, y: 0, lit: true }]);
-  assert.deepEqual(step(west, 'E').events, [wrenMove(1, 0, 2, 0), { type: 'bud', x: 0, y: 0, lit: false }]);
+  assert.deepEqual(step(west, 'Z').events, [{ type: 'wait' }], 'nothing while it stays lit');
+  const away = step(west, 'E');
+  assert.deepEqual(away.events, [wrenMove(1, 0, 2, 0)], 'nothing when the light leaves');
+  assert.deepEqual(step(away, 'W').events, [wrenMove(2, 0, 1, 0)], 'and nothing when the light comes back');
   assert.deepEqual(step(s, 'L').events, [
     { type: 'plant', x: 2, y: 0 },
     { type: 'bud', x: 0, y: 0, lit: true },
     { type: 'bud', x: 4, y: 0, lit: true },
     { type: 'solved' },
-  ]);
+  ], 'two buds at once, in reading order');
 });
 
 test('events: a Stumpcap waking, bumping and going back to sleep', () => {
@@ -1128,36 +1174,52 @@ test('key: different when Wren, the lantern, a creature or a bridge differs', ()
   assert.notEqual(key(one), key(two));
 });
 
-test('key: two states share a key exactly when they share Wren, lantern, creatures and bridges', () => {
-  // Enumerate a few thousand positions of a busy level breadth-first, telling positions apart by a slow
-  // but obviously right description, and check that key() draws exactly the same distinctions.
+test('key: different when the bloom flags differ', () => {
+  const start = parse(['G.W.G']);
+  const west = run(start, ['W', 'E']);   // back on the start tile, the west bud in bloom
+  const east = run(start, ['E', 'W']);   // back on the start tile, the east bud in bloom
+  assert.deepEqual([start.bloom, west.bloom, east.bloom], [[0, 0], [1, 0], [0, 1]]);
+  assert.deepEqual([west.wren, east.wren], [start.wren, start.wren]);
+  assert.equal(new Set([key(start), key(west), key(east)]).size, 3);
+});
+
+test('key: tells every bud apart on a board with many buds', () => {
+  const s = parse(['GGGGGGGGG', '.........', '....W....', '.........', 'GGGGGGGGG']);
+  assert.equal(s.bloom.length, 18);
+  const oneInBloom = s.bloom.map((_, i) => key({ ...s, bloom: s.bloom.map((__, j) => (i === j ? 1 : 0)) }));
+  assert.equal(new Set([key(s), ...oneInBloom]).size, 19);
+});
+
+test('key: two states share a key exactly when they share Wren, lantern, creatures, bridges and bloom', () => {
+  // Enumerate positions breadth-first, telling them apart by a slow but obviously right description, and
+  // check that key() draws exactly the same distinctions.
   const canon = (s) => JSON.stringify([
-    s.wren, s.lantern, s.creatures.map((c) => [c.type, c.x, c.y, c.dir]).sort(), s.bridges,
+    s.wren, s.lantern, s.creatures.map((c) => [c.type, c.x, c.y, c.dir]).sort(), s.bridges, s.bloom,
   ]);
-  const start = parse([
-    'W...~....',
-    '....#.S..',
-    'a>...~.<.',
-    '.....A...',
-    '..M....^.',
-  ]);
-  const keyOf = new Map([[canon(start), key(start)]]);
-  const queue = [start];
-  for (let head = 0; head < queue.length && keyOf.size < 4000; head++) {
-    for (const a of ACTIONS) {
-      const n = step(queue[head], a);
-      if (!n) continue;
-      const c = canon(n);
-      if (keyOf.has(c)) {
-        assert.equal(key(n), keyOf.get(c), 'one position, two keys');
-      } else {
-        keyOf.set(c, key(n));
-        queue.push(n);
+  const boards = [
+    [['W...~....', '....#.S..', 'a>...~.<.', '.....A...', '..M....^.'], 4000],
+    [['G...W...G', '.........', '.S..G....', '.........', 'G.......#'], 1500],   // four buds, never all in bloom
+  ];
+  for (const [map, atLeast] of boards) {
+    const start = parse(map);
+    const keyOf = new Map([[canon(start), key(start)]]);
+    const queue = [start];
+    for (let head = 0; head < queue.length && keyOf.size < 4000; head++) {
+      for (const a of ACTIONS) {
+        const n = step(queue[head], a);
+        if (!n) continue;
+        const c = canon(n);
+        if (keyOf.has(c)) {
+          assert.equal(key(n), keyOf.get(c), 'one position, two keys');
+        } else {
+          keyOf.set(c, key(n));
+          queue.push(n);
+        }
       }
     }
+    assert.ok(keyOf.size >= atLeast, `expected a big state space, found ${keyOf.size}`);
+    assert.equal(new Set(keyOf.values()).size, keyOf.size, 'two positions, one key');
   }
-  assert.ok(keyOf.size >= 4000, `expected a big state space, found ${keyOf.size}`);
-  assert.equal(new Set(keyOf.values()).size, keyOf.size, 'two positions, one key');
 });
 
 // ---------------------------------------------------------------- the worked example (SPEC section 5)
@@ -1312,8 +1374,9 @@ function referenceStep(s, action) {
   }
   const lit = [];
   for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) lit.push(lightB.has(at(x, y)) ? 1 : 0);
-  const solved = s.buds.length > 0 && s.buds.every((b) => lightB.has(at(b.x, b.y)));
-  return { wren, lantern, creatures, bridges, lit, gates, solved };
+  const bloom = s.buds.map((b, i) => (s.bloom[i] === 1 || lightB.has(at(b.x, b.y)) ? 1 : 0));   // never back to 0
+  const solved = bloom.length > 0 && bloom.every((flag) => flag === 1);
+  return { wren, lantern, creatures, bridges, lit, gates, bloom, solved };
 }
 
 test('step agrees with a naive reference implementation on every move of thousands of positions', async (t) => {
@@ -1323,6 +1386,7 @@ test('step agrees with a naive reference implementation on every move of thousan
     'two whelks and two channels': ['W..a.A...', '.S.....S.', '..b.B....', '...~M....', 'G........'],
     'Hush': ['W.H.M....', '..H...S..', '.>HHH....', '....~....', '..G......'],
     'moths and puddles': ['W.......M', '.~.~.~.~.', 'M...M...M', '.........'],
+    'buds far apart, with a whelk and a moth': ['G...W...G', '.S.....M.', '....G....', 'G.......#'],
     'four Stumpcaps and two buds': ['..v.G....', '.W.>.a.A.', '..^.S..G.', '.<..~M...'],
   };
   const byId = (a, b) => (a.id < b.id ? -1 : 1);
@@ -1343,9 +1407,9 @@ test('step agrees with a naive reference implementation on every move of thousan
             continue;
           }
           assert.notEqual(actual, null, `${a} should be legal after ${JSON.stringify(s)}`);
-          const { wren, lantern, bridges, lit, gates, solved } = actual;
+          const { wren, lantern, bridges, lit, gates, bloom, solved } = actual;
           assert.deepEqual(
-            { wren, lantern, creatures: [...actual.creatures].sort(byId), bridges, lit, gates, solved },
+            { wren, lantern, creatures: [...actual.creatures].sort(byId), bridges, lit, gates, bloom, solved },
             { ...expected, creatures: expected.creatures.sort(byId) },
             `${a} after ${JSON.stringify(s)}`,
           );

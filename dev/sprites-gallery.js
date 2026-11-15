@@ -116,7 +116,7 @@ function drawBoard(ctx, board, ox, oy, size, t, lit) {
     const l = isLit(c.x, c.y);
     things.push({ y: c.y, z: 1, draw: () => S.drawCreature(ctx, c.type, ox + c.x * size, oy + c.y * size, size, { t, dir: c.dir, lit: l, hidden: c.type === 'S' && l, awake: c.type === 'T' && l }) });
   }
-  if (board.wren) things.push({ y: board.wren.y, z: 2, draw: () => S.drawWren(ctx, ox + board.wren.x * size, oy + board.wren.y * size, size, { t, dir: board.wren.dir, carrying: !!(board.lantern && board.lantern.carried) }) });
+  if (board.wren) things.push({ y: board.wren.y, z: 2, draw: () => S.drawWren(ctx, ox + board.wren.x * size, oy + board.wren.y * size, size, { t, dir: board.wren.dir, carrying: !!(board.lantern && board.lantern.carried), smothered: !!(board.lantern && board.lantern.smothered) }) });
   things.sort((a, b) => a.y - b.y || a.z - b.z);
   for (const th of things) th.draw();
 }
@@ -217,7 +217,7 @@ const CREATURE_CELLS = [
   [
     (c, x, y, s, t) => S.drawCreature(c, 'S', x, y, s, { t, hidden: false }),
     (c, x, y, s, t) => S.drawCreature(c, 'S', x, y, s, { t, hidden: true }),
-    null,
+    (c, x, y, s, t) => S.drawWren(c, x, y, s, { t, dir: 'S', carrying: true, smothered: true }),
     (c, x, y, s, t) => S.drawCreature(c, 'T', x, y, s, { t, dir: 'S', awake: false }),
     (c, x, y, s, t) => S.drawCreature(c, 'T', x, y, s, { t, dir: 'E', awake: false }),
     (c, x, y, s, t) => S.drawCreature(c, 'T', x, y, s, { t, dir: 'N', awake: false }),
@@ -232,7 +232,7 @@ const CREATURE_CELLS = [
 function creaturesSheet(size, t) {
   const pitch = Math.round(size * 1.3);
   const cols = CREATURE_CELLS[0].length;
-  const ctx = sheet('creatures-' + size, `Creatures at ${size}px: Wren S E N W carrying, S E N W hands free, planted lantern, moth, moth lit / whelk out, whelk hidden, stumpcap asleep S E N W, awake S E N W`, cols * pitch + size * 0.3, 2 * pitch + size * 0.3);
+  const ctx = sheet('creatures-' + size, `Creatures at ${size}px: Wren S E N W carrying, S E N W hands free, planted lantern, moth, moth lit / whelk out, whelk hidden, Wren with the lantern smothered, stumpcap asleep S E N W, awake S E N W`, cols * pitch + size * 0.3, 2 * pitch + size * 0.3);
   const off = size * 0.3;
   for (let r = 0; r < 2; r++) {
     for (let i = 0; i < cols; i++) {
@@ -314,6 +314,20 @@ function backdropSheet(t) {
   S.drawBackdrop(ctx, 360, 640, { t, accent: S.PALETTE.teal });
 }
 
+// Chapter accents: buds and channel tints take any colour.
+function accentsSheet(t) {
+  const size = 64;
+  const accents = [null, '#E8836B', '#B6D45A', '#5CC8E0', '#E6C24A', '#FFF3C4'];
+  const ctx = sheet('accents', 'Accent tints at 64px: lit bud, asleep bud, pressed root B, open gate B (default, coral, lime, aqua, gold, white-gold)', accents.length * size, 4 * size);
+  accents.forEach((accent, i) => {
+    const o = accent ? { accent } : {};
+    S.drawTile(ctx, 'bud', i * size, 0, size, { t, seed: i, lit: true, ...o });
+    S.drawTile(ctx, 'bud', i * size, size, size, { t, seed: i, lit: false, ...o });
+    S.drawTile(ctx, 'root', i * size, 2 * size, size, { t, seed: i, channel: 'b', pressed: true, ...o });
+    S.drawTile(ctx, 'gate', i * size, 3 * size, size, { t, seed: i, channel: 'B', open: true, ...o });
+  });
+}
+
 function renderAll(t) {
   root.textContent = '';
   const made = {};
@@ -322,6 +336,7 @@ function renderAll(t) {
   for (const s of SIZES) made['c' + s] = creaturesSheet(s, t);
   for (const s of SIZES) made['t' + s] = tilesSheet(s, t);
   iconsSheet();
+  accentsSheet(t);
   animSheet();
   backdropSheet(t);
   zoomSheet('zoom-creatures-40', 'Creatures at 40px, enlarged 3x', made.c40, 3);
@@ -377,6 +392,19 @@ async function measure() {
     run('parts dpr3: backdrop only', 40, 3, 100, onlyBack);
     run('parts dpr3: tiles+things only', 40, 3, 100, onlyBoard);
     run('parts dpr3: darkness only', 40, 3, 100, onlyDark);
+  }
+  {
+    // first frame at a tile size nothing has been painted for yet: every sprite is built
+    const c = document.createElement('canvas');
+    c.width = 1200;
+    c.height = 1500;
+    const ctx = c.getContext('2d');
+    ctx.scale(3, 3);
+    const t0 = performance.now();
+    S.drawBackdrop(ctx, 400, 500, { t: 0 });
+    drawMock(ctx, 'dark', 20, 20, 43, 0);
+    ctx.getImageData(0, 0, 1, 1);
+    out['cold first frame (all sprites painted), 43px, dpr3'] = { ms: +(performance.now() - t0).toFixed(1) };
   }
   run('board+darkness, 40px, dpr1 (300 frames)', 40, 1, 300, board);
   run('backdrop+board+darkness, 40px, dpr1', 40, 1, 300, full);

@@ -172,15 +172,17 @@ export function parseLevel(levelDef) {
     lit: null,
     gates: {},
     buds,
+    bloom: null,
     turn: 0,
     solved: false,
     events: [],
   };
-  // Phases 4 to 6 run once for the initial state (section 2).
+  // Phases 4 to 6 run once for the initial state (section 2): a bud lit at the start is already in bloom.
   const meta = metaOf(state);
   state.lit = lightMap(meta, state.lantern, creatures);
   for (const c of meta.channels) state.gates[CHANNELS[c]] = channelOpen(meta, c, creatures, state.lit);
-  state.solved = allBudsLit(meta, state.lit);
+  state.bloom = meta.buds.map((b) => state.lit[b]);
+  state.solved = allInBloom(state.bloom);
   return state;
 }
 
@@ -273,10 +275,10 @@ function channelOpen(meta, channel, creatures, lit) {
   return true;
 }
 
-function allBudsLit(meta, lit) {
-  const buds = meta.buds;
-  if (buds.length === 0) return false;
-  for (let i = 0; i < buds.length; i++) if (lit[buds[i]] !== 1) return false;
+// Solved iff there is at least one Glowbud and every one is in bloom.
+function allInBloom(bloom) {
+  if (bloom.length === 0) return false;
+  for (let i = 0; i < bloom.length; i++) if (bloom[i] !== 1) return false;
   return true;
 }
 
@@ -437,6 +439,7 @@ export function step(state, action) {
     lit: state.lit,
     gates: state.gates,
     buds: state.buds,
+    bloom: state.bloom,
     turn: state.turn + 1,
     solved: false,
     events,
@@ -539,17 +542,21 @@ export function step(state, action) {
   }
   next.gates = gates;
 
-  // Phase 6: the goal. An unchanged light map cannot change a bud, and the level was not solved before.
-  if (lit !== lit0) {
-    const buds = meta.buds;
-    let all = buds.length > 0;
-    for (let k = 0; k < buds.length; k++) {
-      const b = buds[k];
-      const now = lit[b] === 1;
-      if (!now) all = false;
-      if ((lit0[b] === 1) !== now) events.push({ type: 'bud', x: b % w, y: (b - (b % w)) / w, lit: now });
+  // Phase 6: the goal. Every bud lit in Light B comes into bloom and stays so; `bloom` is parallel to
+  // `buds`, both in reading order. The level was not solved before, so only a new bloom can solve it.
+  const buds = meta.buds;
+  let bloom = state.bloom;
+  for (let k = 0; k < buds.length; k++) {
+    const b = buds[k];
+    if (lit[b] === 1 && bloom[k] !== 1) {
+      if (bloom === state.bloom) bloom = bloom.slice();
+      bloom[k] = 1;
+      events.push({ type: 'bud', x: b % w, y: (b - (b % w)) / w, lit: true });
     }
-    if (all) {
+  }
+  if (bloom !== state.bloom) {
+    next.bloom = bloom;
+    if (allInBloom(bloom)) {
       next.solved = true;
       events.push({ type: 'solved' });
     }
@@ -563,13 +570,22 @@ export function step(state, action) {
 const CHAR = Array.from({ length: 1024 }, (_, i) => String.fromCharCode(48 + i));
 const CODES = [];   // scratch for key()
 
-// Identifies a position: Wren, the lantern (tile and carried), every creature (species, tile, facing) and
-// every bridge. Light, gates and `solved` follow from those, so they are not part of it; `turn`, `events`
-// and creature ids are deliberately left out. Two characters plus one per creature and per bridge.
+// Identifies a position: Wren, the lantern (tile and carried), the bloom flags, every creature (species,
+// tile, facing) and every bridge. Light, gates and `solved` follow from those, so they are not part of it;
+// `turn`, `events` and creature ids are deliberately left out. Two characters, one more per nine buds, and
+// one per creature and per bridge.
 export function key(state) {
   const w = state.w;
   const lantern = state.lantern;
   let k = CHAR[state.wren.y * w + state.wren.x] + CHAR[(lantern.y * w + lantern.x) * 2 + (lantern.carried ? 1 : 0)];
+  // The bloom flags, nine to a character. A level has a fixed number of buds, so this part has a fixed
+  // length and cannot be confused with the creature and bridge codes that follow it.
+  const bloom = state.bloom;
+  for (let i = 0; i < bloom.length; i += 9) {
+    let bits = 0;
+    for (let j = i; j < i + 9 && j < bloom.length; j++) if (bloom[j] === 1) bits |= 1 << (j - i);
+    k += CHAR[bits];
+  }
   const creatures = state.creatures;
   const bridges = state.bridges;
   const n = creatures.length + bridges.length;
