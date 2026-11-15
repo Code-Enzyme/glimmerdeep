@@ -1,0 +1,14 @@
+{
+  "name": "glimmerdeep-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "verify": "node tools/verify-levels.js",
+    "build": "node tools/build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
