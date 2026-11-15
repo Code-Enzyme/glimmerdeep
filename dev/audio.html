@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glimmerdeep audio audition</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #14171c; color: #e9e2d0; font: 16px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 20px 0 8px; color: #b9ad8f; text-transform: uppercase; letter-spacing: 0.06em; }
+  p { margin: 4px 0 12px; color: #a9a08a; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+  button, select { font: inherit; color: inherit; background: #252a33; border: 1px solid #3a414d; border-radius: 10px; padding: 12px 10px; min-height: 48px; }
+  button:active { background: #3a4150; }
+  button.on { background: #5b4a1e; border-color: #c9a646; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  input[type=range] { flex: 1 1 160px; min-width: 120px; }
+  #meter { height: 10px; background: #252a33; border-radius: 5px; overflow: hidden; margin-top: 12px; }
+  #bar { height: 100%; width: 0; background: #c9a646; }
+  #status { font: 13px/1.4 ui-monospace, monospace; color: #a9a08a; white-space: pre-wrap; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>Glimmerdeep audio audition</h1>
+<p>Every sound in <code>src/audio.js</code>. Build the bundle first: <code>node dev/audio-check.cjs</code>
+(or <code>npx esbuild src/audio.js --bundle --format=iife --global-name=GAudio --outfile=dev/audio.bundle.js</code>).</p>
+
+<div class="row">
+  <button id="start">Start audio</button>
+  <button id="mute">Mute</button>
+  <button id="burst" title="Eight sounds asked for in one frame">Busy turn</button>
+</div>
+
+<h2>One-shot sounds</h2>
+<div class="grid" id="sounds"></div>
+
+<h2>Music bed</h2>
+<div class="row">
+  <button id="music">Music off</button>
+  <label for="chapter">Chapter</label>
+  <select id="chapter"><option>1</option><option>2</option><option>3</option></select>
+  <label for="intensity">Glowbuds lit <span id="ival">0.00</span></label>
+  <input id="intensity" type="range" min="0" max="1" step="0.01" value="0">
+</div>
+
+<div id="meter"><div id="bar"></div></div>
+<div id="status">Tap "Start audio".</div>
+
+<script src="audio.bundle.js"></script>
+<script>
+(function () {
+  var status = document.getElementById('status');
+  if (typeof GAudio === 'undefined') {
+    status.textContent = 'dev/audio.bundle.js is missing. Run: node dev/audio-check.cjs';
+    return;
+  }
+  var music = { playing: false, intensity: 0, chapter: 1 };
+  var grid = document.getElementById('sounds');
+  GAudio.SOUND_NAMES.forEach(function (name) {
+    var b = document.createElement('button');
+    b.textContent = name;
+    b.dataset.sound = name;
+    b.addEventListener('click', function () { GAudio.initAudio(); GAudio.play(name); });
+    grid.appendChild(b);
+  });
+  document.getElementById('start').addEventListener('click', function () {
+    GAudio.initAudio();
+    GAudio.play('ui');
+  });
+  var mute = document.getElementById('mute');
+  mute.addEventListener('click', function () {
+    GAudio.setMuted(!GAudio.isMuted());
+    mute.classList.toggle('on', GAudio.isMuted());
+    mute.textContent = GAudio.isMuted() ? 'Muted' : 'Mute';
+  });
+  document.getElementById('burst').addEventListener('click', function () {
+    GAudio.initAudio();
+    ['step', 'moth', 'moth', 'whelkMove', 'stumpStep', 'whelkHide', 'gateOpen', 'budOn'].forEach(GAudio.play);
+  });
+  var musicBtn = document.getElementById('music');
+  musicBtn.addEventListener('click', function () {
+    GAudio.initAudio();
+    music.playing = !music.playing;
+    musicBtn.classList.toggle('on', music.playing);
+    musicBtn.textContent = music.playing ? 'Music on' : 'Music off';
+    GAudio.setMusic(music);
+  });
+  document.getElementById('chapter').addEventListener('change', function (e) {
+    music.chapter = Number(e.target.value);
+    GAudio.setMusic(music);
+  });
+  document.getElementById('intensity').addEventListener('input', function (e) {
+    music.intensity = Number(e.target.value);
+    document.getElementById('ival').textContent = music.intensity.toFixed(2);
+    GAudio.setMusic(music);
+  });
+  var bar = document.getElementById('bar');
+  var hold = 0;
+  setInterval(function () {
+    var d = GAudio.audioDebug({ meter: true });
+    if (!d) return;
+    var peak = d.meter ? d.meter.peak : 0;
+    hold = Math.max(peak, hold * 0.9);
+    bar.style.width = Math.min(100, hold * 100) + '%';
+    status.textContent = 'context ' + d.state + ' | one-shots alive ' + d.voices + ' | music voices ' + d.music.voices +
+      ' | nodes ' + d.nodes + ' | layers ' + d.music.layers.map(function (x) { return x ? 'on' : 'off'; }).join(' ') +
+      ' | bud step ' + d.bud + ' | peak ' + peak.toFixed(3);
+  }, 100);
+})();
+</script>
+</body>
+</html>

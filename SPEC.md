@@ -69,10 +69,14 @@ An illegal action returns `null` and spends no turn. A legal action runs these p
    channel has at least one root and all of its roots are pressed. Gate state is stored and used for
    movement during the NEXT turn. Closing a gate never hurts anything: whoever stands in a gate tile stays
    and may step out later.
-6. **Goal.** The level is solved iff there is at least one Glowbud and every Glowbud tile is lit in Light B.
+6. **Goal.** Every Glowbud whose tile is lit in Light B comes into bloom, and it stays in bloom for the
+   rest of the level even after the light leaves. The level is solved iff there is at least one Glowbud and
+   every Glowbud is in bloom. (Changed from the design doc's "all lit at once": with one lantern that rule
+   forces all buds into one cluster.)
 7. `turn` increases by 1.
 
-The initial state (from `parseLevel`) runs phases 4 to 6 once, with `turn = 0`. A level must not start solved.
+The initial state (from `parseLevel`) runs phases 4 to 6 once, with `turn = 0` (so a bud lit at the start
+is already in bloom). A level must not start solved.
 After a level is solved, `step` returns `null` for every action.
 
 ## 3. Creatures
@@ -137,6 +141,10 @@ Wren starts at (1,1) carrying the lantern. Action `E`: Wren is at (2,1). The mot
 puddle becomes a bridge. Then `E`, `E` (onto the bridge), `E`, `E`: Wren stands at (6,1), the Glowbud at
 (7,1) is within radius 1 and lit. Solved in 5 turns. Without the moth the level is unsolvable.
 
+Level size limit: keep the reachable space small. An exhaustive search of any level (and of each of its
+feature-removed variants) must stay under 150,000 positions, so that hints are instant on a phone and
+`npm test` stays fast. Use walls to tighten open rooms.
+
 ## 6. Level format
 
 `src/levels/chN.js` default-exports an array of level definitions:
@@ -194,7 +202,8 @@ State (plain JSON-safe data; treat as immutable):
   bridges: [ 'x,y', ... ],     // puddles that became bridges, sorted
   lit: [0, 1, ...],            // length w*h, index y*w+x, Light B
   gates: { A: false, ... },    // only channels present in the level
-  buds: [ { x, y } ],          // Glowbud positions (static)
+  buds: [ { x, y } ],          // Glowbud positions (static, reading order)
+  bloom: [0, 1, ...],          // parallel to buds: 1 once that bud has been lit; never goes back to 0
   turn: 0,
   solved: false,
   events: [ ... ],             // what happened in the step that produced this state, in order (empty at turn 0)
@@ -211,12 +220,12 @@ Events (the UI animates and plays sounds from these; emit them in the order thin
 { type: 'hide', id }  { type: 'emerge', id }    // Shellwhelk lit state changed between the previous stored light and Light B
 { type: 'wake', id }  { type: 'sleep', id }     // Stumpcap lit state changed, same comparison
 { type: 'gate', channel, open }    // a channel's gates changed
-{ type: 'bud', x, y, lit }         // a Glowbud's lit state changed
+{ type: 'bud', x, y, lit: true }   // a Glowbud came into bloom (emitted once per bud)
 { type: 'solved' }
 ```
 
 `key(state)` must include Wren, the lantern (position and carried), every creature (type, position, facing;
-order-independent) and the bridges. It must not depend on `turn`, `events` or creature ids.
+order-independent), the bridges and the bloom flags. It must not depend on `turn`, `events` or creature ids.
 
 ### `src/solver.js` (pure)
 
@@ -277,9 +286,27 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 
 - **Wren:** "Swipe to walk. Tap Wren to set the lantern down or pick it up. A planted lantern shines further."
 - **Fluffmoth:** "Flies toward your lantern. Loves puddles: it lands in one and becomes a bridge."
-- **Shellwhelk:** "Creeps away from your lantern. In the light it hides in its shell, and a hiding whelk is heavy."
+- **Shellwhelk:** "Creeps away from your lantern. Catch it in the light and it hides in its shell; a hiding whelk is heavy. A planted lantern reaches further."
 - **Stumpcap:** "Sleeps in the dark. In the light it marches straight ahead. Always heavy."
-- **Glowbud:** "Light every Glowbud at the same time."
+- **Glowbud:** "Light every Glowbud. Once lit, it stays in bloom."
 - **Pressure root and gate:** "A gate opens while something heavy rests on its root."
 - **Puddle:** "Too deep for Wren. A Fluffmoth can bridge it."
 - **Hush:** "Darkness that eats light. Wren can only cross it with the lantern in hand, and the lantern goes dark inside."
+
+## 9. Details settled during implementation
+
+- Creature ids are strings numbered per species in reading order: `M1`, `S1`, `T1`.
+- `state.lit` arrays are frozen and shared between states. Never write to them.
+- `state.gates` lists every channel that has a gate or a root. A channel with no root never opens.
+- A moth that settles makes the bridge at once: creatures acting later in the same turn may step onto it.
+- Event order within a step: the player's event; then for each creature in acting order `move`, `settle`,
+  `bump`; then `hide` / `emerge` / `wake` / `sleep`; then `gate`, `bud`, `solved`. A Stumpcap can `move`
+  without a `wake` (lit in Light A, walked out of the light). `bump` repeats on every lit, blocked turn.
+- `parseLevel` throws on maps over 9 by 11, on `under` entries where nothing stands, and on start positions
+  the terrain table forbids.
+- `solve().explored` counts distinct positions reached, including the start. `checkLevel` also returns
+  `searched` (positions over all its searches).
+- Light passes through gates, so a gate protects access, not light: keep buds more than 2 flood steps from
+  anywhere the lantern can stand without opening the gate. A gate only needs to be open on the turn Wren
+  steps into it.
+- Moths chase the lantern from anywhere and cannot be walked through. Planting the lantern parks them.

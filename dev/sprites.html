@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glimmerdeep sprites gallery</title>
+<style>
+  body { background: #1a1226; color: #f4ead5; font: 13px/1.4 system-ui, sans-serif; margin: 16px; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  h2 { font-size: 12px; font-weight: 600; margin: 18px 0 6px; opacity: 0.85; }
+  section { display: inline-block; margin-right: 18px; vertical-align: top; }
+  canvas { display: block; }
+  #perf { white-space: pre; font-family: ui-monospace, monospace; font-size: 12px; }
+  button { font: inherit; padding: 4px 10px; }
+</style>
+</head>
+<body>
+<h1>Glimmerdeep sprites gallery</h1>
+<p>Dev page for <code>src/sprites.js</code>. Serve the project folder over http (the screenshot script does) and open
+<code>/dev/sprites.html</code>. Add <code>?t=2.5</code> to freeze a different moment, <code>?live=1</code> to animate.</p>
+<p><button id="run-perf">Measure frame time</button> <span id="perf"></span></p>
+<div id="root"></div>
+<script type="module" src="./sprites-gallery.js"></script>
+</body>
+</html>
