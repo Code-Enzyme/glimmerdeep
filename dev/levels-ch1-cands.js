@@ -116,4 +116,29 @@ add('block5', 'ML', `
 #G#####
 #######`);
 
+// ---- clingy moth: it follows into the pocket and corks it; lead it past the water from the balcony first
+add('follow1', 'M', `
+#######
+##W..##
+#..M~.#
+#.###G#
+#G#####
+#######`);
+// ---- two moths, two chambers: each dives toward where the lantern is
+add('dzone1', 'M', `
+#######
+#..W..#
+#.###.#
+#~M#M~#
+#.~#~.#
+#G###G#
+#######`);
+add('block6', 'ML', `
+#######
+#.....#
+#W~##M#
+#~..#G#
+#G#G###
+#######`);
+
 export default C;

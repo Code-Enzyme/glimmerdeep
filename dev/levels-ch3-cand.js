@@ -1,41 +1,13 @@
 // Scratch candidates for chapter 3 (not shipped).
 export default [
   {
-    id: 'b2', name: 'moth bridge stream', feature: 'TM',
+    id: 'g2', name: 'finale two wings + pocket bud', feature: 'TSML',
     map: [
       '#######',
-      '#W.v..#',
-      '#.....#',
-      '#~~~~~#',
-      '#.....#',
-      '#M#.#A#',
-      '###a#.#',
-      '###.#G#',
-      '#######',
-    ],
-  },
-  {
-    id: 'w2', name: 'whelk stopper', feature: 'TS',
-    map: [
-      '######',
-      '#..###',
-      '#.S###',
-      '#W.###',
-      '#..###',
-      '#>.a.#',
-      '##A###',
-      '#G.###',
-      '######',
-    ],
-  },
-  {
-    id: 'f1', name: 'finale shared lane', feature: 'TSM',
-    map: [
-      '#######',
-      '#W.####',
-      '#..S###',
-      '#...###',
-      '#...###',
+      '#...~v#',
+      '#....a#',
+      '#.S.#.#',
+      '#..W#G#',
       '#>~.aM#',
       '###A###',
       '#G..###',
