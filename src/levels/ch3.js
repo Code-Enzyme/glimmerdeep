@@ -17,7 +17,7 @@ export default [
       '#######',
     ],
     note: 'Walk beside the Stumpcap until it stands on the root, then go round wide: passing beside it again walks it off the root and into the doorway, but stepping in front of it is safe.',
-    tip: 'A Stumpcap sleeps in the dark. In the light it marches straight ahead. Always heavy.',
+    tip: 'A Stumpcap sleeps in the dark, marches straight ahead in the light, and is always heavy.',
   },
   {
     id: '3-2',
@@ -73,5 +73,23 @@ export default [
     ],
     note: 'Where the lantern is planted decides how far a Stumpcap marches: from the ledge between the pools the light only just reaches, so the left one takes a single step onto its root; planted in the left niche it would march three and overshoot.',
     tip: 'A planted lantern shines further.',
+  },
+  {
+    id: '3-5',
+    name: 'Many Hands',
+    feature: 'TSML',
+    par: 26,
+    map: [
+      '#######',
+      '###.~v#',
+      '#....a#',
+      '#.S.#.#',
+      '#..W#G#',
+      '#>~.aM#',
+      '###A###',
+      '#G..###',
+      '#######',
+    ],
+    note: 'Order is everything: call the moth west along the lane into the pool, light the burrow bud before the upper Stumpcap seals it, launch that one a single step from the ledge across its pool, scare the whelk into the dead end ahead of the lower Stumpcap, and only then walk past the root into the gate.',
   },
 ];
