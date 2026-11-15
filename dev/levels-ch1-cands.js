@@ -53,4 +53,67 @@ add('zone2', 'M', `
 ####G#
 ######`);
 
+add('block2', 'ML', `
+#######
+#.....#
+#W~##M#
+##.####
+##G####
+#######`);
+add('block3', 'ML', `
+#######
+#.....#
+#W~##M#
+#~.G###
+#G#####
+#######`);
+add('block4', 'ML', `
+######
+#....#
+#W~#M#
+##.###
+##G###
+######`);
+add('zone3', 'M', `
+######
+#..W.#
+#.##.#
+#~M#.#
+#.~#.#
+#G#G.#
+######`);
+
+// ---- two moths: the rear moth is blocked by the front one and dives toward the light
+add('queue1', 'M', `
+#######
+#.~####
+#WMM..#
+#.~####
+##.G###
+#######`);
+add('twoside', 'ML', `
+#######
+##.G###
+#.~####
+#W..MM#
+#.~####
+##.G###
+#######`);
+add('twoside2', 'ML', `
+#######
+##..G##
+#.~####
+#W..MM#
+#.~####
+##..G##
+#######`);
+// block with three buds: water bud at the beacon spot, bud past the bridge, bud under the moth's nook
+add('block5', 'ML', `
+#######
+#.....#
+#W~##M#
+#~.G#G#
+#G#####
+#######`);
+
 export default C;

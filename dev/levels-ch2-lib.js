@@ -156,3 +156,49 @@ export function report(name, def, { boards = true, moves = null } = {}) {
   if (boards) replay(d, moves ? Array.from(moves) : sol.moves);
   return { res, sol, an };
 }
+
+// The shortest move strings that reach a dead position (one from which no solution exists).
+export function trapPaths(def, limit = 4) {
+  const d = { id: 'x', name: 'x', feature: 'S', par: 0, ...def };
+  const start = parseLevel(d);
+  const ids = new Map([[key(start), 0]]);
+  const states = [start];
+  const par = [-1];
+  const via = [''];
+  const succ = [];
+  for (let head = 0; head < states.length; head++) {
+    const cur = states[head];
+    const out = [];
+    if (!cur.solved) {
+      for (const a of ACTIONS) {
+        const n = step(cur, a);
+        if (n === null) continue;
+        const k = key(n) + (n.solved ? '!' : '');
+        let id = ids.get(k);
+        if (id === undefined) { id = states.length; ids.set(k, id); states.push(n); par.push(head); via.push(a); }
+        out.push(id);
+      }
+    }
+    succ.push(out);
+  }
+  const n = states.length;
+  const pred = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++) for (const j of succ[i]) pred[j].push(i);
+  const ok = new Uint8Array(n);
+  let frontier = [];
+  for (let i = 0; i < n; i++) if (states[i].solved) { ok[i] = 1; frontier.push(i); }
+  while (frontier.length) {
+    const next = [];
+    for (const i of frontier) for (const p of pred[i]) if (!ok[p]) { ok[p] = 1; next.push(p); }
+    frontier = next;
+  }
+  const res = [];
+  for (let i = 0; i < n && res.length < limit; i++) {
+    if (ok[i]) continue;
+    if (par[i] >= 0 && !ok[par[i]]) continue;   // only the first step into dead territory
+    let s = '';
+    for (let j = i; par[j] >= 0; j = par[j]) s = via[j] + s;
+    res.push(s);
+  }
+  return res;
+}
