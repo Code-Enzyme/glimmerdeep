@@ -15,7 +15,7 @@ export const RULE_CARDS = {
   },
   M: {
     title: 'Fluffmoth',
-    text: 'Flies toward your lantern. Loves puddles: it lands in one and becomes a bridge.',
+    text: 'Flies toward your lantern, sideways first. Loves puddles: it lands in one and becomes a bridge.',
   },
   S: {
     title: 'Shellwhelk',
@@ -23,7 +23,7 @@ export const RULE_CARDS = {
   },
   T: {
     title: 'Stumpcap',
-    text: 'Sleeps in the dark. In the light it marches straight ahead. Always heavy.',
+    text: 'Sleeps in the dark. In the light it marches straight ahead until something stands in its way. Always heavy.',
   },
   bud: {
     title: 'Glowbud',

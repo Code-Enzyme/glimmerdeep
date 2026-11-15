@@ -286,9 +286,9 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 ## 8. Rule cards (player-facing text, use as written)
 
 - **Wren:** "Swipe to walk. Tap Wren to set the lantern down or pick it up. A planted lantern shines further."
-- **Fluffmoth:** "Flies toward your lantern. Loves puddles: it lands in one and becomes a bridge."
+- **Fluffmoth:** "Flies toward your lantern, sideways first. Loves puddles: it lands in one and becomes a bridge."
 - **Shellwhelk:** "Creeps away from your lantern. Catch it in the light and it hides in its shell; a hiding whelk is heavy. A planted lantern reaches further."
-- **Stumpcap:** "Sleeps in the dark. In the light it marches straight ahead. Always heavy."
+- **Stumpcap:** "Sleeps in the dark. In the light it marches straight ahead until something stands in its way. Always heavy."
 - **Glowbud:** "Light every Glowbud. Once lit, it stays in bloom."
 - **Pressure root and gate:** "A gate opens while something heavy rests on its root."
 - **Puddle:** "Too deep for Wren. A Fluffmoth can bridge it."
