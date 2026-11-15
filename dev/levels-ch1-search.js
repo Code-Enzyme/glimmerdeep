@@ -63,28 +63,39 @@ function evaluate(g) {
   let start;
   try { start = parseLevel({ id: 's', map }); } catch { return null; }
   if (start.solved) return null;
-  const main = solve(start, { maxStates: 40000 });
+  const main = solve(start, { maxStates: 30000 });
   if (!main.solved) return null;
   const len = main.moves.length;
   if (len > opt.maxLen) return null;
-  // moth necessity
-  const bare = parseLevel({ id: 's', map: map.map((r) => r.replace(/M/g, '.')) });
-  const wo = solve(bare, { maxStates: 40000 });
-  if (wo.solved || !wo.exhausted) return null;
-  // L necessity
-  const nl = solve(start, { maxStates: 40000, actions: noL });
+  // every moth must be necessary on its own
+  const cells = [];
+  map.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === 'M') cells.push([x, y]); }));
+  for (const [mx, my] of cells) {
+    const m2 = map.map((r, y) => (y === my ? r.slice(0, mx) + '.' + r.slice(mx + 1) : r));
+    const wo = solve(parseLevel({ id: 's', map: m2 }), { maxStates: 30000 });
+    if (wo.solved || !wo.exhausted) return null;
+  }
+  const nl = solve(start, { maxStates: 30000, actions: noL });
   const lNeeded = !nl.solved && nl.exhausted;
-  if (opt.needL && !lNeeded) return null;
-  // naive walk: puddles are floor, no moths
+  if (opt.needL === 1 && !lNeeded) return null;
+  if (opt.needL === -1 && lNeeded) return null;
   const dry = parseLevel({ id: 's', map: map.map((r) => r.replace(/[M~]/g, '.')) });
-  const dr = solve(dry, { maxStates: 40000 });
+  const dr = solve(dry, { maxStates: 30000 });
   const naive = dr.solved ? dr.moves.length : len;
   const floor = map.join('').replace(/#/g, '').length;
   const moves = main.moves.join('');
-  const ls = (moves.match(/L/g) || []).length;
-  const zs = (moves.match(/Z/g) || []).length;
-  let score = (len - naive) * 2 + len * 0.5 - floor * 0.25 + (lNeeded ? 3 : 0) - zs * 1.5;
-  return { map, len, naive, lNeeded, floor, moves, ls, zs, score, explored: main.explored };
+  const waits = (moves.match(/Z/g) || []).length + (moves.match(/LL/g) || []).length;
+  const win = winnability(start, { cap: 30000 });
+  if (win.capped) return null;
+  const winShare = win.winCount / win.size;
+  let deadFirst = 0;
+  for (const a of ACTIONS) {
+    const nx = step(start, a);
+    if (!nx || nx.solved) continue;
+    if (!solve(nx, { maxStates: 30000 }).solved) deadFirst++;
+  }
+  const score = (len - naive) * 1.0 + len * 0.3 - floor * 0.3 + (1 - winShare) * 10 - waits * 3 - deadFirst * 6 + (lNeeded ? 2 : 0);
+  return { map, len, naive, lNeeded, floor, moves, waits, score: +score.toFixed(2), full: win.size, winShare: +winShare.toFixed(2), firstDead: win.firstDead, deadFirst };
 }
 
 function finalChecks(e) {
@@ -121,8 +132,8 @@ for (let r = 0; r < opt.restarts; r++) {
     const k = best.map.join('|');
     if (!seen.has(k)) {
       seen.add(k);
-      const f = finalChecks(best);
-      if (f) { fs.appendFileSync(out, JSON.stringify({ ...best, ...f, opt: `${W}x${H} m${opt.moths} b${opt.buds} s${opt.seed}` }) + '\n'); logged++; }
+      const f = {};
+      if (best.deadFirst === 0) { fs.appendFileSync(out, JSON.stringify({ ...best, ...f, opt: `${W}x${H} m${opt.moths} b${opt.buds} s${opt.seed}` }) + '\n'); logged++; }
     }
   }
 }

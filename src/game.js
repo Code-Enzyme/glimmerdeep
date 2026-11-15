@@ -73,6 +73,7 @@ let lastBloom = -1;
 let raf = 0;
 let woke = false;
 let gesture = null;
+let armedAt = 0;           // a rule card ignores taps until the finger that opened it has lifted
 const queue = [];
 
 const view = new BoardView(canvas, {
@@ -631,6 +632,7 @@ function openCard(kind) {
   $('card-text').textContent = card.text;
   const url = portraitUrl(kind, current ? current.chapter.accent : undefined);
   $('card-art').style.backgroundImage = url ? `url(${url})` : 'none';
+  armedAt = performance.now() + 400;
   openPanel('card');
   play('ui');
 }
@@ -726,6 +728,7 @@ canvas.addEventListener('pointerup', (e) => {
   const g = gesture;
   if (!g || e.pointerId !== g.id) return;
   endGesture();
+  if (g.held) armedAt = performance.now() + 300;   // the lift may still arrive as a click on the card
   if (g.swipes || g.held || g.stopOnly || g.wandered || !g.tile) return;
   tapTile(g.tile);
 });
@@ -757,9 +760,12 @@ onClick($('back'), () => {
   showMap();
 });
 
-onClick($('card-close'), () => closePanel());
+onClick($('card-close'), (e) => {
+  if (e.detail > 0 && performance.now() < armedAt) return;
+  closePanel();
+});
 scrim.addEventListener('click', () => {
-  if (panel === 'card') closePanel();
+  if (panel === 'card' && performance.now() >= armedAt) closePanel();
 });
 onClick($('result-next'), () => {
   const next = current && nextLevelAfter(current.def);
@@ -907,6 +913,8 @@ window.__gd = {
   hint: () => (view.hint ? (view.hint.dir || 'ring') : null),
   layout: () => (view.layout ? { ...view.layout, left: view.rect.left, top: view.rect.top, dpr: view.dpr, frames: view.frames } : null),
   save: () => JSON.parse(JSON.stringify(save)),
+  contrast: () => view.highContrast,
+  frames: () => view.frames,
 };
 
 // ---------------------------------------------------------------- start

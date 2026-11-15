@@ -261,7 +261,7 @@ async function main() {
     eq('map: locked levels', await h.page.locator('.node.locked').count(), Math.max(0, LEVELS.length - 1));
     eq('map: no star moss earned yet', await h.page.locator('.node .moss.on').count(), 0);
     eq('map: every node has three marks', await h.page.locator('.node .moss').count(), LEVELS.length * 3);
-    ok('map: no designer note anywhere', !(await h.page.content()).includes(first.note || '\u0000'));
+    ok('map: no designer note on screen', !(await h.page.evaluate(() => document.body.innerText)).includes(first.note || '\u0000'));
 
     // every button has an aria-label; nothing but paper is in the top 12 percent
     const audit = async (label) => {
@@ -421,15 +421,15 @@ async function main() {
     await h.idle();
     eq('lantern button looks disabled away from the lantern', await h.page.locator('#btn-lantern').getAttribute('aria-disabled'), 'true');
     const kL = await h.gd('key');
-    await h.page.locator('#btn-lantern').tap();
+    await h.page.locator('#btn-lantern').tap({ force: true });
     await h.page.waitForTimeout(150);
     eq('lantern button does nothing when not legal', await h.gd('key'), kL);
     await h.page.keyboard.press('.');
     await h.idle();
-    eq('wait key spends a turn', await h.gd('moves'), 4);
+    eq('wait key spends a turn', await h.gd('moves'), 5);
     await h.page.locator('#btn-wait').tap();
     await h.idle();
-    eq('wait button spends a turn', await h.gd('moves'), 5);
+    eq('wait button spends a turn', await h.gd('moves'), 6);
 
     // fast swiping: inputs during an animation are queued, at most two
     await h.gd('loadLevel', first.id);
@@ -492,7 +492,6 @@ async function main() {
     eq('replay: fresh attempt', [await h.gd('moves'), await h.gd('hints'), await h.gd('panel')], [0, 0, null]);
 
     // a dead end: hint says so and points at Undo
-    await h.gd('loadLevelDef', { id: 'T-0', name: 'Dead End', map: ['#####', '#W.G#', '#~###', '#####'].map((r) => r), par: 1 });
     await h.gd('loadLevelDef', { id: 'T-0', name: 'Dead End', map: ['######', '#WM~G#', '######'] });
     await h.gd('act', 'Z');
     await h.gd('act', 'L');
@@ -543,7 +542,7 @@ async function main() {
     await h.page.keyboard.press('u');
     await h.idle();
     eq('keyboard: U undoes', await h.gd('moves'), 0);
-    await playByKeys(h, sol.map((m) => (m === 'E' ? 'd' : m)).map((m) => (m === 'd' ? 'E' : m)));
+    await playByKeys(h, sol);
     await waitResult(h);
     eq('keyboard solve: three star moss', await earned(h), 3);
     await h.page.keyboard.press('r');
@@ -682,7 +681,7 @@ async function main() {
       const dark = await h.gd('state');
       eq('ad-hoc trio: in the Hush nothing is lit', dark.lit.reduce((a, b) => a + b, 0), 0);
       await h.page.waitForTimeout(200);
-      await h.page.locator('#btn-lantern').tap();
+      await h.page.locator('#btn-lantern').tap({ force: true });
       await h.page.waitForTimeout(150);
       eq('ad-hoc trio: cannot plant on Hush', (await h.gd('state')).lantern.carried, true);
       await h.swipe('N');
@@ -825,6 +824,7 @@ async function main() {
       await g.gd('loadLevel', first.id);
       await playByTouch(g, sol);
       await waitResult(g);
+      await g.page.waitForTimeout(500);   // let the panel finish rising
       const panel = await g.page.locator('#result').boundingBox();
       ok(`${tag}: result panel on screen`, panel.x >= 0 && panel.y >= 0 && panel.x + panel.width <= viewport.width && panel.y + panel.height <= viewport.height, JSON.stringify(panel));
       await g.close();

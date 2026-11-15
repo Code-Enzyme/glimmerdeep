@@ -13,5 +13,23 @@ export default [
       '#########',
     ],
     note: 'The moth flies to the lantern, lands in the puddle and becomes a bridge.',
+    tip: 'Swipe to walk. The Fluffmoth flies toward your lantern.',
+  },
+  {
+    id: '1-2',
+    name: 'Across the Water',
+    feature: 'ML',
+    par: 9,
+    map: [
+      '#####',
+      '#W#G#',
+      '#.#~#',
+      '#.#.#',
+      '#~#.#',
+      '#.M.#',
+      '#####',
+    ],
+    note: 'The moth bridges the first puddle by itself; the second has no moth, so the lantern must be planted at its edge to shine across.',
+    tip: 'Tap Wren to set the lantern down. A planted lantern shines further.',
   },
 ];

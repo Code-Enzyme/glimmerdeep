@@ -12,6 +12,7 @@ const top = num('--top', 25);
 const minlen = num('--minlen', 6);
 const needL = args.includes('--needL');
 const keep = args.includes('--keep');
+const brief = args.includes('--brief');
 const def = C[name];
 if (!def) { console.error('no candidate ' + name); process.exit(1); }
 
@@ -54,12 +55,12 @@ for (const [wx, wy] of floors) {
       if (!solve(nx, { maxStates: 150000 }).solved) deadFirst++;
     }
     const moves = main.moves.join('');
-    results.push({ map, len: moves.length, moves, lNeeded, noL: nl.solved ? nl.moves.length : '-', full: win.size, winShare: win.winCount / win.size, firstDead: win.firstDead, deadFirst, firstCount });
+    results.push({ w: `W${wx},${wy}`, m: ms.map(([x, y]) => `M${x},${y}`).join(' '), map, len: moves.length, moves, lNeeded, noL: nl.solved ? nl.moves.length : '-', full: win.size, winShare: win.winCount / win.size, firstDead: win.firstDead, deadFirst, firstCount });
   }
 }
 results.sort((a, b) => (a.deadFirst - b.deadFirst) || (a.winShare - b.winShare) || (b.len - a.len));
 console.log(`${results.length} placements pass`);
 for (const r of results.slice(0, top)) {
   console.log(`len ${r.len} ${r.moves}  L:${r.lNeeded ? 'needed' : 'no(' + r.noL + ')'} full ${r.full} win ${(100 * r.winShare).toFixed(0)}% firstDead ${r.firstDead} deadFirst ${r.deadFirst}/${r.firstCount}`);
-  console.log(r.map.map((s) => '   ' + s).join('\n'));
+  if (brief) console.log(`   ${r.w} ${r.m}`); else console.log(r.map.map((s) => '   ' + s).join('\n'));
 }

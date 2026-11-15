@@ -124,7 +124,8 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .btn.warn { background: #E9A08B; }
 
 .buttons { display: flex; gap: 10px; }
-.buttons .btn { flex: 1 1 0; min-width: 0; }
+.buttons .btn { flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+.buttons .btn.primary { flex-grow: 1.5; }
 
 /* ------------------------------------------------------------------ bars */
 
@@ -262,14 +263,14 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 }
 
 .trail { position: relative; margin-top: 6px; }
-.trail svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
-.trail path {
+.trail > svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.trail > svg path {
   fill: none;
   stroke: var(--ink);
-  stroke-opacity: 0.5;
-  stroke-width: 3;
+  stroke-opacity: 0.62;
+  stroke-width: 3.5;
   stroke-linecap: round;
-  stroke-dasharray: 1 10;
+  stroke-dasharray: 0.5 9;
 }
 
 .node {
@@ -522,7 +523,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .hc .kicker.ink { color: #3D2410; }
 .hc .paper { background-image: none; background-color: #FFFAEC; border-width: 3px; }
 .hc .tally, .hc .empty, .hc .result-moves, .hc .result-best { color: var(--ink); }
-.hc .trail path { stroke-opacity: 0.9; }
+.hc .trail > svg path { stroke-opacity: 0.95; }
 .hc .node.locked .dot { color: var(--ink); }
 .hc .moss path { stroke: var(--ink); }
 .hc .marks li.missed { color: var(--ink); }

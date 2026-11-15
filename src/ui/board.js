@@ -477,7 +477,12 @@ export class BoardView {
         });
       }
     }
-    if (!s.lantern.carried) things.push({ z: 0, x: s.lantern.x, y: s.lantern.y, c: null, alpha: 1, drop: 0 });
+    // A planted lantern under Wren's feet would be hidden by her: the two step apart a little, lantern in front.
+    let share = 0;
+    if (!s.lantern.carried) {
+      share = clamp01(1 - Math.hypot(wx - s.lantern.x, wy - s.lantern.y) * 1.6);
+      things.push({ z: share > 0 ? 3 : 0, x: s.lantern.x, y: s.lantern.y, c: null, alpha: 1, drop: 0 });
+    }
     let celebrateHop = 0;
     if (cel && !this.reduced && celT < 900) celebrateHop = Math.abs(Math.sin(celT * 0.0105)) * 0.14 * (1 - celT / 900);
     things.push({ z: 2, x: wx, y: wy, c: null, alpha: 1, drop: 0 });
@@ -525,14 +530,14 @@ export class BoardView {
       const th = things[i];
       const px = ox + th.x * size;
       const py = oy + th.y * size;
-      if (th.z === 0) {
-        drawLantern(ctx, px, py, size, { t });
+      if (th.z === 0 || th.z === 3) {
+        drawLantern(ctx, px + share * 0.27 * size, py + share * 0.07 * size, size, { t });
       } else if (th.z === 1) {
         if (th.alpha < 1) ctx.globalAlpha = th.alpha;
         drawCreature(ctx, th.c.type, px, py + th.drop * size, size, { t, dir: th.c.dir, lit: th.lit, hidden: th.hidden, awake: th.awake });
         ctx.globalAlpha = 1;
       } else {
-        drawWren(ctx, px + sx * size, py + (sy - hop - celebrateHop) * size, size, {
+        drawWren(ctx, px + (sx - share * 0.15) * size, py + (sy - hop - celebrateHop) * size, size, {
           t, dir: this.facing, carrying: s.lantern.carried, smothered: s.lantern.carried && smothered,
         });
       }

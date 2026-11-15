@@ -28,4 +28,29 @@ add('block1', 'ML', `
 ###G###
 #######`);
 
+// ---- pond room: lead the moth around the pond, not across it
+add('pondA', 'M', `
+#######
+#....##
+#.~.~.#
+#...#G#
+#######`);
+add('pondB', 'M', `
+#######
+#....##
+#.~.~.#
+#...#G#
+#...###
+#######`);
+// ---- two buds, zones: east bud is in the zone that sends the moth into the decoy
+add('zone2', 'M', `
+######
+#..W.#
+#.##.#
+#~M#.#
+#.~#.#
+#G##.#
+####G#
+######`);
+
 export default C;
