@@ -3,7 +3,8 @@
 // screen at a given moment and paints it with sprites.js.
 
 import { DIRS, terrainAt } from '../engine.js';
-import { drawTile, drawWren, drawLantern, drawCreature, drawDarkness, drawBackdrop, PALETTE } from '../sprites.js';
+import { drawDarkness, drawBackdrop, PALETTE } from '../sprites.js';
+import { drawTile, drawWren, drawLantern, drawCreature } from '../chars.js';
 
 const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',

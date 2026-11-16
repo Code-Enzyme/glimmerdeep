@@ -2,7 +2,8 @@
 // sprites.js into throwaway canvases and handed over as data URLs (so the page keeps a single live
 // canvas), plus the star-moss mark as inline SVG.
 
-import { drawIcon, drawTile, drawWren, drawCreature, drawLantern, PALETTE } from '../sprites.js';
+import { drawIcon, PALETTE } from '../sprites.js';
+import { drawTile, drawWren, drawCreature, drawLantern, charStyle } from '../chars.js';
 
 function paint(cssSize, scale, painter) {
   try {
@@ -55,7 +56,7 @@ const portraitCache = new Map();
 
 // A fully lit portrait for a rule card. kind: 'wren' | 'M' | 'S' | 'T' | 'bud' | 'root' | 'gate' | 'puddle' | 'hush'
 export function portraitUrl(kind, accent) {
-  const k = kind + '|' + (accent || '');
+  const k = kind + '|' + (accent || '') + '|' + charStyle();
   let url = portraitCache.get(k);
   if (url !== undefined) return url;
   const size = 72;

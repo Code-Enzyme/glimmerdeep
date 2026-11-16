@@ -7,13 +7,14 @@
 import { key, DIRS } from './engine.js';
 import { nextMove } from './solver.js';
 import { CHAPTERS, LEVELS } from './levels/index.js';
-import { initAudio, setMuted, play, setMusic } from './audio.js';
+import { initAudio, setMuted, play } from './audio.js';
 import { Session } from './ui/session.js';
 import { loadSave, writeSave, recordResult, clearProgress } from './ui/store.js';
 import { BoardView } from './ui/board.js';
 import { applyIcons, setIcon, portraitUrl, mossSvg, pipSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { renderMap, layoutMap } from './ui/map.js';
+import { setCharStyle } from './chars.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
@@ -58,6 +59,7 @@ try {
   params = { get: () => null };
 }
 const forceUnlock = params.get('unlock') === '1';
+setCharStyle(params.get('style') || 'faces');
 
 let screen = 'map';
 let session = null;        // the attempt in progress
@@ -118,17 +120,8 @@ function wake() {
   if (woke) return;
   woke = true;
   initAudio();
-  syncMusic();
 }
 
-function syncMusic() {
-  if (screen === 'level' && session) {
-    const id = Number(current.chapter.id);
-    setMusic({ playing: true, intensity: session.bloomShare(), chapter: id >= 1 && id <= 3 ? id : 1 });
-  } else {
-    setMusic({ playing: false });
-  }
-}
 
 function setDisabled(button, disabled) {
   const value = disabled ? 'true' : 'false';
@@ -168,7 +161,6 @@ function showMap() {
   celebrating = false;
   showScreen('map');
   drawMap();
-  syncMusic();
 }
 
 function drawMap() {
@@ -275,7 +267,6 @@ function refreshHud() {
   const bloom = session.bloomCount();
   if (bloom !== lastBloom) {
     lastBloom = bloom;
-    syncMusic();
   }
 }
 
