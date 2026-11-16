@@ -19,6 +19,7 @@ const OUTLINE = 'rgba(10,5,16,0.8)';
 const RIM_COOL = '#6A5592';
 const RIM_WARM = '#C99260';
 const MARGIN = 0.25;
+const EMIT_RIM = 'rgba(160,140,214,0.6)';
 
 const T_CLOAK = ['#5C4886', '#30244B', '#160E23'];
 const T_MOTH = ['#55427A', '#2E2145', '#150D20'];
@@ -144,9 +145,10 @@ const mirror = (pts) => pts.map((q) => [1 - q[0], q[1], q[2]]);
 // ---------------------------------------------------------------------------
 
 class Pen {
-  constructor(g, glow, P) {
+  constructor(g, mode, P) {
     this.g = g;
-    this.glow = glow;
+    this.glow = mode >= 1;
+    this.emit = mode === 2;
     this.P = P;
     this.rim = RIM_COOL;
     this.fx = 1; // -1 while painting mirrored, so the rim light stays top-left
@@ -166,8 +168,13 @@ class Pen {
   body(path, cx, cy, r, tone, rim = 0.022) {
     const g = this.g;
     if (this.glow) {
-      g.fillStyle = '#000';
-      g.fill(path);
+      this.occlude(path, true);
+      if (this.emit && r >= 0.07) {
+        // a faint rim so the silhouette can be traced in the dark (the body itself stays dark)
+        g.strokeStyle = EMIT_RIM;
+        g.lineWidth = this.lw(0.016);
+        g.stroke(path);
+      }
       return;
     }
     g.fillStyle = this.rim;
@@ -182,11 +189,25 @@ class Pen {
     g.lineWidth = this.lw(0.014);
     g.stroke(path);
   }
+  // hide glow behind a body: black under 'lighter' in the glow layer, erased in the emissive layer
+  occlude(path, fill, w) {
+    const g = this.g;
+    if (this.emit) g.globalCompositeOperation = 'destination-out';
+    if (fill) {
+      g.fillStyle = '#000';
+      g.fill(path);
+    } else {
+      g.strokeStyle = '#000';
+      g.lineWidth = this.lw(w);
+      g.stroke(path);
+    }
+    if (this.emit) g.globalCompositeOperation = 'source-over';
+  }
   // plain fill that also occludes glow
   solid(path, style) {
-    const g = this.g;
-    g.fillStyle = this.glow ? '#000' : style;
-    g.fill(path);
+    if (this.glow) return this.occlude(path, true);
+    this.g.fillStyle = style;
+    this.g.fill(path);
   }
   // body-layer only paint (shading, shadows)
   paint(path, style) {
@@ -195,8 +216,9 @@ class Pen {
     this.g.fill(path);
   }
   strokeBody(path, style, w) {
+    if (this.glow) return this.occlude(path, false, w);
     const g = this.g;
-    g.strokeStyle = this.glow ? '#000' : style;
+    g.strokeStyle = style;
     g.lineWidth = this.lw(w);
     g.stroke(path);
   }
@@ -207,8 +229,8 @@ class Pen {
     if (this.glow) {
       g.save();
       g.shadowColor = color;
-      g.shadowBlur = this.P * blur;
-      g.strokeStyle = mix(color, '#FFFFFF', 0.3);
+      g.shadowBlur = this.P * blur * (this.emit ? 1.4 : 1);
+      g.strokeStyle = this.emit ? color : mix(color, '#FFFFFF', 0.3);
       g.stroke(path);
       g.restore();
     } else {
@@ -221,8 +243,8 @@ class Pen {
     if (this.glow) {
       g.save();
       g.shadowColor = color;
-      g.shadowBlur = this.P * blur;
-      g.fillStyle = mix(color, '#FFFFFF', 0.3);
+      g.shadowBlur = this.P * blur * (this.emit ? 1.4 : 1);
+      g.fillStyle = this.emit ? color : mix(color, '#FFFFFF', 0.3);
       g.fill(path);
       g.restore();
     } else {
@@ -280,23 +302,25 @@ function bucket(ctx, size) {
   return b;
 }
 
+function layer(P, paint, rim, mode) {
+  const mp = Math.round(P * MARGIN);
+  const c = makeCanvas(P + 2 * mp, P + 2 * mp);
+  if (!c) return null;
+  const g = c.getContext('2d');
+  g.setTransform(P, 0, 0, P, mp, mp);
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const pen = new Pen(g, mode, P);
+  if (rim) pen.rim = rim;
+  paint(pen);
+  return c;
+}
+
 function build(P, paint, rim, bake) {
   const mp = Math.round(P * MARGIN);
-  const side = P + 2 * mp;
-  const out = { body: null, glow: null, m: mp / P, k: side / P };
-  for (let layer = 0; layer < 2; layer++) {
-    const c = makeCanvas(side, side);
-    if (!c) return null;
-    const g = c.getContext('2d');
-    g.setTransform(P, 0, 0, P, mp, mp);
-    g.lineCap = 'round';
-    g.lineJoin = 'round';
-    const pen = new Pen(g, layer === 1, P);
-    if (rim) pen.rim = rim;
-    paint(pen);
-    if (layer) out.glow = c;
-    else out.body = c;
-  }
+  const body = layer(P, paint, rim, 0);
+  if (!body) return null;
+  const out = { body, glow: layer(P, paint, rim, 1), emit: undefined, m: mp / P, k: (P + 2 * mp) / P, P, paint, rim };
   if (bake > 0) {
     const g = out.body.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -317,15 +341,58 @@ function get(b, key, paint, rim, bake) {
   }
   return s;
 }
+// the markings-plus-rim layer drawn after the darkness, made the first time it is asked for
+function emissive(s) {
+  if (s.emit === undefined) s.emit = crop(layer(s.P, s.paint, s.rim, 2));
+  return s.emit;
+}
+function crop(c) {
+  if (!c) return null;
+  const W = c.width;
+  const H = c.height;
+  const a = c.getContext('2d').getImageData(0, 0, W, H).data;
+  let x0 = W;
+  let y0 = H;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (a[(y * W + x) * 4 + 3] > 3) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return null;
+  const w = x1 - x0 + 1;
+  const h = y1 - y0 + 1;
+  const out = makeCanvas(w, h);
+  out.getContext('2d').drawImage(c, x0, y0, w, h, 0, 0, w, h);
+  c.width = 1;
+  c.height = 1;
+  return { c: out, ox: x0, oy: y0, side: W };
+}
 
 // Draw a sprite, optionally squashed around an anchor (in tile units), then its glow.
-function put(ctx, s, px, py, size, glowA, sx = 1, sy = 1, ax = 0.5, ay = 0.9) {
+function put(ctx, s, px, py, size, glowA, sx = 1, sy = 1, ax = 0.5, ay = 0.9, only = null) {
   const d = size * s.k;
   const o = size * s.m;
   const Ax = px + ax * size;
   const Ay = py + ay * size;
   const x = Ax + (px - o - Ax) * sx;
   const y = Ay + (py - o - Ay) * sy;
+  if (only) {
+    // a cropped emissive layer, plain blend
+    const kx = (d * sx) / only.side;
+    const ky = (d * sy) / only.side;
+    const al = ctx.globalAlpha;
+    ctx.globalAlpha = al * Math.min(1, glowA);
+    ctx.drawImage(only.c, x + only.ox * kx, y + only.oy * ky, only.c.width * kx, only.c.height * ky);
+    ctx.globalAlpha = al;
+    return;
+  }
   ctx.drawImage(s.body, x, y, d * sx, d * sy);
   if (s.glow && glowA > 0.01) {
     const al = ctx.globalAlpha;
@@ -485,7 +552,7 @@ const HEM_TRIM_S = [[0.22, 0.845], [0.28, 0.876], [0.385, 0.853], [0.5, 0.881], 
 function mitten(p, x, y, a, trim) {
   const m = ell(x, y, 0.044, 0.038, a);
   p.body(m, x, y, 0.045, T_CLOAK, 0.01);
-  p.line(arcP(x, y, 0.044, 0.038, a, -2.2, -0.9), TRIM, 0.016, 0.5 * trim + 0.2);
+  if (!p.emit) p.line(arcP(x, y, 0.044, 0.038, a, -2.2, -0.9), TRIM, 0.016, 0.5 * trim + 0.2);
 }
 
 function paintWrenFront(p, carrying, on, f, back) {
@@ -574,23 +641,26 @@ function paintWren(p, d, carrying, out, f) {
 const DIRS = { N: 0, E: 1, S: 2, W: 3 };
 const LANTERN_AT = [[0.795, 0.5], [0.845, 0.77], [0.785, 0.79], [0.155, 0.77]];
 
-export function drawWren(ctx, px, py, size, opts) {
-  const o = opts || {};
+function wrenSpec(b, o) {
   const t = o.t || 0;
   const d = DIRS[o.dir] === undefined ? 2 : DIRS[o.dir];
   const carrying = o.carrying ? 1 : 0;
   const out = carrying && o.smothered ? 1 : 0;
   const on = carrying && !out;
-  const b = bucket(ctx, size);
-  const f = 0;
-  const s = get(b, 'W' + d + carrying + out + f, (p) => paintWren(p, d, carrying, out, f), null, on ? 0.92 : out ? 0.25 : 0.62);
-  if (!s) return;
+  const s = get(b, 'W' + d + carrying + out, (p) => paintWren(p, d, carrying, out, 0), null, on ? 0.92 : out ? 0.25 : 0.62);
   const br = Math.sin(t * (out ? 1.4 : 2.3));
-  const sy = (out ? 0.95 : 1) * (1 + 0.022 * br);
-  put(ctx, s, px, py, size, 0, 1 - 0.012 * br, sy, 0.5, 0.89);
-  if (on) {
-    const q = LANTERN_AT[d];
-    halo(ctx, b, px + q[0] * size, py + (0.89 - (0.89 - q[1]) * sy) * size, size * 0.95, 0.32 + 0.16 * flicker(t));
+  return { s, d, on, sx: 1 - 0.012 * br, sy: (out ? 0.95 : 1) * (1 + 0.022 * br) };
+}
+
+export function drawWren(ctx, px, py, size, opts) {
+  const o = opts || {};
+  const b = bucket(ctx, size);
+  const w = wrenSpec(b, o);
+  if (!w.s) return;
+  put(ctx, w.s, px, py, size, 0, w.sx, w.sy, 0.5, 0.89);
+  if (w.on) {
+    const q = LANTERN_AT[w.d];
+    halo(ctx, b, px + q[0] * size, py + (0.89 - (0.89 - q[1]) * w.sy) * size, size * 0.95, 0.32 + 0.16 * flicker(o.t || 0));
   }
 }
 
@@ -996,52 +1066,92 @@ function paintZ(p) {
   p.line(z, CREAM, 0.1, 0.85, 0.12);
 }
 
-export function drawCreature(ctx, type, px, py, size, opts) {
-  const o = opts || {};
+// Which sprite a creature uses this frame and where it sits (shared by drawCreature and drawGlow).
+function creatureSpec(b, type, o) {
   const t = o.t || 0;
-  const b = bucket(ctx, size);
   const lit = o.lit ? 1 : 0;
+  const sp = { s: null, dy: 0, sx: 1, sy: 1, ax: 0.5, ay: 0.9, glowA: 0, hover: false, zed: false, emitA: 0.6 };
   if (type === 'M') {
     const f = lit ? Math.floor(t * 26) % 12 : 0;
-    const s = get(b, 'M' + lit + '.' + f, (p) => paintMoth(p, lit, f), lit ? RIM_WARM : RIM_COOL, lit ? 0 : 0.34);
-    if (!s) return;
+    sp.s = get(b, 'M' + lit + '.' + f, (p) => paintMoth(p, lit, f), lit ? RIM_WARM : RIM_COOL, lit ? 0 : 0.34);
     if (lit) {
       const bob = Math.sin(t * 4.2);
-      shadow(ctx, b, px + 0.5 * size, py + 0.88 * size, (0.5 - 0.04 * bob) * size, 0.12 * size, 0.38);
-      put(ctx, s, px, py - (0.07 + 0.03 * bob) * size, size, 0.85 + 0.15 * Math.sin(t * 5.3));
+      sp.hover = bob;
+      sp.dy = -(0.07 + 0.03 * bob);
+      sp.glowA = 0.85 + 0.15 * Math.sin(t * 5.3);
     } else {
       const br = Math.sin(t * 1.5);
-      put(ctx, s, px, py, size, 0, 1 + 0.015 * br, 1 - 0.02 * br, 0.5, 0.83);
+      sp.sx = 1 + 0.015 * br;
+      sp.sy = 1 - 0.02 * br;
+      sp.ay = 0.83;
+      sp.emitA = 0.5 + 0.08 * br;
     }
   } else if (type === 'S') {
     const hidden = (o.hidden === undefined ? o.lit : o.hidden) ? 1 : 0;
     const gl = o.lit === undefined ? hidden : lit;
     const f = hidden ? 0 : Math.floor(t * 4) % 6;
-    const s = get(b, 'S' + hidden + gl + '.' + f, (p) => paintWhelk(p, hidden, f, gl), gl ? RIM_WARM : RIM_COOL, gl ? 0 : 0.34);
-    if (!s) return;
-    put(ctx, s, px, py, size, !gl ? 0 : hidden ? 0.8 + 0.06 * Math.sin(t * 1.2) : 0.9 + 0.1 * Math.sin(t * 3));
+    sp.s = get(b, 'S' + hidden + gl + '.' + f, (p) => paintWhelk(p, hidden, f, gl), gl ? RIM_WARM : RIM_COOL, gl ? 0 : 0.34);
+    sp.glowA = !gl ? 0 : hidden ? 0.8 + 0.06 * Math.sin(t * 1.2) : 0.9 + 0.1 * Math.sin(t * 3);
+    sp.emitA = 0.48 + 0.07 * Math.sin(t * 1.6);
   } else if (type === 'T') {
     const awake = (o.awake === undefined ? o.lit : o.awake) ? 1 : 0;
     const gl = o.lit === undefined ? awake : lit;
     const d = DIRS[o.dir] === undefined ? 2 : DIRS[o.dir];
     const f = awake ? Math.floor(t * 6) & 3 : 0;
-    const s = get(b, 'T' + d + awake + gl + '.' + f, (p) => paintStump(p, d, awake, f, gl), gl ? RIM_WARM : RIM_COOL, gl ? 0 : 0.34);
-    if (!s) return;
+    sp.s = get(b, 'T' + d + awake + gl + '.' + f, (p) => paintStump(p, d, awake, f, gl), gl ? RIM_WARM : RIM_COOL, gl ? 0 : 0.34);
     if (awake) {
-      const bob = Math.abs(Math.sin(t * Math.PI * 3)) * 0.018 * size;
-      put(ctx, s, px, py - bob, size, gl ? 0.88 + 0.12 * Math.sin(t * 4) : 0);
+      sp.dy = -Math.abs(Math.sin(t * Math.PI * 3)) * 0.018;
+      sp.glowA = gl ? 0.88 + 0.12 * Math.sin(t * 4) : 0;
     } else {
       const br = Math.sin(t * 1.4);
-      put(ctx, s, px, py, size, gl ? 0.7 : 0, 1 + 0.012 * br, 1 + 0.025 * br, 0.5, 0.86);
-      const z = get(b, 'Z', paintZ, null, 0.9);
-      if (z) {
-        const u = (t * 0.4) % 1;
-        const al = ctx.globalAlpha;
-        ctx.globalAlpha = al * Math.sin(Math.PI * u) * 0.9;
-        const zs = size * (0.22 + 0.06 * u);
-        put(ctx, z, px + size * (0.72 + 0.06 * u), py + size * (0.08 - 0.16 * u), zs, 0);
-        ctx.globalAlpha = al;
-      }
+      sp.glowA = gl ? 0.7 : 0;
+      sp.sx = 1 + 0.012 * br;
+      sp.sy = 1 + 0.025 * br;
+      sp.ay = 0.86;
+      sp.zed = true;
+      sp.emitA = 0.48 + 0.06 * br;
     }
   }
+  return sp;
+}
+
+function drawZed(ctx, b, px, py, size, t, emit) {
+  const z = get(b, 'Z', paintZ, null, 0.9);
+  if (!z) return;
+  const u = (t * 0.4) % 1;
+  const al = ctx.globalAlpha;
+  ctx.globalAlpha = al * Math.sin(Math.PI * u) * 0.9;
+  const zs = size * (0.22 + 0.06 * u);
+  const e = emit ? emissive(z) : null;
+  if (!emit || e) put(ctx, z, px + size * (0.72 + 0.06 * u), py + size * (0.08 - 0.16 * u), zs, emit ? 0.55 : 0, 1, 1, 0.5, 0.9, e);
+  ctx.globalAlpha = al;
+}
+
+export function drawCreature(ctx, type, px, py, size, opts) {
+  const o = opts || {};
+  const b = bucket(ctx, size);
+  const sp = creatureSpec(b, type, o);
+  if (!sp.s) return;
+  if (sp.hover !== false) shadow(ctx, b, px + 0.5 * size, py + 0.88 * size, (0.5 - 0.04 * sp.hover) * size, 0.12 * size, 0.38);
+  put(ctx, sp.s, px, py + sp.dy * size, size, sp.glowA, sp.sx, sp.sy, sp.ax, sp.ay);
+  if (sp.zed) drawZed(ctx, b, px, py, size, o.t || 0, false);
+}
+
+// Emissive pass, drawn after the darkness. On an unlit tile only the luminous markings and a faint rim
+// show (no body fill, so the darkness still covers the body); lit creatures and a lit Wren get nothing.
+export function drawGlow(ctx, who, px, py, size, opts) {
+  const o = opts || {};
+  if (o.lit) return;
+  const b = bucket(ctx, size);
+  if (who === 'wren') {
+    const w = wrenSpec(b, o);
+    const e = w.s && emissive(w.s);
+    if (e) put(ctx, w.s, px, py, size, 0.4 + 0.06 * Math.sin((o.t || 0) * 2.3), w.sx, w.sy, 0.5, 0.89, e);
+    return;
+  }
+  const sp = creatureSpec(b, who, o);
+  const e = sp.s && emissive(sp.s);
+  if (!e) return;
+  put(ctx, sp.s, px, py + sp.dy * size, size, sp.emitA, sp.sx, sp.sy, sp.ax, sp.ay, e);
+  if (sp.zed) drawZed(ctx, b, px, py, size, o.t || 0, true);
 }
