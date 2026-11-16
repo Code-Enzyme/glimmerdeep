@@ -24,7 +24,7 @@ const DENSITIES = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
     jobs.push(['legacy', 48 * k, 48 * k, `mipmap-${d}/ic_launcher.webp`]);
     jobs.push(['round', 48 * k, 48 * k, `mipmap-${d}/ic_launcher_round.webp`]);
     jobs.push(['foreground', 108 * k, 108 * k, `mipmap-${d}/ic_launcher_foreground.webp`]);
-    jobs.push(['splash', 160 * k, 160 * k, `drawable-${d}/splash_wren.webp`]);
+    jobs.push(['splash', 200 * k, 200 * k, `drawable-${d}/splash_wren.webp`]);
   }
   jobs.push(['store', 512, 512, '../../../../../store/icon-512.png']);
   for (const [kind, w, h, rel] of jobs) {

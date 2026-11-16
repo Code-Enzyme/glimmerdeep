@@ -60,8 +60,9 @@ function render(kind, w, h, type = 'image/png') {
     backdrop(ctx, w, h);
     wren(ctx, w / 2, h / 2, s * 0.78);
   } else if (kind === 'splash') {
-    // transparent: drawable/splash.xml puts it in the middle of a plain plum screen
-    wren(ctx, w / 2, h / 2, s * 0.62);
+    // transparent: drawable/splash.xml puts it in the middle of a plain plum screen. Small enough
+    // that the lantern glow fades out before the edge (no visible square).
+    wren(ctx, w / 2, h / 2, s * 0.46);
   }
   return type === 'image/webp' ? c.toDataURL(type, 0.9) : c.toDataURL(type);
 }
