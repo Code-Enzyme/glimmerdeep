@@ -311,3 +311,14 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
   anywhere the lantern can stand without opening the gate. A gate only needs to be open on the turn Wren
   steps into it.
 - Moths chase the lantern from anywhere and cannot be walked through. Planting the lantern parks them.
+
+## 10. Characters and sound (decided 16 Nov 2026)
+
+- No character has a face: no eyes, mouths or face-like marks anywhere, at any size.
+- Character art lives in `src/chars.js`, which dispatches to the game's style, `src/chars/glowmark.js`.
+  A style exports `drawWren`, `drawLantern`, `drawCreature` (section 7 signatures), and optionally
+  `drawBridgeMoth(ctx, px, py, size, { t })` and `drawGlow(ctx, who, px, py, size, opts)`. The board calls
+  drawGlow after drawDarkness, so glowing markings show on unlit tiles. Tiles still come from sprites.js.
+- `src/chars/felt.js` and `src/chars/glyph.js` are the two faceless styles not chosen. They are kept for
+  `dev/style-preview.js` only and are not in the game bundle.
+- No music. `audio.js` still contains the music bed, but the game never starts it; only sound effects play.
