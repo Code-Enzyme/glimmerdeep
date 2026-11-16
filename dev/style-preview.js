@@ -3,7 +3,15 @@
 import { drawDarkness, drawBackdrop, PALETTE } from '../src/sprites.js';
 import { parseLevel, step, isLit, isHidden, isAwake } from '../src/engine.js';
 import { LEVELS } from '../src/levels/index.js';
-import { CHAR_STYLES, setCharStyle, drawTile } from '../src/chars.js';
+import { CHAR_STYLES, setCharStyle, drawTile, drawGlow, registerCharStyle } from '../src/chars.js';
+import * as faces from '../src/sprites.js';
+import * as felt from '../src/chars/felt.js';
+import * as glyph from '../src/chars/glyph.js';
+
+// The game ships Glowmark only; the alternatives stay in the repo for comparison.
+registerCharStyle('felt', 'Felt and stitch', felt);
+registerCharStyle('glyph', 'Lantern glyphs', glyph);
+registerCharStyle('faces', 'Earlier art (with faces)', faces);
 
 export const BLURBS = {
   faces: 'The art in the prototype today, for comparison.',
@@ -138,6 +146,14 @@ function drawScene(ctx, mod, t, width, size) {
   }
   const src = s.lantern.carried ? { x: s.wren.x, y: s.wren.y, radius: 1 } : { x: s.lantern.x, y: s.lantern.y, radius: 2 };
   drawDarkness(ctx, { ox, oy, size, w: s.w, h: s.h, lit: s.lit, source: src, t, highContrast: false });
+  for (const th of things) {
+    if (th.lantern) continue;
+    if (th.wren) drawGlow(ctx, 'wren', ox + (s.wren.x - 0.12) * size, oy + s.wren.y * size, size, { t, dir: 'N', carrying: s.lantern.carried, lit: isLit(s, s.wren.x, s.wren.y) });
+    else {
+      const c = th.c;
+      drawGlow(ctx, c.type, ox + c.x * size, oy + c.y * size, size, { t, dir: c.dir, lit: isLit(s, c.x, c.y), hidden: isHidden(s, c), awake: isAwake(s, c) });
+    }
+  }
   return oy + s.h * size + 8;
 }
 

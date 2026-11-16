@@ -14,7 +14,6 @@ import { BoardView } from './ui/board.js';
 import { applyIcons, setIcon, portraitUrl, mossSvg, pipSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { renderMap, layoutMap } from './ui/map.js';
-import { setCharStyle } from './chars.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
@@ -59,7 +58,6 @@ try {
   params = { get: () => null };
 }
 const forceUnlock = params.get('unlock') === '1';
-setCharStyle(params.get('style') || 'faces');
 
 let screen = 'map';
 let session = null;        // the attempt in progress

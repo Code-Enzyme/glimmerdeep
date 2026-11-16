@@ -1,19 +1,19 @@
-// Character art (Wren, the planted lantern, the creatures) comes in several styles so they can be
-// compared. Everything else (tiles, darkness, backdrop, icons) is in sprites.js and shared by all styles.
-// Each style module exports drawWren, drawLantern and drawCreature with the signatures in SPEC section 7.
-import * as faces from './sprites.js';
+// Character art (Wren, the planted lantern, the creatures). The game uses the faceless Glowmark style.
+// Tiles, darkness, backdrop and icons come from sprites.js. Other styles can be registered for
+// side-by-side previews (dev/style-preview.js); each exports drawWren, drawLantern and drawCreature with
+// the signatures in SPEC section 7, and optionally drawBridgeMoth.
+import { drawTile as baseTile } from './sprites.js';
 import * as glowmark from './chars/glowmark.js';
-import * as felt from './chars/felt.js';
-import * as glyph from './chars/glyph.js';
 
 export const CHAR_STYLES = {
-  faces: { name: 'Current (with faces)', mod: faces },
   glowmark: { name: 'Glowmark', mod: glowmark },
-  felt: { name: 'Felt and stitch', mod: felt },
-  glyph: { name: 'Lantern glyphs', mod: glyph },
 };
 
-let current = 'faces';
+export function registerCharStyle(key, name, mod) {
+  CHAR_STYLES[key] = { name, mod };
+}
+
+let current = 'glowmark';
 
 export function setCharStyle(name) {
   if (CHAR_STYLES[name]) current = name;
@@ -33,13 +33,20 @@ export function drawCreature(ctx, type, px, py, size, opts) {
   return CHAR_STYLES[current].mod.drawCreature(ctx, type, px, py, size, opts);
 }
 
-// Tiles come from sprites.js, except the moth bridge, which is a creature and follows the style when
-// the style module exports drawBridgeMoth(ctx, px, py, size, { t }) (drawn on top of a puddle tile).
+// Optional emissive pass, drawn AFTER the darkness so glowing markings show in the dark.
+// who: 'wren' | 'M' | 'S' | 'T'; opts as for drawWren / drawCreature, plus lit (the tile is lit).
+export function drawGlow(ctx, who, px, py, size, opts) {
+  const mod = CHAR_STYLES[current].mod;
+  if (mod.drawGlow) mod.drawGlow(ctx, who, px, py, size, opts);
+}
+
+// The moth bridge is a creature, so it follows the style when the style exports drawBridgeMoth
+// (drawn on top of a puddle tile).
 export function drawTile(ctx, kind, px, py, size, opts) {
   const mod = CHAR_STYLES[current].mod;
   if (kind === 'bridge' && mod.drawBridgeMoth) {
-    faces.drawTile(ctx, 'puddle', px, py, size, opts);
+    baseTile(ctx, 'puddle', px, py, size, opts);
     return mod.drawBridgeMoth(ctx, px, py, size, opts || {});
   }
-  return faces.drawTile(ctx, kind, px, py, size, opts);
+  return baseTile(ctx, kind, px, py, size, opts);
 }

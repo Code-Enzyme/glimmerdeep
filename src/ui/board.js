@@ -4,7 +4,7 @@
 
 import { DIRS, terrainAt } from '../engine.js';
 import { drawDarkness, drawBackdrop, PALETTE } from '../sprites.js';
-import { drawTile, drawWren, drawLantern, drawCreature } from '../chars.js';
+import { drawTile, drawWren, drawLantern, drawCreature, drawGlow } from '../chars.js';
 
 const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',
@@ -545,6 +545,25 @@ export class BoardView {
     }
 
     drawDarkness(ctx, { ox, oy, size, w: s.w, h: s.h, lit, source, t, highContrast: this.highContrast });
+
+    // Glowing markings shine through the dark, so creatures and Wren can be found in unlit tiles.
+    for (let i = 0; i < things.length; i++) {
+      const th = things[i];
+      const px = ox + th.x * size;
+      const py = oy + th.y * size;
+      if (th.z === 1) {
+        if (th.alpha < 1) ctx.globalAlpha = th.alpha;
+        drawGlow(ctx, th.c.type, px, py + th.drop * size, size, { t, dir: th.c.dir, lit: th.lit, hidden: th.hidden, awake: th.awake });
+        ctx.globalAlpha = 1;
+      } else if (th.z === 2) {
+        const tx = Math.round(th.x);
+        const ty = Math.round(th.y);
+        const wrenLit = tx >= 0 && ty >= 0 && tx < s.w && ty < s.h && !!lit[ty * s.w + tx];
+        drawGlow(ctx, 'wren', px + (sx - share * 0.15) * size, py + (sy - hop - celebrateHop) * size, size, {
+          t, dir: this.facing, carrying: s.lantern.carried, smothered: s.lantern.carried && smothered, lit: wrenLit,
+        });
+      }
+    }
 
     this.drawOverlays(ctx, L, now, t, wx, wy, celT);
 
