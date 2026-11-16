@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Rules, levels, and the game in a browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Unit tests
+        run: npm test
+      - name: Every level solves at par and needs its featured element
+        run: npm run verify
+      - name: Build the single-file game
+        run: npm run build
+      - name: UI checks
+        run: node dev/ui-check.cjs
+      - name: Play every level through the UI
+        run: node dev/play-all.cjs
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-screenshots
+          path: |
+            dev/ui-shots
+            dev/play-shots
+      - name: Upload the web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: glimmerdeep-web
+          path: dist/glimmerdeep.html
+
+  android:
+    name: Android app (lint, debug APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - name: Build the game and copy it into the app
+        run: npm run android:sync
+      - name: Android lint and debug APK
+        working-directory: android
+        run: ./gradlew lintDebug assembleDebug
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: android/app/build/reports
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: glimmerdeep-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  device:
+    name: Play on an Android emulator
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: glimmerdeep-debug-apk
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install, open, play levels, restart, check the save
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: node dev/device-check.cjs apk/app-debug.apk
+      - name: Upload device screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-screenshots
+          path: dev/device-shots

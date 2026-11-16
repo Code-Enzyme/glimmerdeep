@@ -28,3 +28,8 @@ html = html.replace('/*__CSS__*/', () => css).replace('/*__JS__*/', () => js);
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, html);
 console.log(`built ${out} (${(html.length / 1024).toFixed(1)} KB)`);
+
+// The app shell (Capacitor) serves www/index.html; it is the same single file.
+const www = resolve(root, 'www');
+mkdirSync(www, { recursive: true });
+writeFileSync(resolve(www, 'index.html'), html);

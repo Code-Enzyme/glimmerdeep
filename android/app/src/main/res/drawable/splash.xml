@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch screen before Android 12: plain plum with Wren in the middle (splash_wren is drawn by
+     tools/make-icons.cjs). Android 12 and later show the launcher icon on plum instead (styles.xml). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/glimmer_plum" />
+    <item>
+        <bitmap android:gravity="center" android:src="@drawable/splash_wren" />
+    </item>
+</layer-list>

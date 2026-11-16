@@ -7,13 +7,14 @@
 import { key, DIRS } from './engine.js';
 import { nextMove } from './solver.js';
 import { CHAPTERS, LEVELS } from './levels/index.js';
-import { initAudio, setMuted, play } from './audio.js';
+import { initAudio, setMuted, play, setAppHidden } from './audio.js';
 import { Session } from './ui/session.js';
 import { loadSave, writeSave, recordResult, clearProgress } from './ui/store.js';
 import { BoardView } from './ui/board.js';
 import { applyIcons, setIcon, portraitUrl, mossSvg, pipSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { renderMap, layoutMap } from './ui/map.js';
+import { onBackButton, exitApp, haptic, onAppState } from './ui/native.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
@@ -105,13 +106,9 @@ function nextLevelAfter(def) {
   return i >= 0 && i + 1 < LEVELS.length ? LEVELS[i + 1] : null;
 }
 
-function buzz(pattern) {
+function buzz(kind) {
   if (!woke) return;   // browsers refuse vibration before a gesture, and say so in the console
-  try {
-    if (navigator.vibrate) navigator.vibrate(pattern);
-  } catch (e) {
-    // haptics are a nicety
-  }
+  haptic(kind);
 }
 
 function wake() {
@@ -313,7 +310,7 @@ function doAction(action) {
   clearHint();
   moved = true;
   view.playTurn(prev, next, { facing: session.facing, speed: queue.length ? 1.5 : 1 });
-  buzz(10);
+  buzz('tick');
   refreshHud();
   return true;
 }
@@ -533,7 +530,7 @@ function beginCelebration() {
   current.result = result;
   view.startCelebration();
   play('solve');
-  buzz([18, 60, 90]);
+  buzz('success');
   refreshHud();
 }
 
@@ -684,7 +681,7 @@ canvas.addEventListener('pointerdown', (e) => {
         if (gesture !== g || g.wandered || g.swipes) return;
         g.held = true;
         view.press = null;
-        buzz(12);
+        buzz('tap');
         openCard(kind);
       }, HOLD_MS);
     }
@@ -791,6 +788,17 @@ onClick($('confirm-no'), () => {
   closePanel();
 });
 
+// ---------------------------------------------------------------- input: Android back button
+
+onBackButton(() => {
+  if (panel === 'result') showMap();
+  else if (panel) closePanel();
+  else if (screen === 'level') {
+    play('ui');
+    showMap();
+  } else exitApp();
+});
+
 // ---------------------------------------------------------------- input: keyboard
 
 document.addEventListener('keydown', (e) => {
@@ -827,6 +835,12 @@ window.addEventListener('keydown', wake, true);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopLoop();
   else startLoop();
+});
+// In the app, going to the background also pauses drawing and puts sound to sleep.
+onAppState((active) => {
+  setAppHidden(!active);
+  if (active) startLoop();
+  else stopLoop();
 });
 
 function onResize() {

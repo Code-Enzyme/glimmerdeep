@@ -1234,6 +1234,11 @@ export function createAudioEngine(ctx, options) {
 let engine = null;
 let failed = false;
 const wanted = { muted: false, music: { playing: false, intensity: 0, chapter: 1 } };
+// The app shell reports when the whole app goes to the background; a browser tab uses visibilitychange.
+let appHidden = false;
+function pageHidden() {
+  return appHidden || (typeof document !== 'undefined' && document.visibilityState === 'hidden');
+}
 
 /** Call from the first user gesture. Safe to call again; later calls wake a suspended context. */
 export function initAudio() {
@@ -1259,7 +1264,7 @@ export function initAudio() {
       engine.setMusic(wanted.music);
       if (typeof document !== 'undefined' && document.addEventListener) {
         const onVisibility = function () {
-          try { engine.setHidden(document.visibilityState === 'hidden'); } catch (e) { /* never throw */ }
+          try { engine.setHidden(pageHidden()); } catch (e) { /* never throw */ }
         };
         document.addEventListener('visibilitychange', onVisibility);
         onVisibility();
@@ -1289,6 +1294,14 @@ export function setMuted(muted) {
 
 export function isMuted() {
   return wanted.muted;
+}
+
+/** The app went to the background (true) or came back (false). Sound sleeps while it is away. */
+export function setAppHidden(hidden) {
+  appHidden = !!hidden;
+  try {
+    if (engine) engine.setHidden(pageHidden());
+  } catch (e) { /* never throw */ }
 }
 
 /** Play a one-shot sound by name. Unknown names are ignored. */

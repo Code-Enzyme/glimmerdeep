@@ -1,0 +1,10 @@
+{
+  "appId": "com.codeenzyme.glimmerdeep",
+  "appName": "Glimmerdeep",
+  "webDir": "www",
+  "backgroundColor": "#2B1E3A",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": false
+  }
+}

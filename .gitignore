@@ -1,4 +1,12 @@
 node_modules/
 dist/
-*.png
+# screenshots and scratch images (the app icons under android/ and store/ are committed)
+/*.png
+dev/**/*.png
 dev/style-preview.html
+www/
+
+# signing keys never go in the repo
+*.jks
+*.keystore
+keystore.properties

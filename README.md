@@ -1,0 +1,51 @@
+# Glimmerdeep
+
+A cosy puzzle game about light. Wren carries a lantern through a cave, and the creatures move
+themselves: fluffmoths fly toward the light, shellwhelks creep away from it, and stumpcaps only walk
+while they are lit. You never push anything; you decide where the light is.
+
+Android first, iOS later. The game is plain JavaScript drawn on a canvas, wrapped as a native app with
+[Capacitor](https://capacitorjs.com/).
+
+## Run it
+
+```sh
+npm ci
+npx playwright install chromium   # once, for the browser checks
+npm run build                     # -> dist/glimmerdeep.html, open it in any browser
+npm run check                     # everything CI checks in a browser
+```
+
+Open `dist/glimmerdeep.html?unlock=1` to play any level, or `?level=2-3` to jump straight to one.
+
+## The Android app
+
+```sh
+npm run android:sync              # build the game and copy it into android/
+npx cap open android              # open in Android Studio, or:
+cd android && ./gradlew assembleDebug
+```
+
+Needs JDK 21 and the Android SDK. CI builds a debug APK on every push; download it from the run's
+artifacts (`glimmerdeep-debug-apk`) and install it with `adb install app-debug.apk`.
+
+## Where things are
+
+| Path | What |
+| --- | --- |
+| `SPEC.md` | The rules contract: board, turn order, creatures, light, level format, module contracts |
+| `docs/glimmerdeep-design.md` | The full game design document |
+| `src/engine.js`, `src/solver.js` | Rules and the shortest-solution solver (pure) |
+| `src/levels/` | The 16 levels, by chapter |
+| `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
+| `src/sprites.js` | Tiles, darkness and icons |
+| `src/audio.js` | Synthesised sound effects |
+| `src/game.js`, `src/ui/` | Screens, input, saving, the app-shell bridge (`ui/native.js`) |
+| `tools/` | Build, level verifier, icon maker |
+| `dev/` | Browser and device checks, plus the level-design search scripts |
+| `android/` | The Capacitor Android project |
+| `store/` | Store listing assets |
+
+## Working on it
+
+Read `CLAUDE.md` first. CI is described in `docs/CI.md`.

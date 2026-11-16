@@ -8,20 +8,17 @@ Goal of the prototype: a single self-contained HTML file, playable with one thum
 that proves the core idea: **you never push anything; you decide where the light is, and the cave's
 creatures move themselves.** Three species, about 15 levels, unlimited undo.
 
-## 0. Ground rules for everyone working in this folder
+## 0. Ground rules
 
-- Project root: `/home/user/glimmerdeep`. Work only here. Do not touch `/mnt/project-files`.
-- Each task owns specific files (listed in your brief). Do not edit files you do not own. If you need a
-  change in someone else's file or in this spec, say so in your final report instead.
-- Source files are ES modules (`"type": "module"`), plain JavaScript, no frameworks, no runtime
-  dependencies, no network requests, no external fonts or images. Everything is drawn and synthesised in code.
+Working rules (test first, which checks to run, how the app is built) live in `CLAUDE.md`. The rules
+that shape the code:
+
+- Source files are ES modules, plain JavaScript, no frameworks, no network requests, no external fonts
+  or images. Everything is drawn and synthesised in code.
 - `src/engine.js` and `src/solver.js` are pure: no DOM, no `window`, no timers, no randomness.
-- Test-first for rules: write the failing test, then the code. Never delete or skip a test to get green.
-- Tests: `npm test` (node:test, files in `test/*.test.js`). Level check: `npm run verify`. Build: `npm run build`
-  (bundles `src/game.js` into `dist/glimmerdeep.html`).
-- Playwright and Chromium are pre-installed. Use them from a `.cjs` script with `require('playwright')`
-  and `chromium.launch()` with no options. Do NOT run `playwright install` or `npm install playwright`.
-- Do not `npm install` anything. esbuild is already installed and is the only dependency.
+- The only runtime dependencies are the Capacitor app shell and its App and Haptics plugins, and only
+  `src/ui/native.js` imports them. In a browser every call there falls back or does nothing, so the
+  single-file web build keeps working.
 - Originality: every name, shape, sound and layout must be our own. Do not imitate any existing game's
   characters, art, music or levels.
 
