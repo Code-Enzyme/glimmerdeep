@@ -1,0 +1,2401 @@
+<!doctype html><html><body style="margin:0;background:#2B1E3A"><script>(() => {
+  // src/sprites.js
+  var TAU = Math.PI * 2;
+  var NONE = Object.freeze({});
+  var PALETTE = Object.freeze({
+    // the six named colours of the design doc
+    amber: "#F2B04C",
+    // lantern light, Wren
+    teal: "#5FBFA8",
+    // flora, Glowbuds
+    rose: "#C97A8A",
+    // creatures
+    plum: "#2B1E3A",
+    // unlit floor, background
+    hush: "#120C1C",
+    // the Hush
+    cream: "#F4EAD5",
+    // paper, UI lines
+    // supporting tones used by the painters (handy for UI that wants to match)
+    ink: "#24162E",
+    night: "#21172F",
+    floor: "#7A5C58",
+    wall: "#5A4563",
+    water: "#2B3454",
+    bark: "#7B5850",
+    flame: "#FFE08A",
+    channels: Object.freeze({ A: "#F2B04C", B: "#5FBFA8", C: "#C97A8A" })
+  });
+  var INK = PALETTE.ink;
+  var CREAM = PALETTE.cream;
+  var AMBER = PALETTE.amber;
+  var TEAL = PALETTE.teal;
+  var ROSE = PALETTE.rose;
+  var CHANNEL_TINT = [AMBER, TEAL, ROSE];
+  function rng(seed) {
+    let a = seed >>> 0 || 1;
+    return function() {
+      a = a + 1831565813 >>> 0;
+      let t = a;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function hashInt(n) {
+    n = (n | 0) ^ 2654435769;
+    n = Math.imul(n ^ n >>> 16, 2246822507);
+    n = Math.imul(n ^ n >>> 13, 3266489909);
+    return (n ^ n >>> 16) >>> 0;
+  }
+  function seedInt(seed) {
+    if (typeof seed === "number") return seed === seed ? Math.floor(seed) | 0 : 0;
+    if (typeof seed === "string") {
+      let h = 0;
+      for (let i = 0; i < seed.length; i++) h = Math.imul(h, 31) + seed.charCodeAt(i) | 0;
+      return h;
+    }
+    return 0;
+  }
+  function makeCanvas(w, h) {
+    w = Math.max(1, Math.ceil(w));
+    h = Math.max(1, Math.ceil(h));
+    if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(w, h);
+    if (typeof document !== "undefined" && document.createElement) {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      return c;
+    }
+    return null;
+  }
+  function nowMs() {
+    return typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+  }
+  var colorCache = /* @__PURE__ */ new Map();
+  var scratch = null;
+  function parseColor(c, depth) {
+    if (typeof c !== "string") return null;
+    let m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c);
+    if (m) return [parseInt(m[1] + m[1], 16), parseInt(m[2] + m[2], 16), parseInt(m[3] + m[3], 16)];
+    m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c);
+    if (m) return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+    m = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i.exec(c);
+    if (m) return [Math.round(+m[1]), Math.round(+m[2]), Math.round(+m[3])];
+    if (!depth) {
+      if (!scratch) {
+        const sc = makeCanvas(1, 1);
+        scratch = sc ? sc.getContext("2d") : null;
+      }
+      if (scratch) {
+        scratch.fillStyle = "#000000";
+        scratch.fillStyle = c;
+        return parseColor(String(scratch.fillStyle), 1);
+      }
+    }
+    return null;
+  }
+  function rgbOf(c) {
+    let v = colorCache.get(c);
+    if (!v) {
+      v = parseColor(c, 0) || [95, 191, 168];
+      colorCache.set(c, v);
+    }
+    return v;
+  }
+  function mix(a, b, t) {
+    const A = rgbOf(a);
+    const B = rgbOf(b);
+    return "rgb(" + Math.round(A[0] + (B[0] - A[0]) * t) + "," + Math.round(A[1] + (B[1] - A[1]) * t) + "," + Math.round(A[2] + (B[2] - A[2]) * t) + ")";
+  }
+  function rgba(c, a) {
+    const A = rgbOf(c);
+    return "rgba(" + A[0] + "," + A[1] + "," + A[2] + "," + a + ")";
+  }
+  function F(g, c) {
+    g.fillStyle = c;
+    g.fill();
+  }
+  function K(g, c, lw) {
+    g.strokeStyle = c;
+    g.lineWidth = lw;
+    g.stroke();
+  }
+  function closed(g, p) {
+    const n = p.length;
+    g.beginPath();
+    g.moveTo((p[n - 1][0] + p[0][0]) / 2, (p[n - 1][1] + p[0][1]) / 2);
+    for (let i = 0; i < n; i++) {
+      const a = p[i];
+      const b = p[(i + 1) % n];
+      g.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    }
+    g.closePath();
+  }
+  function open(g, p) {
+    const n = p.length;
+    g.beginPath();
+    g.moveTo(p[0][0], p[0][1]);
+    if (n === 2) {
+      g.lineTo(p[1][0], p[1][1]);
+      return;
+    }
+    for (let i = 1; i < n - 1; i++) {
+      const a = p[i];
+      const b = p[i + 1];
+      if (i === n - 2) g.quadraticCurveTo(a[0], a[1], b[0], b[1]);
+      else g.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    }
+  }
+  function wline(g, x0, y0, x1, y1, rnd, wob, seg) {
+    seg = seg || 4;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const p = [[x0, y0]];
+    for (let i = 1; i < seg; i++) {
+      const t = i / seg;
+      const o = (rnd() - 0.5) * 2 * wob;
+      p.push([x0 + dx * t + nx * o, y0 + dy * t + ny * o]);
+    }
+    p.push([x1, y1]);
+    open(g, p);
+  }
+  function blob(g, cx, cy, rx, ry, rnd, wob, n, rot) {
+    n = n || 9;
+    if (wob === void 0) wob = 0.07;
+    const a0 = rnd ? rnd() * TAU : 0;
+    const c = rot ? Math.cos(rot) : 1;
+    const s = rot ? Math.sin(rot) : 0;
+    const p = [];
+    for (let i = 0; i < n; i++) {
+      const a = a0 + i / n * TAU;
+      const k = (1 + 1.6 / (n * n)) * (1 + (rnd ? (rnd() - 0.5) * 2 * wob : 0)) / Math.cos(Math.PI / n) * 0.985;
+      const x = Math.cos(a) * rx * k;
+      const y = Math.sin(a) * ry * k;
+      p.push([cx + x * c - y * s, cy + x * s + y * c]);
+    }
+    closed(g, p);
+  }
+  function ell(g, cx, cy, rx, ry, rot) {
+    g.beginPath();
+    g.ellipse(cx, cy, rx, ry, rot || 0, 0, TAU);
+  }
+  function poly(g, p, r) {
+    const n = p.length;
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = p[(i + n - 1) % n];
+      const b = p[i];
+      const c = p[(i + 1) % n];
+      const l1 = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+      const l2 = Math.hypot(c[0] - b[0], c[1] - b[1]) || 1;
+      const d1 = Math.min(r, l1 * 0.45);
+      const d2 = Math.min(r, l2 * 0.45);
+      const x1 = b[0] + (a[0] - b[0]) * d1 / l1;
+      const y1 = b[1] + (a[1] - b[1]) * d1 / l1;
+      const x2 = b[0] + (c[0] - b[0]) * d2 / l2;
+      const y2 = b[1] + (c[1] - b[1]) * d2 / l2;
+      if (i === 0) g.moveTo(x1, y1);
+      else g.lineTo(x1, y1);
+      g.quadraticCurveTo(b[0], b[1], x2, y2);
+    }
+    g.closePath();
+  }
+  function leaf(g, x0, y0, x1, y1, w, bend) {
+    bend = bend || 0;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const L = Math.hypot(dx, dy) || 1;
+    const nx = -dy / L;
+    const ny = dx / L;
+    const mx = (x0 + x1) / 2 + nx * bend;
+    const my = (y0 + y1) / 2 + ny * bend;
+    g.beginPath();
+    g.moveTo(x0, y0);
+    g.quadraticCurveTo(mx + nx * w, my + ny * w, x1, y1);
+    g.quadraticCurveTo(mx - nx * w, my - ny * w, x0, y0);
+    g.closePath();
+  }
+  function spiral(g, cx, cy, r0, r1, turns, start, squash) {
+    const steps = Math.max(12, Math.round(turns * 22));
+    g.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const a = start + t * turns * TAU;
+      const r = r0 + (r1 - r0) * t;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r * (squash || 1);
+      if (i === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+  }
+  function sparkle(g, x, y, r) {
+    const k = r * 0.22;
+    g.beginPath();
+    g.moveTo(x, y - r);
+    g.quadraticCurveTo(x + k, y - k, x + r, y);
+    g.quadraticCurveTo(x + k, y + k, x, y + r);
+    g.quadraticCurveTo(x - k, y + k, x - r, y);
+    g.quadraticCurveTo(x - k, y - k, x, y - r);
+    g.closePath();
+  }
+  function radial(g, cx, cy, r, stops) {
+    const gr = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+    for (let i = 0; i < stops.length; i += 2) gr.addColorStop(stops[i], stops[i + 1]);
+    return gr;
+  }
+  function slabPts(x0, y0, x1, y1, nb, rad, rnd, wob) {
+    const oN = !(nb & 1);
+    const oE = !(nb & 2);
+    const oS = !(nb & 4);
+    const oW = !(nb & 8);
+    const F0 = -0.5;
+    const F1 = 1.5;
+    const e0 = -0.04;
+    const e1 = 1.04;
+    const p = [];
+    const j = () => (rnd() - 0.5) * 2 * wob;
+    if (oN) {
+      const a = oW ? x0 + rad : 0;
+      const b = oE ? x1 - rad : 1;
+      if (oW) p.push([x0 + rad, y0]);
+      else p.push([F0, y0], [e0, y0]);
+      for (let i = 1; i < 4; i++) p.push([a + (b - a) * i / 4, y0 + j()]);
+      if (oE) p.push([x1 - rad, y0]);
+      else p.push([e1, y0], [F1, y0]);
+    } else if (!oW) p.push([F0, F0]);
+    if (oE) {
+      const a = oN ? y0 + rad : 0;
+      const b = oS ? y1 - rad : 1;
+      if (oN) p.push([x1, y0 + rad]);
+      else p.push([x1, F0], [x1, e0]);
+      for (let i = 1; i < 4; i++) p.push([x1 + j(), a + (b - a) * i / 4]);
+      if (oS) p.push([x1, y1 - rad]);
+      else p.push([x1, e1], [x1, F1]);
+    } else if (!oN) p.push([F1, F0]);
+    if (oS) {
+      const a = oE ? x1 - rad : 1;
+      const b = oW ? x0 + rad : 0;
+      if (oE) p.push([x1 - rad, y1]);
+      else p.push([F1, y1], [e1, y1]);
+      for (let i = 1; i < 4; i++) p.push([a + (b - a) * i / 4, y1 + j()]);
+      if (oW) p.push([x0 + rad, y1]);
+      else p.push([e0, y1], [F0, y1]);
+    } else if (!oE) p.push([F1, F1]);
+    if (oW) {
+      const a = oS ? y1 - rad : 1;
+      const b = oN ? y0 + rad : 0;
+      if (oS) p.push([x0, y1 - rad]);
+      else p.push([x0, F1], [x0, e1]);
+      for (let i = 1; i < 4; i++) p.push([x0 + j(), a + (b - a) * i / 4]);
+      if (oN) p.push([x0, y0 + rad]);
+      else p.push([x0, e0], [x0, F0]);
+    } else if (!oS) p.push([F0, F1]);
+    return p;
+  }
+  var grainTile = null;
+  function grainSource() {
+    if (grainTile) return grainTile;
+    const n = 96;
+    const c = makeCanvas(n, n);
+    if (!c) return null;
+    const g = c.getContext("2d");
+    const img = g.createImageData(n, n);
+    const d = img.data;
+    const rnd = rng(4242);
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const i = (y * n + x) * 4;
+        const fine = rnd() - 0.5;
+        const u = x / n * TAU;
+        const w = y / n * TAU;
+        const lo = 0.5 * Math.sin(u * 2 + 1.3) * Math.sin(w * 3 + 0.4) + 0.5 * Math.sin(u * 5 + w * 2 + 2.1) * Math.sin(w * 4 + 0.9);
+        const v = fine + lo * 0.26;
+        if (v > 0) {
+          d[i] = 252;
+          d[i + 1] = 242;
+          d[i + 2] = 222;
+          d[i + 3] = Math.min(255, v * 150);
+        } else {
+          d[i] = 26;
+          d[i + 1] = 14;
+          d[i + 2] = 36;
+          d[i + 3] = Math.min(255, -v * 175);
+        }
+      }
+    }
+    g.putImageData(img, 0, 0);
+    grainTile = c;
+    return c;
+  }
+  function stampGrain(g, w, h, amt, seed, scale) {
+    const src = grainSource();
+    if (!src) return;
+    const n = src.width * scale;
+    const ox = -(hashInt(seed) % 1e3 / 1e3) * n;
+    const oy = -(hashInt(seed + 71) % 1e3 / 1e3) * n;
+    g.save();
+    g.globalCompositeOperation = "source-atop";
+    g.globalAlpha = amt;
+    for (let y = oy; y < h; y += n) for (let x = ox; x < w; x += n) g.drawImage(src, x, y, n, n);
+    g.restore();
+  }
+  var MAX_BUCKETS = 8;
+  var buckets = /* @__PURE__ */ new Map();
+  var useTick = 0;
+  var lastP = -1;
+  var lastBucket = null;
+  var lastBucketMade = -1e9;
+  var scaleCtx = null;
+  var scaleValue = 1;
+  var scaleTtl = 0;
+  function ctxScale(ctx2) {
+    if (ctx2 === scaleCtx && scaleTtl-- > 0) return scaleValue;
+    let s = 0;
+    if (typeof ctx2.getTransform === "function") {
+      const m = ctx2.getTransform();
+      s = Math.sqrt(m.a * m.a + m.b * m.b);
+    }
+    if (!(s > 0)) s = typeof devicePixelRatio === "number" && devicePixelRatio > 0 && devicePixelRatio || 1;
+    scaleCtx = ctx2;
+    scaleValue = s;
+    scaleTtl = 40;
+    return s;
+  }
+  function dropBucket(b) {
+    for (const s of b.map.values()) {
+      if (s && s.c) {
+        s.c.width = 1;
+        s.c.height = 1;
+      }
+    }
+    b.map.clear();
+  }
+  function bucketFor(ctx2, size) {
+    let P = Math.round(size * ctxScale(ctx2));
+    if (!(P >= 12)) P = 12;
+    else if (P > 512) P = 512;
+    if (P === lastP) return lastBucket;
+    let b = buckets.get(P);
+    if (!b) {
+      const t = nowMs();
+      if (t - lastBucketMade < 350) {
+        let best = null;
+        let bestR = 1.25;
+        for (const c of buckets.values()) {
+          const r = c.P > P ? c.P / P : P / c.P;
+          if (r < bestR) {
+            bestR = r;
+            best = c;
+          }
+        }
+        if (best) {
+          best.used = ++useTick;
+          return best;
+        }
+      }
+      b = { P, map: /* @__PURE__ */ new Map(), used: 0 };
+      buckets.set(P, b);
+      lastBucketMade = t;
+      if (buckets.size > MAX_BUCKETS) {
+        let old = null;
+        for (const c of buckets.values()) if (c !== b && (!old || c.used < old.used)) old = c;
+        if (old) {
+          buckets.delete(old.P);
+          dropBucket(old);
+        }
+      }
+    }
+    b.used = ++useTick;
+    lastP = P;
+    lastBucket = b;
+    return b;
+  }
+  function flushSprites() {
+    for (const b of buckets.values()) dropBucket(b);
+    buckets.clear();
+    lastP = -1;
+    lastBucket = null;
+  }
+  var accentIds = /* @__PURE__ */ new Map();
+  var accentCount = 0;
+  function accentId(a) {
+    if (!a) return 0;
+    let id = accentIds.get(a);
+    if (id === void 0) {
+      if (accentCount >= 62) {
+        accentIds.clear();
+        accentCount = 0;
+        flushSprites();
+      }
+      id = ++accentCount;
+      accentIds.set(a, id);
+    }
+    return id;
+  }
+  function make(b, key, margin, grainAmt, painter, opaque) {
+    const P = b.P;
+    const mp = margin > 0 ? Math.round(P * margin) : 1;
+    const side = P + 2 * mp;
+    const c = makeCanvas(side, side);
+    let s = null;
+    if (c) {
+      const g = opaque ? c.getContext("2d", { alpha: false }) : c.getContext("2d");
+      g.setTransform(P, 0, 0, P, mp, mp);
+      g.lineCap = "round";
+      g.lineJoin = "round";
+      painter(g);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      if (grainAmt > 0) stampGrain(g, side, side, grainAmt, key, Math.max(1, P / 64));
+      s = { c, m: mp / P, k: side / P };
+    }
+    b.map.set(key, s);
+    return s;
+  }
+  function blit(ctx2, s, px, py, size) {
+    const d = size * s.k;
+    const o = size * s.m;
+    ctx2.drawImage(s.c, px - o, py - o, d, d);
+  }
+  var K_FLOOR = 1;
+  var K_WALL = 2;
+  var K_PUDDLE = 3;
+  var K_BRIDGE = 4;
+  var K_BUD = 5;
+  var K_HUSH = 6;
+  var K_HUSH_SHIM = 7;
+  var K_ROOT = 8;
+  var K_GATE = 9;
+  var K_BUDGLOW = 18;
+  var FLOOR_BASE = ["#7a5c58", "#80625a", "#755755", "#7c5f5c"];
+  function paintFloor(g, v) {
+    const rnd = rng(9001 + v * 131);
+    g.fillStyle = FLOOR_BASE[v & 3];
+    g.fillRect(-0.1, -0.1, 1.2, 1.2);
+    for (let i = 0; i < 9; i++) {
+      const y = -0.05 + rnd() * 1.1;
+      const tilt = (rnd() - 0.5) * 0.28;
+      wline(g, -0.12, y, 1.12, y + tilt, rnd, 0.04, 4);
+      K(g, rgba(i % 2 ? "#a08070" : "#58414a", 0.07 + rnd() * 0.1), 0.06 + rnd() * 0.14);
+    }
+    const seam = rgba("#35242f", 0.34);
+    wline(g, -0.02, 0, 1.02, 0, rnd, 0.012, 4);
+    K(g, seam, 0.05);
+    wline(g, -0.02, 1, 1.02, 1, rnd, 0.012, 4);
+    K(g, seam, 0.05);
+    wline(g, 0, -0.02, 0, 1.02, rnd, 0.012, 4);
+    K(g, seam, 0.05);
+    wline(g, 1, -0.02, 1, 1.02, rnd, 0.012, 4);
+    K(g, seam, 0.05);
+    const corners = [[0, 0], [1, 0], [0, 1], [1, 1]];
+    for (let i = 0; i < 4; i++) {
+      blob(g, corners[i][0], corners[i][1], 0.06, 0.06, rnd, 0.2, 7);
+      F(g, rgba("#35242f", 0.3));
+    }
+    wline(g, 0.08, 0.075, 0.9, 0.07, rnd, 0.01, 3);
+    K(g, rgba("#c9a892", 0.17), 0.03);
+    wline(g, 0.075, 0.1, 0.07, 0.88, rnd, 0.01, 3);
+    K(g, rgba("#c9a892", 0.12), 0.03);
+    const pebble = (x, y, r) => {
+      blob(g, x + r * 0.15, y + r * 0.35, r * 1.1, r * 0.8, rnd, 0.1, 7);
+      F(g, rgba("#35242f", 0.5));
+      blob(g, x, y, r, r * 0.78, rnd, 0.12, 7);
+      F(g, "#a18577");
+      blob(g, x - r * 0.25, y - r * 0.25, r * 0.45, r * 0.28, rnd, 0.1, 6);
+      F(g, rgba("#d3bba6", 0.75));
+    };
+    const crack = (pts) => {
+      open(g, pts);
+      K(g, rgba("#35242f", 0.5), 0.016);
+    };
+    const moss = (x, y, n) => {
+      blob(g, x, y, 0.15, 0.085, rnd, 0.18, 9);
+      F(g, rgba("#4c8f7f", 0.3));
+      for (let i = 0; i < n; i++) {
+        blob(g, x + (rnd() - 0.5) * 0.2, y + (rnd() - 0.5) * 0.11, 0.028 + rnd() * 0.03, 0.02 + rnd() * 0.018, rnd, 0.15, 6);
+        F(g, i % 3 ? rgba("#4c8f7f", 0.85) : rgba("#79bfaa", 0.85));
+      }
+    };
+    const specks = (n) => {
+      for (let i = 0; i < n; i++) {
+        ell(g, 0.12 + rnd() * 0.76, 0.12 + rnd() * 0.76, 8e-3 + rnd() * 8e-3, 7e-3 + rnd() * 6e-3);
+        F(g, i % 2 ? rgba("#c9a892", 0.45) : rgba("#35242f", 0.4));
+      }
+    };
+    specks(5);
+    switch (v) {
+      case 0:
+        pebble(0.72, 0.3, 0.05);
+        pebble(0.26, 0.7, 0.035);
+        break;
+      case 1:
+        crack([[0.2, 0.3], [0.32, 0.38], [0.36, 0.52], [0.5, 0.6]]);
+        break;
+      case 2:
+        moss(0.24, 0.78, 6);
+        break;
+      case 3:
+        specks(7);
+        break;
+      case 4:
+        pebble(0.3, 0.3, 0.04);
+        crack([[0.6, 0.62], [0.7, 0.7], [0.82, 0.72]]);
+        break;
+      case 5:
+        moss(0.76, 0.22, 5);
+        pebble(0.34, 0.74, 0.035);
+        break;
+      case 6:
+        crack([[0.66, 0.2], [0.6, 0.3], [0.66, 0.42]]);
+        specks(4);
+        break;
+      default:
+        moss(0.3, 0.26, 4);
+        break;
+    }
+  }
+  function paintWall(g, nb, v) {
+    const rnd = rng(7001 + v * 53 + nb * 977);
+    const openS = !(nb & 4);
+    g.fillStyle = "#2a1d29";
+    g.fillRect(-0.1, -0.1, 1.2, 1.2);
+    const block = slabPts(0.03, 0.035, 0.97, 0.985, nb, 0.12, rnd, 0.016);
+    const lipY = 0.68;
+    const lip = [];
+    for (let i = 0; i <= 6; i++) lip.push([-0.2 + 1.4 * i / 6, lipY + (rnd() - 0.5) * 0.035]);
+    const topPath = () => {
+      g.beginPath();
+      g.moveTo(-0.5, -0.5);
+      g.lineTo(1.5, -0.5);
+      if (openS) {
+        g.lineTo(1.5, lipY);
+        for (let i = 6; i >= 0; i--) g.lineTo(lip[i][0], lip[i][1]);
+        g.lineTo(-0.5, lipY);
+      } else {
+        g.lineTo(1.5, 1.5);
+        g.lineTo(-0.5, 1.5);
+      }
+      g.closePath();
+    };
+    const topH = openS ? 0.66 : 1;
+    closed(g, block);
+    F(g, "#2c1f37");
+    g.save();
+    closed(g, block);
+    g.clip();
+    if (openS) {
+      for (let i = 0; i < 9; i++) {
+        const x = -0.05 + rnd() * 1.1;
+        wline(g, x, lipY, x + (rnd() - 0.5) * 0.06, 1.02, rnd, 0.015, 3);
+        K(g, rgba(i % 3 ? "#1f1528" : "#4a3860", 0.4), 0.04 + rnd() * 0.07);
+      }
+      const gr = g.createLinearGradient(0, lipY, 0, 1);
+      gr.addColorStop(0, "rgba(20,12,26,0)");
+      gr.addColorStop(1, "rgba(20,12,26,0.65)");
+      g.fillStyle = gr;
+      g.fillRect(-0.1, lipY, 1.2, 0.4);
+    }
+    topPath();
+    F(g, "#44344c");
+    g.save();
+    topPath();
+    g.clip();
+    for (let i = 0; i < 6; i++) {
+      const x = rnd();
+      const y = rnd() * topH;
+      const a = rnd() * TAU;
+      wline(g, x - Math.cos(a) * 0.3, y - Math.sin(a) * 0.3, x + Math.cos(a) * 0.3, y + Math.sin(a) * 0.3, rnd, 0.04, 3);
+      K(g, rgba(i % 2 ? "#574464" : "#35273f", 0.34), 0.08 + rnd() * 0.12);
+    }
+    for (let i = 0; i < 3; i++) {
+      const x = 0.12 + rnd() * 0.76;
+      const y = (0.14 + rnd() * 0.72) * topH;
+      const r = 0.11 + rnd() * 0.1;
+      const a0 = rnd() * TAU;
+      const n = 4 + (rnd() * 2 | 0);
+      const pts = [];
+      for (let k = 0; k < n; k++) {
+        const a = a0 + k / n * TAU + (rnd() - 0.5) * 0.5;
+        pts.push([x + Math.cos(a) * r * (0.7 + rnd() * 0.5), y + Math.sin(a) * r * (0.55 + rnd() * 0.4)]);
+      }
+      poly(g, pts, 0.02);
+      F(g, rgba("#6a5679", 0.3));
+      g.beginPath();
+      g.moveTo(pts[0][0], pts[0][1]);
+      g.lineTo(pts[1][0], pts[1][1]);
+      g.lineTo(pts[2][0], pts[2][1]);
+      K(g, rgba("#221729", 0.55), 0.018);
+      g.beginPath();
+      g.moveTo(pts[n - 2][0], pts[n - 2][1]);
+      g.lineTo(pts[n - 1][0], pts[n - 1][1]);
+      K(g, rgba("#8d769a", 0.4), 0.014);
+    }
+    for (let i = 0; i < 4; i++) {
+      blob(g, 0.1 + rnd() * 0.8, (0.08 + rnd() * 0.84) * topH, 0.012 + rnd() * 0.016, 0.01 + rnd() * 0.01, rnd, 0.2, 6);
+      F(g, rgba(i % 2 ? "#7c6689" : "#2a1d33", 0.55));
+    }
+    for (let i = 0; i < 2; i++) {
+      const x = 0.16 + rnd() * 0.68;
+      const y = (0.2 + rnd() * 0.6) * topH;
+      const r = 0.06 + rnd() * 0.06;
+      const tilt = (rnd() - 0.5) * 0.9;
+      g.beginPath();
+      g.ellipse(x, y, r, r * 0.55, tilt, 0.05 * Math.PI, 0.8 * Math.PI);
+      K(g, rgba("#1f1527", 0.6), 0.024);
+      g.beginPath();
+      g.ellipse(x, y - 0.014, r, r * 0.55, tilt, 1.1 * Math.PI, 1.7 * Math.PI);
+      K(g, rgba("#927a9f", 0.5), 0.02);
+    }
+    closed(g, block);
+    K(g, rgba("#8f7699", 0.5), 0.08);
+    if (openS) {
+      open(g, lip.map((p) => [p[0], p[1] - 0.028]));
+      K(g, rgba("#bb9da8", 0.9), 0.045);
+    }
+    g.restore();
+    if (openS) {
+      open(g, lip);
+      K(g, rgba(INK, 0.75), 0.018);
+    }
+    g.restore();
+    closed(g, block);
+    K(g, rgba("#1c1124", 0.9), 0.03);
+  }
+  function paintPuddle(g, nb, v) {
+    paintFloor(g, v * 3 + 1 & 7);
+    const rnd = rng(3001 + v * 17 + nb * 31);
+    const openN = !(nb & 1);
+    const hole = slabPts(0.1, 0.12, 0.9, 0.9, nb, 0.2, rnd, 0.03);
+    closed(g, hole);
+    K(g, rgba("#3d2b36", 0.55), 0.11);
+    closed(g, hole);
+    F(g, "#33252f");
+    g.save();
+    closed(g, hole);
+    g.clip();
+    g.translate(0, openN ? 0.05 : 0);
+    closed(g, hole);
+    F(g, "#2b3454");
+    g.fillStyle = "#2b3454";
+    g.fillRect(-0.2, 0.6, 1.4, 0.7);
+    g.translate(0, openN ? -0.05 : 0);
+    blob(g, 0.5, 0.58, 0.3, 0.22, rnd, 0.1, 9);
+    F(g, rgba("#1b2140", 0.6));
+    if (openN) {
+      wline(g, 0.1, 0.2, 0.9, 0.2, rnd, 0.01, 3);
+      K(g, rgba("#141830", 0.45), 0.05);
+    }
+    wline(g, 0.26, 0.42, 0.5, 0.415, rnd, 8e-3, 3);
+    K(g, rgba("#b9d2e0", 0.75), 0.024);
+    wline(g, 0.56, 0.6, 0.74, 0.6, rnd, 8e-3, 3);
+    K(g, rgba("#9cbad0", 0.6), 0.02);
+    wline(g, 0.3, 0.72, 0.42, 0.72, rnd, 6e-3, 2);
+    K(g, rgba("#9cbad0", 0.45), 0.016);
+    ell(g, 0.66, 0.4, 0.014, 0.012);
+    F(g, rgba(CREAM, 0.85));
+    closed(g, hole);
+    K(g, rgba("#9fc0d6", 0.5), 0.05);
+    g.restore();
+    closed(g, hole);
+    K(g, rgba(INK, 0.8), 0.026);
+  }
+  function paintBridge(g, nb, v) {
+    paintPuddle(g, nb, v);
+    const rnd = rng(2300);
+    ell(g, 0.5, 0.55, 0.445, 0.365);
+    K(g, rgba("#a8c3d6", 0.4), 0.016);
+    ell(g, 0.5, 0.585, 0.4, 0.31);
+    F(g, rgba("#11152a", 0.55));
+    for (let sx = -1; sx <= 1; sx += 2) {
+      g.save();
+      g.translate(0.5, 0.5);
+      g.scale(sx, 1);
+      const lower = [[0.03, 0.02], [0.26, 0.03], [0.37, 0.13], [0.33, 0.27], [0.18, 0.33], [0.05, 0.22]];
+      closed(g, lower);
+      K(g, INK, 0.05);
+      F(g, "#e6adb1");
+      const upper = [[0.02, -0.08], [0.12, -0.27], [0.31, -0.33], [0.43, -0.22], [0.43, -0.05], [0.31, 0.05], [0.05, 0.05]];
+      closed(g, upper);
+      K(g, INK, 0.05);
+      F(g, "#d48d9a");
+      g.save();
+      closed(g, upper);
+      g.clip();
+      closed(g, upper);
+      K(g, rgba("#f6e2d0", 0.85), 0.05);
+      const veins = [[0.2, -0.3], [0.36, -0.26], [0.42, -0.12], [0.36, 0.02]];
+      for (let i = 0; i < veins.length; i++) {
+        open(g, [[0.06, -0.03], veins[i]]);
+        K(g, rgba("#a85a6c", 0.55), 0.012);
+      }
+      g.restore();
+      ell(g, 0.27, -0.15, 0.05, 0.045);
+      F(g, "#f6e6d2");
+      ell(g, 0.27, -0.15, 0.024, 0.022);
+      F(g, "#93485d");
+      g.restore();
+    }
+    blob(g, 0.5, 0.5, 0.085, 0.2, rnd, 0.05, 12);
+    K(g, INK, 0.045);
+    F(g, "#f7eedc");
+    for (let i = 0; i < 4; i++) {
+      wline(g, 0.44, 0.47 + i * 0.055, 0.56, 0.47 + i * 0.055, rnd, 6e-3, 2);
+      K(g, rgba("#d6bfa5", 0.8), 0.014);
+    }
+    g.beginPath();
+    g.arc(0.468, 0.385, 0.02, 0.1 * Math.PI, 0.9 * Math.PI);
+    K(g, INK, 0.014);
+    g.beginPath();
+    g.arc(0.532, 0.385, 0.02, 0.1 * Math.PI, 0.9 * Math.PI);
+    K(g, INK, 0.014);
+    open(g, [[0.47, 0.31], [0.4, 0.22], [0.32, 0.2], [0.28, 0.24]]);
+    K(g, INK, 0.022);
+    open(g, [[0.53, 0.31], [0.6, 0.22], [0.68, 0.2], [0.72, 0.24]]);
+    K(g, INK, 0.022);
+  }
+  function paintHush(g, nb, v) {
+    paintFloor(g, v + 5 & 7);
+    g.fillStyle = rgba("#170e22", 0.6);
+    g.fillRect(-0.1, -0.1, 1.2, 1.2);
+    const rnd = rng(8100 + nb * 13 + v * 71);
+    const ink = slabPts(0.05, 0.05, 0.95, 0.95, nb, 0.2, rnd, 0.045);
+    closed(g, ink);
+    K(g, rgba(PALETTE.hush, 0.5), 0.1);
+    closed(g, ink);
+    F(g, PALETTE.hush);
+    g.save();
+    closed(g, ink);
+    g.clip();
+    for (let i = 0; i < 4; i++) {
+      const a0 = rnd() * TAU;
+      g.beginPath();
+      g.arc(0.5 + (rnd() - 0.5) * 0.06, 0.5 + (rnd() - 0.5) * 0.06, 0.1 + i * 0.1, a0, a0 + 1.5 + rnd() * 1.6);
+      K(g, rgba("#2c1e49", 0.75), 0.04);
+    }
+    spiral(g, 0.5, 0.5, 0.02, 0.1, 1.3, rnd() * TAU);
+    K(g, rgba("#3a2960", 0.8), 0.03);
+    g.restore();
+  }
+  function paintHushShimmer(g, nb, v, phase) {
+    const rnd = rng(8100 + nb * 13 + v * 71);
+    const line = slabPts(0.105, 0.105, 0.895, 0.895, nb, 0.2, rnd, 0.045);
+    g.setLineDash(phase ? [0.11, 0.13] : [0.16, 0.1]);
+    g.lineDashOffset = phase ? 0.12 : 0;
+    closed(g, line);
+    K(g, rgba("#b29cf0", phase ? 0.8 : 0.7), 0.022);
+    g.setLineDash([]);
+    const r2 = rng(8200 + phase * 91 + v * 7 + nb);
+    for (let i = 0; i < 3; i++) {
+      sparkle(g, 0.22 + r2() * 0.56, 0.22 + r2() * 0.56, 0.022 + r2() * 0.02);
+      F(g, rgba("#cdbcff", 0.75));
+    }
+  }
+  function paintBud(g, v, lit, accent) {
+    paintFloor(g, v);
+    const rnd = rng(4100 + (lit ? 7 : 0));
+    const stem = mix(accent, "#2c5350", 0.5);
+    const leafCol = lit ? mix(accent, "#2f6a5a", 0.35) : mix(accent, "#4a5b63", 0.6);
+    const outline2 = rgba(INK, 0.9);
+    if (lit) {
+      ell(g, 0.5, 0.45, 0.46, 0.46);
+      F(g, radial(g, 0.5, 0.45, 0.45, [0, rgba(mix(accent, "#ffffff", 0.55), 0.9), 0.5, rgba(accent, 0.5), 1, rgba(accent, 0)]));
+    }
+    blob(g, 0.5, 0.875, 0.2, 0.06, rnd, 0.08, 9);
+    F(g, rgba(INK, 0.32));
+    blob(g, 0.5, 0.855, 0.165, 0.052, rnd, 0.1, 9);
+    K(g, outline2, 0.03);
+    F(g, mix(accent, "#3c4a4c", lit ? 0.45 : 0.68));
+    if (!lit) {
+      leaf(g, 0.5, 0.85, 0.17, 0.83, 0.08, -0.05);
+      K(g, outline2, 0.04);
+      F(g, leafCol);
+      leaf(g, 0.5, 0.85, 0.83, 0.84, 0.075, 0.04);
+      K(g, outline2, 0.04);
+      F(g, leafCol);
+      const stalk2 = [[0.5, 0.85], [0.41, 0.62], [0.37, 0.36], [0.46, 0.19], [0.62, 0.18], [0.68, 0.32]];
+      open(g, stalk2);
+      K(g, INK, 0.085);
+      open(g, stalk2);
+      K(g, stem, 0.045);
+      const bud = [[0.68, 0.315], [0.79, 0.39], [0.835, 0.55], [0.775, 0.7], [0.69, 0.81], [0.605, 0.7], [0.545, 0.55], [0.59, 0.39]];
+      closed(g, bud);
+      K(g, INK, 0.06);
+      F(g, mix(accent, "#eef1e4", 0.62));
+      g.save();
+      closed(g, bud);
+      g.clip();
+      blob(g, 0.76, 0.66, 0.1, 0.16, rnd, 0.1, 8);
+      F(g, rgba(mix(accent, "#3f5560", 0.5), 0.5));
+      open(g, [[0.655, 0.34], [0.625, 0.55], [0.69, 0.8]]);
+      K(g, rgba(INK, 0.5), 0.018);
+      open(g, [[0.715, 0.34], [0.755, 0.55], [0.69, 0.8]]);
+      K(g, rgba(INK, 0.5), 0.018);
+      g.restore();
+      leaf(g, 0.68, 0.3, 0.57, 0.42, 0.04, 0.012);
+      K(g, outline2, 0.028);
+      F(g, stem);
+      leaf(g, 0.68, 0.3, 0.8, 0.41, 0.04, -0.012);
+      K(g, outline2, 0.028);
+      F(g, stem);
+      return;
+    }
+    leaf(g, 0.5, 0.85, 0.2, 0.7, 0.07, 0.05);
+    K(g, outline2, 0.04);
+    F(g, leafCol);
+    leaf(g, 0.5, 0.85, 0.8, 0.7, 0.07, -0.05);
+    K(g, outline2, 0.04);
+    F(g, leafCol);
+    const stalk = [[0.5, 0.85], [0.49, 0.72], [0.5, 0.58]];
+    open(g, stalk);
+    K(g, INK, 0.08);
+    open(g, stalk);
+    K(g, stem, 0.042);
+    const cx = 0.5;
+    const cy = 0.43;
+    const petals = 7;
+    const tipCol = mix(accent, "#ffffff", 0.62);
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < petals; i++) {
+        const a = -Math.PI / 2 + i / petals * TAU + 0.06;
+        const c = Math.cos(a);
+        const s = Math.sin(a) * 0.86;
+        if (pass === 0) {
+          leaf(g, cx + c * 0.04, cy + s * 0.04, cx + c * 0.315, cy + s * 0.315, 0.1);
+          K(g, rgba(INK, 0.92), 0.05);
+          F(g, mix(accent, "#ffffff", 0.18));
+        } else {
+          leaf(g, cx + c * 0.09, cy + s * 0.09, cx + c * 0.28, cy + s * 0.28, 0.05);
+          F(g, tipCol);
+        }
+      }
+    }
+    ell(g, cx, cy, 0.2, 0.18);
+    F(g, radial(g, cx, cy, 0.2, [0, "rgba(255,253,236,1)", 0.45, "rgba(255,250,220,0.9)", 1, "rgba(255,250,220,0)"]));
+    ell(g, cx, cy, 0.075, 0.068);
+    F(g, "#fffdf0");
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * TAU + 0.3;
+      ell(g, cx + Math.cos(a) * 0.108, cy + Math.sin(a) * 0.094, 0.014, 0.014);
+      F(g, AMBER);
+    }
+    sparkle(g, 0.13, 0.17, 0.05);
+    F(g, "#fffbe6");
+    sparkle(g, 0.88, 0.22, 0.04);
+    F(g, "#fffbe6");
+    sparkle(g, 0.86, 0.74, 0.032);
+    F(g, "#fffbe6");
+  }
+  function paintBudGlow(g, accent) {
+    ell(g, 0.5, 0.45, 0.46, 0.46);
+    F(g, radial(g, 0.5, 0.45, 0.45, [0, rgba(mix(accent, "#ffffff", 0.7), 0.5), 0.5, rgba(accent, 0.2), 1, rgba(accent, 0)]));
+  }
+  function glyphPath(g, ch, cx, cy, r) {
+    g.beginPath();
+    if (ch === 1) {
+      g.moveTo(cx, cy - r * 1.12);
+      g.lineTo(cx + r * 1.08, cy + r * 0.78);
+      g.lineTo(cx - r * 1.08, cy + r * 0.78);
+      g.closePath();
+    } else if (ch === 2) {
+      g.rect(cx - r * 0.86, cy - r * 0.86, r * 1.72, r * 1.72);
+    } else {
+      g.arc(cx, cy, r, 0, TAU);
+    }
+  }
+  function paintGlyph(g, ch, cx, cy, r, active, accent) {
+    glyphPath(g, ch, cx, cy, r);
+    K(g, INK, r * 1.05);
+    F(g, active ? mix(CREAM, accent, 0.12) : INK);
+    glyphPath(g, ch, cx, cy, r);
+    K(g, active ? "#fffaf0" : mix(CREAM, accent, 0.3), r * 0.4);
+  }
+  var BARK = "#a07a63";
+  var BARK_HI = "#d2b092";
+  var BARK_DK = "#5d4046";
+  function paintRoot(g, v, pressed, ch, accent) {
+    paintFloor(g, v);
+    const rnd = rng(5200 + ch * 31);
+    const tendril = (pts, lw) => {
+      open(g, pts);
+      K(g, rgba(INK, 0.85), lw + 0.035);
+      open(g, pts);
+      K(g, BARK, lw);
+    };
+    tendril([[0.3, 0.42], [0.18, 0.28], [0.08, 0.2], [-0.04, 0.12]], 0.045);
+    tendril([[0.7, 0.42], [0.84, 0.3], [0.92, 0.16], [1.04, 0.1]], 0.045);
+    tendril([[0.36, 0.66], [0.26, 0.84], [0.14, 0.92], [0.08, 1.04]], 0.04);
+    tendril([[0.66, 0.66], [0.78, 0.82], [0.9, 0.9], [1.04, 0.94]], 0.04);
+    const cx = 0.5;
+    const cy = pressed ? 0.55 : 0.48;
+    const rx = pressed ? 0.37 : 0.315;
+    const ry = pressed ? 0.275 : 0.255;
+    const h = pressed ? 0 : 0.085;
+    if (pressed) {
+      ell(g, cx, cy, 0.45, 0.45);
+      F(g, radial(g, cx, cy, 0.44, [0, rgba(accent, 0.8), 0.65, rgba(accent, 0.4), 1, rgba(accent, 0)]));
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * TAU + 0.39;
+        const c = Math.cos(a);
+        const s = Math.sin(a);
+        g.beginPath();
+        g.moveTo(cx + c * rx * 1.14, cy + s * ry * 1.16);
+        g.lineTo(cx + c * rx * 1.34, cy + s * ry * 1.4);
+        K(g, INK, 0.055);
+        g.beginPath();
+        g.moveTo(cx + c * rx * 1.14, cy + s * ry * 1.16);
+        g.lineTo(cx + c * rx * 1.34, cy + s * ry * 1.4);
+        K(g, "#fff6dc", 0.026);
+      }
+    } else {
+      ell(g, cx + 0.01, cy + h + 0.035, rx * 1.1, ry * 1.04);
+      F(g, rgba(INK, 0.4));
+      ell(g, cx, cy + h, rx, ry);
+      K(g, INK, 0.05);
+      F(g, BARK_DK);
+      g.fillStyle = BARK_DK;
+      g.fillRect(cx - rx, cy, rx * 2, h);
+      g.beginPath();
+      g.moveTo(cx - rx, cy);
+      g.lineTo(cx - rx, cy + h);
+      g.moveTo(cx + rx, cy);
+      g.lineTo(cx + rx, cy + h);
+      K(g, INK, 0.025);
+    }
+    blob(g, cx, cy, rx, ry, rnd, 0.025, 14);
+    K(g, INK, 0.05);
+    F(g, BARK);
+    ell(g, cx, cy, rx * 0.74, ry * 0.74);
+    K(g, pressed ? mix(BARK_HI, accent, 0.35) : BARK_HI, pressed ? 0.06 : 0.08);
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * TAU + 0.2;
+      const a2 = a + 0.22;
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * rx * 0.56, cy + Math.sin(a) * ry * 0.56);
+      g.lineTo(cx + Math.cos(a2) * rx * 0.93, cy + Math.sin(a2) * ry * 0.93);
+      K(g, pressed ? rgba(mix(accent, "#ffffff", 0.55), 0.95) : rgba(INK, 0.7), pressed ? 0.024 : 0.02);
+    }
+    ell(g, cx, cy, rx * 0.5, ry * 0.5);
+    F(g, pressed ? mix(accent, "#ffffff", 0.35) : BARK_DK);
+    paintGlyph(g, ch, cx, cy, pressed ? 0.1 : 0.092, pressed, accent);
+  }
+  function paintGate(g, v, isOpen, ch, accent) {
+    paintFloor(g, v);
+    const root = (pts, lw) => {
+      open(g, pts);
+      K(g, INK, lw + 0.05);
+      open(g, pts);
+      K(g, BARK, lw);
+      g.save();
+      g.translate(-lw * 0.2, -lw * 0.2);
+      open(g, pts);
+      K(g, rgba(BARK_HI, 0.85), lw * 0.28);
+      g.restore();
+    };
+    if (!isOpen) {
+      g.fillStyle = rgba(INK, 0.34);
+      g.fillRect(-0.1, -0.1, 1.2, 1.2);
+      root([[-0.1, 0.3], [0.2, 0.26], [0.5, 0.31], [0.8, 0.26], [1.1, 0.3]], 0.085);
+      root([[-0.1, 0.72], [0.22, 0.76], [0.52, 0.71], [0.8, 0.76], [1.1, 0.72]], 0.085);
+      root([[0.2, -0.1], [0.17, 0.25], [0.22, 0.5], [0.18, 0.78], [0.21, 1.1]], 0.1);
+      root([[0.8, -0.1], [0.83, 0.22], [0.79, 0.5], [0.82, 0.76], [0.79, 1.1]], 0.1);
+      root([[0.5, -0.1], [0.52, 0.15], [0.5, 0.36]], 0.1);
+      root([[0.5, 0.64], [0.48, 0.86], [0.51, 1.1]], 0.1);
+      const rnd = rng(6200 + ch * 17);
+      blob(g, 0.5, 0.5, 0.2, 0.19, rnd, 0.04, 12);
+      K(g, INK, 0.06);
+      F(g, BARK);
+      ell(g, 0.5, 0.5, 0.15, 0.14);
+      K(g, rgba(BARK_HI, 0.8), 0.022);
+      paintGlyph(g, ch, 0.5, 0.5, 0.095, false, accent);
+      return;
+    }
+    for (let sy = -1; sy <= 1; sy += 2) {
+      for (let sx = -1; sx <= 1; sx += 2) {
+        g.save();
+        g.translate(0.5, 0.5);
+        g.scale(sx, sy);
+        g.translate(-0.5, -0.5);
+        root([[-0.1, 0.3], [0.06, 0.31], [0.2, 0.25], [0.25, 0.13], [0.17, 0.05], [0.08, 0.1], [0.11, 0.18]], 0.075);
+        root([[0.3, -0.1], [0.31, 0.02], [0.27, 0.08]], 0.06);
+        g.restore();
+      }
+    }
+    ell(g, 0.5, 0.5, 0.3, 0.3);
+    F(g, radial(g, 0.5, 0.5, 0.26, [0, rgba(accent, 0.5), 1, rgba(accent, 0)]));
+    paintGlyph(g, ch, 0.5, 0.5, 0.085, true, accent);
+  }
+  function nbMask(n) {
+    return n ? (n.n ? 1 : 0) | (n.e ? 2 : 0) | (n.s ? 4 : 0) | (n.w ? 8 : 0) : 0;
+  }
+  function channelIndex(c) {
+    if (typeof c === "number") return c >= 0 && c <= 2 ? c | 0 : 0;
+    if (typeof c !== "string" || !c) return 0;
+    const i = (c.charCodeAt(0) & 95) - 65;
+    return i >= 0 && i <= 2 ? i : 0;
+  }
+  function drawTile(ctx2, kind, px, py, size, opts) {
+    const o = opts || NONE;
+    const b = bucketFor(ctx2, size);
+    const v = hashInt(seedInt(o.seed)) & 7;
+    let key;
+    let s;
+    switch (kind) {
+      case "wall": {
+        const nb = nbMask(o.neighbors);
+        const wv = v & 3;
+        key = K_WALL + 32 * (wv + 8 * nb);
+        s = b.map.get(key);
+        if (s === void 0) s = make(b, key, 0, 0.55, (g) => paintWall(g, nb, wv), true);
+        if (s) blit(ctx2, s, px, py, size);
+        return;
+      }
+      case "puddle":
+      case "bridge": {
+        const nb = nbMask(o.neighbors);
+        const pv = v & 1;
+        const bridge = kind === "bridge";
+        key = (bridge ? K_BRIDGE : K_PUDDLE) + 32 * (pv + 8 * nb);
+        s = b.map.get(key);
+        if (s === void 0) s = make(b, key, 0, 0.5, (g) => bridge ? paintBridge(g, nb, pv) : paintPuddle(g, nb, pv), true);
+        if (s) blit(ctx2, s, px, py, size);
+        return;
+      }
+      case "hush": {
+        const nb = nbMask(o.neighbors);
+        const hv = v & 1;
+        key = K_HUSH + 32 * (hv + 8 * nb);
+        s = b.map.get(key);
+        if (s === void 0) s = make(b, key, 0, 0.35, (g) => paintHush(g, nb, hv), true);
+        if (!s) return;
+        blit(ctx2, s, px, py, size);
+        const t = o.t || 0;
+        const w = 0.5 + 0.5 * Math.sin(t * 0.9 + (v & 7) * 0.8);
+        const al = ctx2.globalAlpha;
+        for (let ph = 0; ph < 2; ph++) {
+          const k2 = K_HUSH_SHIM + 32 * (hv + 8 * (nb + 16 * ph));
+          let sh = b.map.get(k2);
+          if (sh === void 0) sh = make(b, k2, 0, 0, (g) => paintHushShimmer(g, nb, hv, ph));
+          if (sh) {
+            ctx2.globalAlpha = al * (0.25 + 0.6 * (ph ? 1 - w : w));
+            blit(ctx2, sh, px, py, size);
+          }
+        }
+        ctx2.globalAlpha = al;
+        return;
+      }
+      case "bud": {
+        const lit = o.lit ? 1 : 0;
+        const acc = accentId(o.accent);
+        const accent = o.accent || TEAL;
+        key = K_BUD + 32 * (v + 8 * (lit + 4 * acc));
+        s = b.map.get(key);
+        if (s === void 0) s = make(b, key, 0, 0.45, (g) => paintBud(g, v, lit, accent), true);
+        if (!s) return;
+        blit(ctx2, s, px, py, size);
+        if (lit) {
+          const k2 = K_BUDGLOW + 32 * acc;
+          let gl = b.map.get(k2);
+          if (gl === void 0) gl = make(b, k2, 0, 0, (g) => paintBudGlow(g, accent));
+          if (gl) {
+            const t = o.t || 0;
+            const al = ctx2.globalAlpha;
+            const op = ctx2.globalCompositeOperation;
+            ctx2.globalCompositeOperation = "lighter";
+            ctx2.globalAlpha = al * (0.3 + 0.22 * Math.sin(t * 2.6 + (v & 7)));
+            blit(ctx2, gl, px, py, size);
+            ctx2.globalAlpha = al;
+            ctx2.globalCompositeOperation = op;
+          }
+        }
+        return;
+      }
+      case "root":
+      case "gate": {
+        const ch = channelIndex(o.channel);
+        const acc = accentId(o.accent);
+        const accent = o.accent || CHANNEL_TINT[ch];
+        const root = kind === "root";
+        const on = (root ? o.pressed : o.open) ? 1 : 0;
+        key = (root ? K_ROOT : K_GATE) + 32 * (v + 8 * (on + 2 * (ch + 4 * acc)));
+        s = b.map.get(key);
+        if (s === void 0) s = make(b, key, 0, 0.5, (g) => root ? paintRoot(g, v, on, ch, accent) : paintGate(g, v, on, ch, accent), true);
+        if (s) blit(ctx2, s, px, py, size);
+        return;
+      }
+      default: {
+        key = K_FLOOR + 32 * v;
+        s = b.map.get(key);
+        if (s === void 0) s = make(b, key, 0, 0.55, (g) => paintFloor(g, v), true);
+        if (s) blit(ctx2, s, px, py, size);
+      }
+    }
+  }
+  var MAX_SIDE = 4096;
+  var MAX_AREA = 8e6;
+  var back = { c: null, g: null, w: 0, h: 0, cw: 0, ch: 0 };
+  var moteSprites = /* @__PURE__ */ new Map();
+  var MOTES = [];
+  function moteSprite(accent) {
+    let c = moteSprites.get(accent);
+    if (c !== void 0) return c;
+    if (moteSprites.size > 12) moteSprites.clear();
+    c = makeCanvas(32, 32);
+    if (c) {
+      const g = c.getContext("2d");
+      g.fillStyle = radial(g, 16, 16, 16, [0, rgba(mix(accent, "#ffffff", 0.6), 1), 0.25, rgba(accent, 0.7), 1, rgba(accent, 0)]);
+      g.fillRect(0, 0, 32, 32);
+    }
+    moteSprites.set(accent, c);
+    return c;
+  }
+  function buildBackdrop(bw, bh) {
+    const c = makeCanvas(bw, bh);
+    if (!c) return null;
+    const g = c.getContext("2d");
+    const rnd = rng(1207);
+    const big = Math.max(bw, bh);
+    g.fillStyle = PALETTE.plum;
+    g.fillRect(0, 0, bw, bh);
+    g.fillStyle = radial(g, bw * 0.5, bh * 0.44, big * 0.62, [0, "rgba(70,50,94,0.5)", 1, "rgba(70,50,94,0)"]);
+    g.fillRect(0, 0, bw, bh);
+    for (let i = 0; i < 12; i++) {
+      blob(g, rnd() * bw, rnd() * bh, big * (0.12 + rnd() * 0.2), big * (0.09 + rnd() * 0.14), rnd, 0.2, 9);
+      F(g, i % 2 ? "rgba(66,47,90,0.1)" : "rgba(24,16,36,0.12)");
+    }
+    const ridge = (y0, dirY, col, amp, seed) => {
+      const r = rng(seed);
+      g.beginPath();
+      g.moveTo(-10, y0 - dirY * 40);
+      const steps = 9;
+      for (let i = 0; i <= steps; i++) {
+        const x = i / steps * bw;
+        const y = y0 + dirY * (0.3 + r() * 0.7) * amp;
+        const xm = x - bw / steps / 2;
+        g.quadraticCurveTo(xm, y0 + dirY * r() * amp * 1.5, x, y);
+      }
+      g.lineTo(bw + 10, y0 - dirY * 40);
+      g.closePath();
+      F(g, col);
+    };
+    ridge(0, 1, "rgba(22,14,33,0.55)", bh * 0.1, 11);
+    ridge(0, 1, "rgba(16,10,25,0.6)", bh * 0.055, 12);
+    ridge(bh, -1, "rgba(22,14,33,0.55)", bh * 0.09, 13);
+    ridge(bh, -1, "rgba(16,10,25,0.6)", bh * 0.05, 14);
+    const vg = g.createRadialGradient(bw / 2, bh / 2, big * 0.25, bw / 2, bh / 2, big * 0.78);
+    vg.addColorStop(0, "rgba(14,9,22,0)");
+    vg.addColorStop(1, "rgba(14,9,22,0.82)");
+    g.fillStyle = vg;
+    g.fillRect(0, 0, bw, bh);
+    stampGrain(g, bw, bh, 0.16, 5, 1);
+    return c;
+  }
+  function drawBackdrop(ctx2, width, height, opts) {
+    if (!(width > 0 && height > 0)) return;
+    const o = opts || NONE;
+    const t = o.t || 0;
+    const accent = o.accent || TEAL;
+    const scale = ctxScale(ctx2);
+    let cw = Math.max(8, Math.round(width * scale));
+    let ch = Math.max(8, Math.round(height * scale));
+    const k = Math.min(1, MAX_SIDE / cw, MAX_SIDE / ch, Math.sqrt(MAX_AREA / (cw * ch)));
+    if (k < 1) {
+      cw = Math.floor(cw * k);
+      ch = Math.floor(ch * k);
+    }
+    const bw = Math.max(8, Math.round(width / 3));
+    const bh = Math.max(8, Math.round(height / 3));
+    if (!back.c || back.cw !== cw || back.ch !== ch || back.w !== bw || back.h !== bh) {
+      const low = buildBackdrop(bw, bh);
+      if (!low) return;
+      if (!back.c) {
+        back.c = makeCanvas(cw, ch);
+        back.g = back.c.getContext("2d", { alpha: false });
+      } else if (back.c.width !== cw || back.c.height !== ch) {
+        back.c.width = cw;
+        back.c.height = ch;
+      }
+      const g = back.g;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = "source-over";
+      g.imageSmoothingEnabled = true;
+      g.drawImage(low, 0, 0, cw, ch);
+      stampGrain(g, cw, ch, 0.16, 9, Math.max(1, cw / Math.max(1, width)));
+      back.w = bw;
+      back.h = bh;
+      back.cw = cw;
+      back.ch = ch;
+    }
+    const smooth2 = ctx2.imageSmoothingEnabled;
+    if (smooth2 === false) ctx2.imageSmoothingEnabled = true;
+    ctx2.drawImage(back.c, 0, 0, width, height);
+    const m = moteSprite(accent);
+    if (m) {
+      if (!MOTES.length) {
+        const r = rng(905);
+        for (let i = 0; i < 16; i++) {
+          MOTES.push({ x: r(), y: r(), sp: 6e-3 + r() * 0.012, f: 0.2 + r() * 0.5, ph: r() * TAU, sw: 0.01 + r() * 0.025, r: 2.5 + r() * 4.5, tw: 0.5 + r() * 1.2 });
+        }
+      }
+      const al = ctx2.globalAlpha;
+      for (let i = 0; i < MOTES.length; i++) {
+        const a = MOTES[i];
+        const yy = ((a.y - t * a.sp) % 1 + 1) % 1;
+        const x = (a.x + Math.sin(t * a.f + a.ph) * a.sw) * width;
+        const y = yy * (height + 40) - 20;
+        const edge = Math.min(1, yy * 6, (1 - yy) * 6);
+        ctx2.globalAlpha = al * edge * (0.3 + 0.22 * Math.sin(t * a.tw + a.ph * 3));
+        ctx2.drawImage(m, x - a.r, y - a.r, a.r * 2, a.r * 2);
+      }
+      ctx2.globalAlpha = al;
+    }
+    if (smooth2 === false) ctx2.imageSmoothingEnabled = false;
+  }
+
+  // src/chars/felt.js
+  var TAU2 = Math.PI * 2;
+  var NONE2 = Object.freeze({});
+  var AMBER2 = PALETTE.amber;
+  var TEAL2 = PALETTE.teal;
+  var ROSE2 = PALETTE.rose;
+  var CREAM2 = PALETTE.cream;
+  var INK2 = PALETTE.ink;
+  var AMBER_LT = "#F8CB7C";
+  var TEAL_DK = "#3E9A86";
+  var BOOT = "#6A4454";
+  var PEACH = "#EEDCC0";
+  var BROWN = "#94633F";
+  var BROWN_DK = "#664330";
+  var STUMP = "#ECDDC1";
+  var BARK2 = "#B8977A";
+  var LID = "#7E5160";
+  var THREAD = CREAM2;
+  var THREAD_DK = "#6E3F52";
+  var OUTLINE = "rgba(30,18,40,0.86)";
+  function rng2(seed) {
+    let s = Math.imul(seed | 0, 2654435761) >>> 0 || 1;
+    return () => {
+      s ^= s << 13;
+      s >>>= 0;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      s >>>= 0;
+      return s / 4294967296;
+    };
+  }
+  var rgbMemo = /* @__PURE__ */ new Map();
+  function rgbOf2(c) {
+    let v = rgbMemo.get(c);
+    if (!v) {
+      const n = parseInt(c.slice(1), 16);
+      v = [n >> 16 & 255, n >> 8 & 255, n & 255];
+      rgbMemo.set(c, v);
+    }
+    return v;
+  }
+  function tone(c, k) {
+    const a = rgbOf2(c);
+    const t = k < 0 ? [36, 22, 46] : [255, 249, 232];
+    const m = Math.abs(k);
+    const h = (i) => Math.round(a[i] + (t[i] - a[i]) * m).toString(16).padStart(2, "0");
+    return "#" + h(0) + h(1) + h(2);
+  }
+  function rgba2(c, al) {
+    const a = rgbOf2(c);
+    return `rgba(${a[0]},${a[1]},${a[2]},${al})`;
+  }
+  function makeCanvas2(w, h) {
+    w = Math.max(1, Math.ceil(w));
+    h = Math.max(1, Math.ceil(h));
+    if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(w, h);
+    if (typeof document !== "undefined" && document.createElement) {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      return c;
+    }
+    return null;
+  }
+  function oval(cx, cy, rx, ry, o) {
+    o = o || NONE2;
+    const n = o.n || 44;
+    const wob = o.wob === void 0 ? 0.025 : o.wob;
+    const e = 2 / (o.sq || 2);
+    const R = rng2(o.seed || 7);
+    const p1 = R() * TAU2;
+    const p2 = R() * TAU2;
+    const rot = o.rot || 0;
+    const c = Math.cos(rot);
+    const s = Math.sin(rot);
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU2;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      const k = 1 + wob * (0.6 * Math.sin(a * 3 + p1) + 0.4 * Math.sin(a * 5 + p2));
+      const x = Math.sign(ca) * Math.pow(Math.abs(ca), e) * rx * k;
+      let y = Math.sign(sa) * Math.pow(Math.abs(sa), e) * ry * k;
+      if (o.flat !== void 0 && y > o.flat) y = o.flat + (y - o.flat) * 0.15;
+      pts.push([cx + x * c - y * s, cy + x * s + y * c]);
+    }
+    return pts;
+  }
+  function smooth(ctrl, k) {
+    k = k || 7;
+    const n = ctrl.length;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const a = ctrl[(i - 1 + n) % n];
+      const c = ctrl[i];
+      const b = ctrl[(i + 1) % n];
+      const p0x = (a[0] + c[0]) / 2;
+      const p0y = (a[1] + c[1]) / 2;
+      const p1x = (c[0] + b[0]) / 2;
+      const p1y = (c[1] + b[1]) / 2;
+      for (let j = 0; j < k; j++) {
+        const t = j / k;
+        const u = 1 - t;
+        out.push([u * u * p0x + 2 * u * t * c[0] + t * t * p1x, u * u * p0y + 2 * u * t * c[1] + t * t * p1y]);
+      }
+    }
+    return out;
+  }
+  function strand(x0, y0, cx, cy, x1, y1, w0, w1, bulge, n) {
+    n = n || 12;
+    bulge = bulge || 0;
+    const A = [];
+    const B = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const u = 1 - t;
+      const x = u * u * x0 + 2 * u * t * cx + t * t * x1;
+      const y = u * u * y0 + 2 * u * t * cy + t * t * y1;
+      const tx = 2 * u * (cx - x0) + 2 * t * (x1 - cx);
+      const ty = 2 * u * (cy - y0) + 2 * t * (y1 - cy);
+      const tl = Math.hypot(tx, ty) || 1;
+      const hw = w0 + (w1 - w0) * t + bulge * Math.sin(Math.PI * t);
+      A.push([x - ty / tl * hw, y + tx / tl * hw]);
+      B.push([x + ty / tl * hw, y - tx / tl * hw]);
+    }
+    return A.concat(B.reverse());
+  }
+  function curvePts(x0, y0, cx, cy, x1, y1, n) {
+    const p = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const u = 1 - t;
+      p.push([u * u * x0 + 2 * u * t * cx + t * t * x1, u * u * y0 + 2 * u * t * cy + t * t * y1]);
+    }
+    return p;
+  }
+  function spiralPts(cx, cy, r0, r1, turns, start, sy) {
+    const p = [];
+    const n = Math.ceil(turns * 26);
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const a = start + t * turns * TAU2;
+      const r = r0 + (r1 - r0) * t;
+      p.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r * sy]);
+    }
+    return p;
+  }
+  function trace(g, pts, close, dx, dy) {
+    dx = dx || 0;
+    dy = dy || 0;
+    g.beginPath();
+    g.moveTo(pts[0][0] + dx, pts[0][1] + dy);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0] + dx, pts[i][1] + dy);
+    if (close !== false) g.closePath();
+  }
+  function area(pts) {
+    let a = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const p = pts[i];
+      const q = pts[(i + 1) % n];
+      a += p[0] * q[1] - q[0] * p[1];
+    }
+    return a / 2;
+  }
+  function normals(pts) {
+    const n = pts.length;
+    const sgn = area(pts) > 0 ? 1 : -1;
+    const out = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = pts[(i - 1 + n) % n];
+      const b = pts[(i + 1) % n];
+      const tx = b[0] - a[0];
+      const ty = b[1] - a[1];
+      const l = Math.hypot(tx, ty) || 1;
+      out[i] = [sgn * ty / l, -sgn * tx / l];
+    }
+    return out;
+  }
+  function inset(pts, d) {
+    const nr = normals(pts);
+    return pts.map((p, i) => [p[0] - nr[i][0] * d, p[1] - nr[i][1] * d]);
+  }
+  function bbox(pts) {
+    let x0 = 1e9;
+    let y0 = 1e9;
+    let x1 = -1e9;
+    let y1 = -1e9;
+    for (const p of pts) {
+      if (p[0] < x0) x0 = p[0];
+      if (p[0] > x1) x1 = p[0];
+      if (p[1] < y0) y0 = p[1];
+      if (p[1] > y1) y1 = p[1];
+    }
+    return [x0, y0, x1, y1];
+  }
+  var UPX = 1 / 64;
+  var pieceSeed = 1;
+  function felt(g, pts, col, o) {
+    o = o || NONE2;
+    const R = rng2(o.seed || ++pieceSeed);
+    const hair = o.hair === void 0 ? 1 : o.hair;
+    const b = bbox(pts);
+    const w = b[2] - b[0];
+    const h = b[3] - b[1];
+    if (hair > 0) {
+      const nr = normals(pts);
+      g.beginPath();
+      for (let i = 0; i < pts.length; i++) {
+        if (R() > 0.62) continue;
+        const a = (R() - 0.5) * 1.4;
+        const c = Math.cos(a);
+        const s = Math.sin(a);
+        const nx = nr[i][0] * c - nr[i][1] * s;
+        const ny = nr[i][0] * s + nr[i][1] * c;
+        const L = (4e-3 + R() * 9e-3) * hair;
+        const p = pts[i];
+        g.moveTo(p[0] - nx * 6e-3, p[1] - ny * 6e-3);
+        g.lineTo(p[0] + nx * L, p[1] + ny * L);
+      }
+      g.strokeStyle = tone(col, -0.05);
+      g.lineWidth = Math.max(45e-4, UPX * 0.9);
+      g.stroke();
+    }
+    trace(g, pts);
+    g.fillStyle = col;
+    g.fill();
+    const puff = o.puff === void 0 ? 1 : o.puff;
+    if (puff > 0) {
+      const r = Math.max(w, h) * 0.78;
+      const gr = g.createRadialGradient(b[0] + w * 0.38, b[1] + h * 0.3, 0, b[0] + w * 0.45, b[1] + h * 0.42, r);
+      gr.addColorStop(0, `rgba(255,248,232,${0.28 * puff})`);
+      gr.addColorStop(0.5, "rgba(255,248,232,0)");
+      gr.addColorStop(1, `rgba(36,22,46,${0.34 * puff})`);
+      g.fillStyle = gr;
+      g.fill();
+    }
+    if (o.stitch !== false) {
+      const ins = o.ins || Math.min(0.026, Math.min(w, h) * 0.17);
+      stitch(g, inset(pts, ins), true, o.stitch || THREAD, o);
+    }
+  }
+  function stitch(g, pts, close, col, o) {
+    o = o || NONE2;
+    const lw = Math.max(o.lw || 0.011, UPX * 1.1);
+    const dash = o.dash || 0.028;
+    g.save();
+    g.lineCap = "round";
+    g.setLineDash([dash * 0.5, dash * 0.62]);
+    trace(g, pts, close, 0, lw * 0.6);
+    g.strokeStyle = "rgba(36,22,46,0.3)";
+    g.lineWidth = lw * 1.25;
+    g.stroke();
+    trace(g, pts, close);
+    g.strokeStyle = col;
+    g.lineWidth = lw;
+    g.stroke();
+    g.restore();
+  }
+  function knit(g, pts, col, step, rot) {
+    step = step || 0.03;
+    const b = bbox(pts);
+    g.save();
+    trace(g, pts);
+    g.clip();
+    const cx = (b[0] + b[2]) / 2;
+    const cy = (b[1] + b[3]) / 2;
+    g.translate(cx, cy);
+    if (rot) g.rotate(rot);
+    const hw = (b[2] - b[0]) / 2;
+    const hh = (b[3] - b[1]) / 2;
+    const sr = Math.abs(Math.sin(rot || 0));
+    const ex = hw + hh * sr + step;
+    const ey = hh + hw * sr + step;
+    g.beginPath();
+    for (let y = -ey; y < ey; y += step * 0.72) {
+      for (let x = -ex; x < ex; x += step) {
+        g.moveTo(x - step * 0.36, y - step * 0.26);
+        g.lineTo(x, y + step * 0.2);
+        g.lineTo(x + step * 0.36, y - step * 0.26);
+      }
+    }
+    g.strokeStyle = rgba2(tone(col, -0.4), 0.5);
+    g.lineWidth = Math.max(65e-4, UPX * 1);
+    g.stroke();
+    g.restore();
+  }
+  function ribs(g, pts, col, a0, a1, n) {
+    g.save();
+    trace(g, pts);
+    g.clip();
+    g.beginPath();
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      const x = a0[0] + (a1[0] - a0[0]) * t;
+      const y = a0[1] + (a1[1] - a0[1]) * t;
+      const dx = a1[0] - a0[0];
+      const dy = a1[1] - a0[1];
+      const l = Math.hypot(dx, dy) || 1;
+      g.moveTo(x - dy / l * 0.06, y + dx / l * 0.06);
+      g.lineTo(x + dy / l * 0.06, y - dx / l * 0.06);
+    }
+    g.strokeStyle = rgba2(tone(col, -0.4), 0.55);
+    g.lineWidth = Math.max(7e-3, UPX);
+    g.stroke();
+    g.restore();
+  }
+  var MARGIN = 0.25;
+  var sizes = /* @__PURE__ */ new Map();
+  var useTick2 = 0;
+  var scaleCtx2 = null;
+  var scaleVal = 1;
+  var scaleTtl2 = 0;
+  var fibreTile = null;
+  var scratch2 = null;
+  function ctxScale2(ctx2) {
+    if (ctx2 === scaleCtx2 && scaleTtl2-- > 0) return scaleVal;
+    let s = 0;
+    if (typeof ctx2.getTransform === "function") {
+      const m = ctx2.getTransform();
+      s = Math.hypot(m.a, m.b);
+    }
+    if (!(s > 0)) s = typeof devicePixelRatio === "number" && devicePixelRatio > 0 && devicePixelRatio || 1;
+    scaleCtx2 = ctx2;
+    scaleVal = s;
+    scaleTtl2 = 40;
+    return s;
+  }
+  function bucketFor2(ctx2, size) {
+    let P = Math.round(size * ctxScale2(ctx2));
+    P = Math.max(16, Math.min(400, P || 16));
+    let b = sizes.get(P);
+    if (!b) {
+      b = { P, map: /* @__PURE__ */ new Map(), used: 0 };
+      sizes.set(P, b);
+      if (sizes.size > 6) {
+        let old = null;
+        for (const c of sizes.values()) if (c !== b && (!old || c.used < old.used)) old = c;
+        if (old) {
+          for (const s of old.map.values()) if (s && s.c) s.c.width = s.c.height = 1;
+          sizes.delete(old.P);
+        }
+      }
+    }
+    b.used = ++useTick2;
+    return b;
+  }
+  function fibreSource() {
+    if (fibreTile) return fibreTile;
+    const n = 128;
+    const c = makeCanvas2(n, n);
+    if (!c) return null;
+    const g = c.getContext("2d");
+    const R = rng2(9001);
+    g.lineCap = "round";
+    for (let pass = 0; pass < 2; pass++) {
+      g.strokeStyle = pass ? "rgba(255,249,232,0.55)" : "rgba(36,22,46,0.5)";
+      g.lineWidth = pass ? 0.8 : 0.9;
+      g.beginPath();
+      for (let i = 0; i < 520; i++) {
+        const x = R() * n;
+        const y = R() * n;
+        const a = R() * TAU2;
+        const l = 2 + R() * 5;
+        const bx = x + Math.cos(a) * l;
+        const by = y + Math.sin(a) * l;
+        for (const ox of [-n, 0, n]) {
+          for (const oy of [-n, 0, n]) {
+            if (ox && (bx + ox < -6 || bx + ox > n + 6) && (x + ox < -6 || x + ox > n + 6)) continue;
+            if (oy && (by + oy < -6 || by + oy > n + 6) && (y + oy < -6 || y + oy > n + 6)) continue;
+            g.moveTo(x + ox, y + oy);
+            g.quadraticCurveTo(x + ox + Math.cos(a + 0.6) * l * 0.5, y + oy + Math.sin(a + 0.6) * l * 0.5, bx + ox, by + oy);
+          }
+        }
+      }
+      g.stroke();
+    }
+    fibreTile = c;
+    return c;
+  }
+  function stampFibres(g, side, P, seed) {
+    const src = fibreSource();
+    if (!src) return;
+    const n = Math.max(40, P * 0.8);
+    const R = rng2(seed);
+    const ox = -R() * n;
+    const oy = -R() * n;
+    g.save();
+    g.globalCompositeOperation = "source-atop";
+    g.globalAlpha = 0.26;
+    for (let y = oy; y < side; y += n) for (let x = ox; x < side; x += n) g.drawImage(src, x, y, n, n);
+    g.restore();
+  }
+  function outline(g, c, side, P) {
+    if (!scratch2 || scratch2.width < side || scratch2.height < side) scratch2 = makeCanvas2(Math.max(side, 64), Math.max(side, 64));
+    if (!scratch2) return;
+    const sg = scratch2.getContext("2d");
+    sg.setTransform(1, 0, 0, 1, 0, 0);
+    sg.globalCompositeOperation = "source-over";
+    sg.clearRect(0, 0, scratch2.width, scratch2.height);
+    sg.drawImage(c, 0, 0);
+    sg.globalCompositeOperation = "source-in";
+    sg.fillStyle = OUTLINE;
+    sg.fillRect(0, 0, side, side);
+    sg.globalCompositeOperation = "source-over";
+    g.save();
+    g.globalCompositeOperation = "destination-over";
+    const r = Math.max(1, P * 0.018);
+    const q = r * 0.85;
+    for (const [dx, dy] of [[-q, -q * 0.6], [q, -q * 0.6], [-q, q * 1.1], [q, q * 1.1], [0, r * 1.4]]) g.drawImage(scratch2, 0, 0, side, side, dx, dy, side, side);
+    g.restore();
+  }
+  function bakeShadow(g, P, mp, sh) {
+    g.save();
+    g.setTransform(P, 0, 0, P, mp, mp);
+    g.globalCompositeOperation = "destination-over";
+    g.translate(sh[0], sh[1]);
+    g.scale(1, sh[3] / sh[2]);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, sh[2]);
+    gr.addColorStop(0, `rgba(24,14,32,${0.85 * sh[4]})`);
+    gr.addColorStop(0.55, `rgba(24,14,32,${0.5 * sh[4]})`);
+    gr.addColorStop(1, "rgba(24,14,32,0)");
+    g.fillStyle = gr;
+    g.fillRect(-sh[2], -sh[2], sh[2] * 2, sh[2] * 2);
+    g.restore();
+  }
+  function hashKey(key) {
+    let h = 2166136261;
+    for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+    return h >>> 0;
+  }
+  function make2(b, key, painter, opts) {
+    const P = b.P;
+    const mp = Math.round(P * MARGIN);
+    const side = P + 2 * mp;
+    const c = makeCanvas2(side, side);
+    if (!c) {
+      b.map.set(key, null);
+      return null;
+    }
+    const g = c.getContext("2d");
+    UPX = 1 / P;
+    pieceSeed = hashKey(key) & 65535;
+    g.setTransform(P, 0, 0, P, mp, mp);
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    painter(g);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    stampFibres(g, side, P, hashKey(key));
+    if (!opts || opts.outline !== false) outline(g, c, side, P);
+    if (opts && opts.shadow) bakeShadow(g, P, mp, opts.shadow);
+    const s = { c, m: mp / P, k: side / P };
+    b.map.set(key, s);
+    return s;
+  }
+  function blit2(ctx2, s, px, py, size, ax, ay, sx, sy, dy) {
+    const k = size * s.k;
+    const m = s.m;
+    const X = px + ax * size;
+    const Y = py + ay * size + dy;
+    ctx2.drawImage(s.c, X - (ax + m) * size * sx, Y - (ay + m) * size * sy, k * sx, k * sy);
+  }
+  var shadowTile = null;
+  var glowTile = null;
+  function radialTile(stops) {
+    const n = 96;
+    const c = makeCanvas2(n, n);
+    if (!c) return null;
+    const g = c.getContext("2d");
+    const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    for (let i = 0; i < stops.length; i += 2) gr.addColorStop(stops[i], stops[i + 1]);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, n, n);
+    return c;
+  }
+  function drawShadow(ctx2, cx, cy, rx, ry, al) {
+    if (!shadowTile) shadowTile = radialTile([0, "rgba(24,14,32,0.85)", 0.55, "rgba(24,14,32,0.5)", 1, "rgba(24,14,32,0)"]);
+    if (!shadowTile) return;
+    const a = ctx2.globalAlpha;
+    ctx2.globalAlpha = a * al;
+    ctx2.drawImage(shadowTile, cx - rx, cy - ry, rx * 2, ry * 2);
+    ctx2.globalAlpha = a;
+  }
+  function drawGlow(ctx2, cx, cy, d, al) {
+    if (!glowTile) glowTile = radialTile([0, "rgba(255,214,130,0.9)", 0.35, "rgba(250,180,84,0.42)", 1, "rgba(242,176,76,0)"]);
+    if (!glowTile) return;
+    const a = ctx2.globalAlpha;
+    const op = ctx2.globalCompositeOperation;
+    ctx2.globalCompositeOperation = "lighter";
+    ctx2.globalAlpha = a * al;
+    ctx2.drawImage(glowTile, cx - d / 2, cy - d / 2, d, d);
+    ctx2.globalAlpha = a;
+    ctx2.globalCompositeOperation = op;
+  }
+  function frameOf(t, period, n) {
+    const f = Math.floor((t / period % 1 + 1) % 1 * n);
+    return f >= n ? 0 : f;
+  }
+  function flicker(t) {
+    return 0.5 + 0.28 * Math.sin(t * 9.1) + 0.22 * Math.sin(t * 14.3 + 1.7);
+  }
+  var DIRS = { N: 0, E: 1, S: 2, W: 3 };
+  function dirIndex(d) {
+    const i = DIRS[d];
+    return i === void 0 ? 2 : i;
+  }
+  function flamePts(cx, by, w, h) {
+    return smooth([[cx, by - h], [cx, by - h], [cx + w * 0.55, by - h * 0.5], [cx + w, by - h * 0.12], [cx + w * 0.5, by + w * 0.2], [cx - w * 0.5, by + w * 0.2], [cx - w, by - h * 0.12], [cx - w * 0.55, by - h * 0.5]], 6);
+  }
+  function paintLantern(g, cx, top, h, flame, out) {
+    const w = h * 0.58;
+    g.beginPath();
+    g.ellipse(cx, top + h * 0.1, h * 0.085, h * 0.085, 0, 0, TAU2);
+    g.strokeStyle = BROWN_DK;
+    g.lineWidth = h * 0.065;
+    g.stroke();
+    const glass = oval(cx, top + h * 0.6, w * 0.4, h * 0.27, { sq: 3.4, wob: 0.015, seed: 11 });
+    if (out) {
+      felt(g, glass, "#4A3C5A", { stitch: false, hair: 0.4, puff: 0.7 });
+      g.beginPath();
+      g.moveTo(cx, top + h * 0.8);
+      g.lineTo(cx, top + h * 0.68);
+      g.strokeStyle = INK2;
+      g.lineWidth = h * 0.04;
+      g.stroke();
+      stitch(g, curvePts(cx, top + h * 0.66, cx + h * 0.14, top + h * 0.55, cx - h * 0.02, top + h * 0.42, 8), false, "rgba(244,234,213,0.6)", { lw: h * 0.035, dash: h * 0.08 });
+    } else {
+      felt(g, glass, "#FFE6A2", { stitch: false, hair: 0.4, puff: 0 });
+      const gr = g.createRadialGradient(cx, top + h * 0.66, 0, cx, top + h * 0.62, h * 0.3);
+      gr.addColorStop(0, "#FFF8DE");
+      gr.addColorStop(0.6, "rgba(255,230,160,0.4)");
+      gr.addColorStop(1, "rgba(242,160,60,0.65)");
+      g.fillStyle = gr;
+      g.fill();
+      const fx = cx + [0, -0.016, 0.016, 6e-3][flame] * h;
+      const fh = [1, 1.1, 0.9, 1.05][flame];
+      felt(g, flamePts(fx, top + h * 0.79, h * 0.12, h * 0.31 * fh), "#F2862E", { stitch: false, hair: 0.3, puff: 0.3, seed: 31 });
+      felt(g, flamePts((fx + cx) / 2, top + h * 0.78, h * 0.06, h * 0.16 * fh), "#FFF4D6", { stitch: false, hair: 0, puff: 0 });
+    }
+    for (const sx of [-1, 1]) {
+      const bar = strand(cx + sx * w * 0.2, top + h * 0.34, cx + sx * w * 0.24, top + h * 0.6, cx + sx * w * 0.22, top + h * 0.86, h * 0.028, h * 0.028, 0, 6);
+      felt(g, bar, BROWN, { stitch: false, hair: 0, puff: 0.4 });
+    }
+    felt(g, oval(cx, top + h * 0.27, w * 0.5, h * 0.09, { sq: 3, seed: 12 }), BROWN, { ins: h * 0.04, lw: Math.max(8e-3, h * 0.025), dash: h * 0.07 });
+    felt(g, oval(cx, top + h * 0.9, w * 0.52, h * 0.08, { sq: 3, seed: 13 }), BROWN_DK, { ins: h * 0.035, lw: Math.max(8e-3, h * 0.025), dash: h * 0.07 });
+  }
+  function mitten(g, cx, cy, s, thumb, seed) {
+    const th = oval(cx + thumb * 0.038 * s, cy - 0.016 * s, 0.022 * s, 0.027 * s, { seed: seed + 1, rot: thumb * 0.5 });
+    felt(g, th, TEAL_DK, { stitch: false, hair: 0.6, puff: 0.5 });
+    felt(g, oval(cx, cy, 0.05 * s, 0.056 * s, { sq: 2.3, wob: 0.04, seed }), TEAL2, { stitch: false, hair: 0.7 });
+    felt(g, oval(cx, cy - 0.046 * s, 0.046 * s, 0.018 * s, { seed: seed + 2 }), TEAL_DK, { stitch: false, hair: 0.4, puff: 0.3 });
+  }
+  function pompom(g, x, y, r) {
+    felt(g, oval(x, y, r, r * 0.95, { wob: 0.12, seed: 41 }), CREAM2, { stitch: false, hair: 2.2, puff: 0.8 });
+  }
+  function hoodCone(g, L, R, T, C1, C2, col) {
+    const a = curvePts(L[0], L[1], C1[0], C1[1], T[0], T[1], 10);
+    const b = curvePts(T[0], T[1], C2[0], C2[1], R[0], R[1], 10);
+    const mid = [(L[0] + R[0]) / 2, (L[1] + R[1]) / 2 + 0.05];
+    const pts = a.concat(b.slice(1), [mid]);
+    felt(g, pts, col, { stitch: false, hair: 0.9 });
+    const m0 = [(L[0] + R[0]) / 2, (L[1] + R[1]) / 2];
+    const cm = [(C1[0] + C2[0]) / 2, (C1[1] + C2[1]) / 2];
+    stitch(g, curvePts(m0[0], m0[1], cm[0], cm[1], T[0], T[1], 10).slice(1, 9), false, THREAD);
+  }
+  function coat(g, ctrl, seed) {
+    const pts = smooth(ctrl, 8);
+    felt(g, pts, AMBER2, { seed, ins: 0.028 });
+    return pts;
+  }
+  function patch(g, x, y, r, rot, col) {
+    const p = oval(x, y, r, r * 0.9, { sq: 3.6, wob: 0.03, rot, seed: 51 });
+    felt(g, p, col, { stitch: false, hair: 0.4, puff: 0.5 });
+    stitch(g, inset(p, Math.max(8e-3, r * 0.18)), true, THREAD, { dash: 0.02, lw: 9e-3 });
+  }
+  function scarfRoll(g, cx, cy, rx, ry, col, seed, rot) {
+    const p = oval(cx, cy, rx, ry, { wob: 0.05, seed, rot });
+    felt(g, p, col, { stitch: false, hair: 1.1 });
+    knit(g, p, col, 0.03, rot);
+    return p;
+  }
+  function scarfTail(g, x0, y0, cx, cy, x1, y1, w, seed) {
+    const p = strand(x0, y0, cx, cy, x1, y1, w, w * 0.85, w * 0.12, 10);
+    felt(g, p, TEAL2, { stitch: false, hair: 0.9, seed });
+    ribs(g, p, TEAL2, [x0, y0], [x1, y1], 6);
+    const dx = x1 - cx;
+    const dy = y1 - cy;
+    const l = Math.hypot(dx, dy) || 1;
+    g.beginPath();
+    for (let i = -2; i <= 2; i++) {
+      const ox = -dy / l * w * 0.4 * i;
+      const oy = dx / l * w * 0.4 * i;
+      g.moveTo(x1 + ox, y1 + oy);
+      g.lineTo(x1 + ox + dx / l * 0.035, y1 + oy + dy / l * 0.035);
+    }
+    g.strokeStyle = TEAL_DK;
+    g.lineWidth = Math.max(9e-3, UPX * 1.2);
+    g.stroke();
+  }
+  function boot(g, cx, cy, rx, ry, rot, seed) {
+    felt(g, oval(cx, cy, rx, ry, { sq: 2.4, seed, rot }), BOOT, { stitch: false, hair: 0.6 });
+  }
+  var W_GLOW = [[0.8, 0.55], [0.83, 0.745], [0.785, 0.745], [0.17, 0.745]];
+  var LANT_H = 0.34;
+  function paintWren(g, d, state, ph) {
+    const carry = state !== 1;
+    const out = state === 2;
+    if (d === 3) {
+      g.translate(1, 0);
+      g.scale(-1, 1);
+      d = 1;
+    }
+    if (out) {
+      g.translate(0.5, 0.88);
+      g.scale(1.06, 0.9);
+      g.translate(-0.5, -0.88);
+    }
+    const s1 = Math.sin(ph);
+    const s2 = Math.sin(ph + 1.2);
+    const s3 = Math.sin(ph + 2.4);
+    const fl = Math.floor(ph / TAU2 * 12) % 4;
+    if (d === 2) wrenS(g, carry, out, s1, s2, s3, fl);
+    else if (d === 0) wrenN(g, carry, out, s1, s2, s3, fl);
+    else wrenE(g, carry, out, s1, s2, s3, fl);
+  }
+  function wrenS(g, carry, out, s1, s2, s3, fl) {
+    const T = out ? [0.75, 0.2 + s2 * 4e-3] : [0.64 + s2 * 0.014, 0.035];
+    hoodCone(g, [0.4, 0.25], [0.6, 0.23], T, out ? [0.5, 0.08] : [0.48, 0.08], out ? [0.66, 0.13] : [0.62, 0.12], AMBER2);
+    pompom(g, T[0], T[1], 0.045);
+    boot(g, 0.405, 0.852, 0.072, 0.05, 0.1, 61);
+    boot(g, 0.595, 0.852, 0.072, 0.05, -0.1, 62);
+    coat(g, [[0.5, 0.43], [0.67, 0.47], [0.75, 0.71], [0.72, 0.86], [0.5, 0.885], [0.28, 0.86], [0.25, 0.71], [0.33, 0.47]], 63);
+    patch(g, 0.4, 0.74, 0.048, 0.25, ROSE2);
+    mitten(g, 0.265, 0.7 + s1 * 6e-3, 1, 1, 70);
+    felt(g, oval(0.5, 0.29, 0.19, 0.155, { seed: 64 }), AMBER2, { stitch: false });
+    felt(g, oval(0.5, 0.345, 0.165, 0.05, { seed: 65, wob: 0.03 }), AMBER_LT, { stitch: THREAD_DK, ins: 0.018, puff: 0.6 });
+    scarfRoll(g, 0.5, 0.475, 0.205, 0.068, TEAL2, 66, 0);
+    scarfRoll(g, 0.5, 0.405, 0.19, 0.062, tone(TEAL2, 0.1), 67, 0);
+    scarfTail(g, 0.39, 0.46, 0.37 + s3 * 0.01, 0.56, 0.36 + s1 * 0.016, 0.66, 0.034, 68);
+    if (carry) {
+      paintLantern(g, 0.785, 0.53 + s2 * 4e-3, LANT_H, fl, out);
+      mitten(g, 0.775, 0.555, 1, -1, 72);
+    } else {
+      mitten(g, 0.735, 0.7 - s1 * 6e-3, 1, -1, 72);
+    }
+  }
+  function wrenN(g, carry, out, s1, s2, s3, fl) {
+    if (carry) {
+      paintLantern(g, 0.8, 0.33 + s2 * 4e-3, LANT_H, fl, out);
+      mitten(g, 0.785, 0.36, 1, -1, 72);
+    }
+    boot(g, 0.41, 0.858, 0.064, 0.042, 0, 61);
+    boot(g, 0.59, 0.858, 0.064, 0.042, 0, 62);
+    coat(g, [[0.5, 0.42], [0.67, 0.46], [0.75, 0.7], [0.72, 0.855], [0.5, 0.88], [0.28, 0.855], [0.25, 0.7], [0.33, 0.46]], 63);
+    stitch(g, [[0.5, 0.52], [0.5, 0.85]], false, THREAD);
+    patch(g, 0.62, 0.76, 0.045, -0.3, ROSE2);
+    mitten(g, 0.265, 0.69 + s1 * 6e-3, 1, 1, 70);
+    if (!carry) mitten(g, 0.735, 0.69 - s1 * 6e-3, 1, -1, 71);
+    scarfRoll(g, 0.5, 0.455, 0.2, 0.062, TEAL2, 66, 0);
+    scarfTail(g, 0.55, 0.46, 0.56 + s3 * 0.01, 0.56, 0.54 + s1 * 0.016, 0.67, 0.032, 68);
+    scarfTail(g, 0.58, 0.46, 0.62 + s3 * 0.01, 0.54, 0.63 + s1 * 0.012, 0.63, 0.03, 69);
+    felt(g, oval(0.5, 0.3, 0.195, 0.168, { seed: 64 }), AMBER2, { stitch: false });
+    stitch(g, curvePts(0.5, 0.15, 0.49, 0.3, 0.5, 0.42, 8), false, THREAD);
+    const T = out ? [0.33, 0.56] : [0.35 + s2 * 0.012, 0.57];
+    hoodCone(g, [0.43, 0.19], [0.59, 0.21], T, [0.34, 0.3], [0.48, 0.4], tone(AMBER2, -0.12));
+    pompom(g, T[0], T[1], 0.045);
+  }
+  function wrenE(g, carry, out, s1, s2, s3, fl) {
+    if (!carry) mitten(g, 0.35, 0.68 - s1 * 8e-3, 0.9, 1, 71);
+    boot(g, 0.42, 0.848, 0.066, 0.042, 0, 61);
+    const T = out ? [0.22, 0.44] : [0.2 + s2 * 0.012, 0.37 + s2 * 8e-3];
+    hoodCone(g, [0.43, 0.27], [0.53, 0.16], T, out ? [0.33, 0.3] : [0.32, 0.24], out ? [0.3, 0.12] : [0.28, 0.05], AMBER2);
+    coat(g, [[0.53, 0.43], [0.67, 0.48], [0.74, 0.71], [0.71, 0.86], [0.5, 0.885], [0.31, 0.86], [0.28, 0.7], [0.38, 0.47]], 63);
+    patch(g, 0.44, 0.73, 0.046, 0.2, ROSE2);
+    boot(g, 0.61, 0.856, 0.088, 0.05, 0.05, 62);
+    scarfTail(g, 0.4, 0.47, 0.3 + s3 * 0.01, 0.5, 0.18 + s1 * 0.02, 0.585 + s1 * 0.01, 0.034, 68);
+    felt(g, oval(0.55, 0.3, 0.175, 0.155, { seed: 64 }), AMBER2, { stitch: false });
+    stitch(g, curvePts(0.6, 0.16, 0.7, 0.26, 0.66, 0.4, 8), false, THREAD);
+    pompom(g, T[0], T[1], 0.045);
+    scarfRoll(g, 0.55, 0.465, 0.19, 0.066, TEAL2, 66, 0);
+    scarfRoll(g, 0.65, 0.41, 0.09, 0.075, tone(TEAL2, 0.1), 67, 0.25);
+    if (carry) {
+      paintLantern(g, 0.83, 0.53 + s2 * 4e-3, LANT_H, fl, out);
+      mitten(g, 0.8, 0.555, 1, -1, 72);
+    } else {
+      mitten(g, 0.67, 0.69 + s1 * 8e-3, 1, -1, 72);
+    }
+  }
+  var FORE = [[0.02, -0.03], [0.14, -0.18], [0.33, -0.22], [0.44, -0.15], [0.43, -0.03], [0.3, 0.05], [0.12, 0.07], [0.03, 0.04]];
+  var HIND = [[0.02, -0.02], [0.18, -0.03], [0.31, 0.05], [0.31, 0.17], [0.2, 0.24], [0.08, 0.2], [0.02, 0.1]];
+  var FOLD = [[0.01, -0.04], [0.1, -0.03], [0.18, 0.1], [0.21, 0.26], [0.13, 0.32], [0.04, 0.28], [0, 0.12]];
+  function wing(g, ox, oy, rel, sx, sy, col, veins) {
+    const pts = smooth(rel.map((p) => [ox + p[0] * sx, oy + p[1] * sy]), 7);
+    felt(g, pts, col, { ins: 0.024 });
+    if (veins) {
+      for (const v of veins) stitch(g, curvePts(ox + v[0] * sx, oy + v[1] * sy, ox + v[2] * sx, oy + v[3] * sy, ox + v[4] * sx, oy + v[5] * sy, 8), false, rgba2(CREAM2, 0.85), { dash: 0.024 });
+    }
+  }
+  function antenna(g, x0, y0, cx, cy, x1, y1) {
+    const c = curvePts(x0, y0, cx, cy, x1, y1, 10);
+    g.beginPath();
+    trace(g, c, false);
+    for (let i = 2; i < c.length; i++) {
+      const a = c[i - 1];
+      const p = c[i];
+      const dx = p[0] - a[0];
+      const dy = p[1] - a[1];
+      const l = Math.hypot(dx, dy) || 1;
+      const bl = 0.03 * (1 - i / (c.length + 1));
+      for (const sd of [-1, 1]) {
+        g.moveTo(p[0], p[1]);
+        g.lineTo(p[0] + -dy / l * bl * sd - dx / l * bl * 0.5, p[1] + dx / l * bl * sd - dy / l * bl * 0.5);
+      }
+    }
+    g.strokeStyle = tone(ROSE2, -0.4);
+    g.lineWidth = Math.max(9e-3, UPX * 1.2);
+    g.stroke();
+  }
+  function fluffBody(g, cx, cy, rx, ry) {
+    const p = oval(cx, cy, rx, ry, { wob: 0.06, seed: 81 });
+    felt(g, p, "#EEDFC8", { stitch: false, hair: 1.8 });
+    g.save();
+    trace(g, p);
+    g.clip();
+    for (const k of [0.15, 0.5]) {
+      const y = cy + ry * k;
+      const band = oval(cx, y, rx * 1.2, ry * 0.12, { wob: 0.04, seed: 82 + k * 10 });
+      felt(g, band, ROSE2, { stitch: false, hair: 0, puff: 0.3 });
+    }
+    g.restore();
+  }
+  function ruff(g, cx, cy, r) {
+    felt(g, oval(cx, cy, r, r * 0.85, { wob: 0.14, seed: 83, n: 52 }), CREAM2, { stitch: false, hair: 2.6, puff: 0.7 });
+  }
+  function paintMoth(g, lit, ph) {
+    if (lit) {
+      const o = 0.74 + 0.26 * Math.cos(ph);
+      const lift = 0.02 * Math.sin(ph);
+      antenna(g, 0.48, 0.36, 0.43, 0.22, 0.31, 0.15 - lift);
+      antenna(g, 0.52, 0.36, 0.57, 0.22, 0.69, 0.15 - lift);
+      const hv = [[0.03, 0.02, 0.15, 0.06, 0.25, 0.16]];
+      wing(g, 0.48, 0.5, HIND, -o, 1, ROSE_LT_W, hv);
+      wing(g, 0.52, 0.5, HIND, o, 1, ROSE_LT_W, hv);
+      const fv = [[0.03, -0.01, 0.2, -0.08, 0.38, -0.12], [0.03, 0.01, 0.2, 0, 0.34, 0.01]];
+      wing(g, 0.48, 0.44, FORE, -o, 1, ROSE2, fv);
+      wing(g, 0.52, 0.44, FORE, o, 1, ROSE2, fv);
+      fluffBody(g, 0.5, 0.57, 0.07, 0.145);
+      ruff(g, 0.5, 0.415, 0.088);
+    } else {
+      const o = 1 + 0.05 * Math.sin(ph);
+      fluffBody(g, 0.5, 0.66, 0.075, 0.1);
+      const fv = [[0.04, 0, 0.1, 0.12, 0.12, 0.26]];
+      wing(g, 0.49, 0.5, FOLD, -o, 1, ROSE2, fv);
+      wing(g, 0.51, 0.5, FOLD, o, 1, ROSE2, fv);
+      antenna(g, 0.47, 0.47, 0.4, 0.5, 0.36, 0.62);
+      antenna(g, 0.53, 0.47, 0.6, 0.5, 0.64, 0.62);
+      ruff(g, 0.5, 0.49, 0.08);
+    }
+  }
+  var ROSE_LT_W = "#E2A6B0";
+  function shellSpiral(g, cx, cy, r, sy, start) {
+    const sp = spiralPts(cx, cy, r * 0.12, r * 0.86, 2.1, start, sy);
+    g.save();
+    g.beginPath();
+    trace(g, sp, false);
+    g.strokeStyle = tone(ROSE2, 0.32);
+    g.lineWidth = r * 0.2;
+    g.stroke();
+    g.restore();
+    stitch(g, sp, false, THREAD, { lw: 0.012, dash: 0.026 });
+  }
+  function paintWhelkHidden(g) {
+    {
+      const base = 0.86;
+      const sh = oval(0.5, 0.62, 0.31, 0.25, { sq: 2.3, wob: 0.03, seed: 101, flat: 0.235, n: 56 });
+      felt(g, sh, tone(ROSE2, -0.08), { ins: 0.03 });
+      g.save();
+      trace(g, sh);
+      g.clip();
+      const band = oval(0.5, base + 0.01, 0.4, 0.075, { seed: 102, wob: 0.02 });
+      felt(g, band, tone(ROSE2, -0.38), { stitch: false, hair: 0, puff: 0.5 });
+      stitch(g, curvePts(0.22, base - 0.04, 0.5, base - 0.07, 0.78, base - 0.04, 12), false, THREAD, { dash: 0.026 });
+      g.restore();
+      shellSpiral(g, 0.46, 0.57, 0.2, 0.85, 0.4);
+      const lid = oval(0.73, 0.73, 0.085, 0.075, { sq: 2.8, rot: -0.3, seed: 103, wob: 0.06 });
+      felt(g, lid, LID, { stitch: false, hair: 0.6, puff: 0.6 });
+      g.beginPath();
+      for (let i = 0; i < 7; i++) {
+        const a = i / 7 * TAU2 + 0.3;
+        g.moveTo(0.73 + Math.cos(a) * 0.055, 0.73 + Math.sin(a) * 0.05);
+        g.lineTo(0.73 + Math.cos(a) * 0.094, 0.73 + Math.sin(a) * 0.086);
+      }
+      g.strokeStyle = THREAD;
+      g.lineWidth = Math.max(9e-3, UPX * 1.1);
+      g.stroke();
+    }
+  }
+  function paintWhelkFoot(g) {
+    const body = smooth([
+      [0.13, 0.88],
+      [0.15, 0.8],
+      [0.4, 0.765],
+      [0.64, 0.75],
+      [0.68, 0.6],
+      [0.75, 0.47],
+      [0.86, 0.45],
+      [0.95, 0.55],
+      [0.93, 0.7],
+      [0.89, 0.8],
+      [0.94, 0.875],
+      [0.6, 0.885],
+      [0.24, 0.885]
+    ], 7);
+    felt(g, body, PEACH, { ins: 0.024, stitch: tone(ROSE2, -0.1) });
+    stitch(g, curvePts(0.69, 0.69, 0.8, 0.74, 0.91, 0.7, 8), false, tone(ROSE2, -0.1));
+    g.beginPath();
+    for (const x of [0.3, 0.45, 0.6]) {
+      g.moveTo(x - 0.022, 0.865);
+      g.quadraticCurveTo(x, 0.835, x + 0.022, 0.865);
+    }
+    g.strokeStyle = rgba2(tone(PEACH, -0.35), 0.6);
+    g.lineWidth = Math.max(8e-3, UPX);
+    g.stroke();
+  }
+  function paintWhelkShell(g) {
+    const sh = oval(0.4, 0.5, 0.245, 0.235, { rot: -0.2, wob: 0.03, seed: 104, n: 56 });
+    felt(g, sh, ROSE2, { ins: 0.03 });
+    shellSpiral(g, 0.38, 0.48, 0.2, 0.92, 0.9);
+    g.beginPath();
+    trace(g, curvePts(0.5, 0.7, 0.62, 0.68, 0.64, 0.56, 8), false);
+    g.strokeStyle = tone(ROSE2, -0.35);
+    g.lineWidth = 0.03;
+    g.stroke();
+  }
+  var CAP_COL = "#CD7C8C";
+  function chevron(g, cx, cy, ang, s) {
+    const c = Math.cos(ang);
+    const si = Math.sin(ang);
+    const P = (x, y) => [cx + x * c - y * si, cy + x * si + y * c];
+    const pts = smooth([P(0.07 * s, 0), P(0.07 * s, 0), P(-0.04 * s, 0.085 * s), P(-0.085 * s, 0.07 * s), P(-0.01 * s, 0), P(-0.085 * s, -0.07 * s), P(-0.04 * s, -0.085 * s)], 5);
+    felt(g, pts, CREAM2, { stitch: false, hair: 0.5, puff: 0.5 });
+    stitch(g, inset(pts, 0.012), true, tone(ROSE2, -0.2), { lw: 8e-3, dash: 0.018 });
+  }
+  function capUnder(g, ctrl, fx, fy, a0, a1) {
+    const pts = smooth(ctrl, 6);
+    felt(g, pts, tone(ROSE2, -0.3), { stitch: false, hair: 0.5, puff: 0.4 });
+    g.save();
+    trace(g, pts);
+    g.clip();
+    g.beginPath();
+    for (let i = 0; i <= 14; i++) {
+      const a = a0 + (a1 - a0) * i / 14;
+      g.moveTo(fx + Math.cos(a) * 0.04, fy + Math.sin(a) * 0.04);
+      g.lineTo(fx + Math.cos(a) * 0.6, fy + Math.sin(a) * 0.6);
+    }
+    g.strokeStyle = rgba2(tone(ROSE2, 0.4), 0.85);
+    g.lineWidth = Math.max(9e-3, UPX * 1.1);
+    g.stroke();
+    g.restore();
+  }
+  function stumpFoot(g, cx, cy, rx, ry, seed) {
+    felt(g, oval(cx, cy, rx, ry, { sq: 3, seed, wob: 0.04 }), BARK2, { stitch: false, hair: 0.6 });
+  }
+  function leg(g, x, y0, y1, w) {
+    felt(g, oval(x, (y0 + y1) / 2, w, (y1 - y0) / 2 + 0.01, { sq: 4, seed: 111, wob: 0.02 }), tone(BARK2, -0.1), { stitch: false, hair: 0.4, puff: 0.6 });
+  }
+  function stumpBody(g, cx, cy, rx, ry, seed) {
+    const p = oval(cx, cy, rx, ry, { sq: 4.2, wob: 0.025, seed });
+    felt(g, p, STUMP, { stitch: tone(BARK2, -0.25), ins: 0.026 });
+    return p;
+  }
+  function paintStump(g, d, awake, ph) {
+    if (d === 3) {
+      g.translate(1, 0);
+      g.scale(-1, 1);
+      d = 1;
+    }
+    const st = awake ? Math.sin(ph) : 0;
+    const bob = awake ? 0.012 * Math.abs(Math.cos(ph)) : 0;
+    if (d === 1) {
+      if (awake) {
+        const fb = [0.4 - st * 0.07, 0.855 - Math.max(0, -st) * 0.035];
+        const ff = [0.56 + st * 0.07, 0.855 - Math.max(0, st) * 0.035];
+        leg(g, fb[0], 0.7, fb[1], 0.042);
+        stumpFoot(g, fb[0] + 0.025, fb[1], 0.075, 0.042, 112);
+        leg(g, ff[0], 0.7, ff[1], 0.042);
+        stumpFoot(g, ff[0] + 0.025, ff[1], 0.075, 0.042, 113);
+        g.translate(0.03, -bob);
+        stumpBody(g, 0.47, 0.565, 0.165, 0.165, 114);
+        felt(g, oval(0.4, 0.62, 0.05, 0.06, { sq: 3, rot: 0.3, seed: 115 }), BARK2, { stitch: false, hair: 0.4, puff: 0.5 });
+        stumpCapE(g, 0, 0);
+      } else {
+        stumpFoot(g, 0.55, 0.862, 0.06, 0.026, 113);
+        stumpFoot(g, 0.4, 0.862, 0.05, 0.024, 112);
+        stumpBody(g, 0.49, 0.71, 0.18, 0.135, 114);
+        g.translate(0.5, 0.55);
+        g.rotate(0.07);
+        g.translate(-0.5, -0.55);
+        stumpCapE(g, 0.14, 0.15);
+      }
+      return;
+    }
+    const S2 = d === 2;
+    if (awake) {
+      const ya = 0.86 - Math.max(0, st) * 0.04;
+      const yb = 0.86 - Math.max(0, -st) * 0.04;
+      leg(g, 0.4, 0.72, ya - 0.02, 0.045);
+      leg(g, 0.6, 0.72, yb - 0.02, 0.045);
+      if (S2) {
+        stumpFoot(g, 0.4, ya, 0.07, 0.055 - Math.max(0, st) * 0.012, 112);
+        stumpFoot(g, 0.6, yb, 0.07, 0.055 - Math.max(0, -st) * 0.012, 113);
+        stitch(g, curvePts(0.35, ya + 0.02, 0.4, ya + 0.045, 0.45, ya + 0.02, 6), false, THREAD_DK, { lw: 9e-3, dash: 0.018 });
+        stitch(g, curvePts(0.55, yb + 0.02, 0.6, yb + 0.045, 0.65, yb + 0.02, 6), false, THREAD_DK, { lw: 9e-3, dash: 0.018 });
+      } else {
+        stumpFoot(g, 0.4, ya, 0.06, 0.04, 112);
+        stumpFoot(g, 0.6, yb, 0.06, 0.04, 113);
+      }
+      g.translate(0, -bob);
+      stumpBody(g, 0.5, 0.58, 0.19, 0.17, 114);
+    } else {
+      stumpFoot(g, 0.39, 0.866, 0.06, 0.024, 112);
+      stumpFoot(g, 0.61, 0.866, 0.06, 0.024, 113);
+      stumpBody(g, 0.5, 0.71, 0.205, 0.135, 114);
+      g.translate(0, 0.13);
+    }
+    if (S2) {
+      felt(g, oval(0.6, 0.66, 0.045, 0.05, { sq: 3.5, rot: -0.2, seed: 116 }), BARK2, { stitch: false, hair: 0.4, puff: 0.5 });
+      stumpCapS(g, awake);
+    } else {
+      felt(g, oval(0.42, 0.66, 0.05, 0.045, { sq: 3.5, rot: 0.2, seed: 116 }), BARK2, { stitch: false, hair: 0.4, puff: 0.5 });
+      stitch(g, [[0.58, 0.5], [0.58, 0.72]], false, tone(BARK2, -0.25));
+      stumpCapN(g, awake);
+    }
+  }
+  function capDeco(g, pts, cx, cy, ang, s) {
+    felt(g, pts, CAP_COL, { ins: 0.03 });
+    chevron(g, cx, cy, ang, s);
+  }
+  function stumpCapE(g, dy, droop) {
+    const pts = smooth([
+      [0.2, 0.44 + dy],
+      [0.22, 0.27 + dy],
+      [0.38, 0.16 + dy],
+      [0.6, 0.15 + dy],
+      [0.77, 0.24 + dy],
+      [0.92, 0.37 + dy],
+      [0.92, 0.37 + dy],
+      [0.86, 0.44 + dy],
+      [0.62, 0.47 + dy],
+      [0.36, 0.475 + dy]
+    ], 7);
+    capUnder(g, [[0.42, 0.45 + dy], [0.62, 0.52 + dy], [0.86, 0.5 + dy], [0.96, 0.39 + dy], [0.84, 0.4 + dy], [0.6, 0.43 + dy]], 0.48, 0.36 + dy, 0.15, 1.35);
+    capDeco(g, pts, 0.56, 0.31 + dy, 0, 1 - droop * 0.2);
+  }
+  function stumpCapS(g, awake) {
+    void awake;
+    const pts = smooth([
+      [0.17, 0.42],
+      [0.19, 0.24],
+      [0.35, 0.13],
+      [0.65, 0.13],
+      [0.81, 0.24],
+      [0.83, 0.42],
+      [0.7, 0.49],
+      [0.5, 0.545],
+      [0.5, 0.545],
+      [0.3, 0.49]
+    ], 7);
+    capUnder(g, [[0.2, 0.44], [0.32, 0.54], [0.5, 0.605], [0.68, 0.54], [0.8, 0.44], [0.5, 0.42]], 0.5, 0.34, Math.PI / 2 - 1, Math.PI / 2 + 1);
+    capDeco(g, pts, 0.5, 0.31, Math.PI / 2, 1);
+  }
+  function stumpCapN(g, awake) {
+    void awake;
+    const pts = smooth([
+      [0.17, 0.4],
+      [0.2, 0.22],
+      [0.36, 0.1],
+      [0.5, 0.055],
+      [0.5, 0.055],
+      [0.64, 0.1],
+      [0.8, 0.22],
+      [0.83, 0.4],
+      [0.66, 0.46],
+      [0.34, 0.46]
+    ], 7);
+    capDeco(g, pts, 0.5, 0.27, -Math.PI / 2, 1);
+  }
+  function paintZed(g) {
+    const pts = [[0.24, 0.22], [0.78, 0.22], [0.78, 0.36], [0.46, 0.64], [0.78, 0.64], [0.78, 0.8], [0.22, 0.8], [0.22, 0.66], [0.54, 0.38], [0.24, 0.38]];
+    const p = smooth(pts.flatMap((q) => [q, q]), 3);
+    felt(g, p, CREAM2, { stitch: false, hair: 0.5, puff: 0.4 });
+  }
+  function drawWren(ctx2, px, py, size, opts) {
+    const o = opts || NONE2;
+    const b = bucketFor2(ctx2, size);
+    const t = o.t || 0;
+    const d = dirIndex(o.dir);
+    const carrying = o.carrying ? 1 : 0;
+    const out = carrying && o.smothered ? 1 : 0;
+    const state = carrying ? out ? 2 : 0 : 1;
+    const f = frameOf(t, 3.2, 12);
+    const key = "W" + d + state + "." + f;
+    let s = b.map.get(key);
+    if (s === void 0) s = make2(b, key, (g) => paintWren(g, d, state, f / 12 * TAU2), { shadow: [0.5, 0.875, 0.3, 0.075, 0.55] });
+    if (!s) return;
+    const br = out ? 0.012 * Math.sin(t * 1.6) : 0.02 * Math.sin(t * 2.6);
+    const sway = out ? 0 : 8e-3 * Math.sin(t * 1.3) * size;
+    blit2(ctx2, s, px + sway, py, size, 0.5, 0.88, 1 - br * 0.6, 1 + br, 0);
+    if (carrying && !out) {
+      const p = W_GLOW[d];
+      drawGlow(ctx2, px + p[0] * size, py + p[1] * size, size * 0.8, 0.2 + 0.14 * flicker(t));
+    }
+  }
+  function drawLantern(ctx2, px, py, size, opts) {
+    const o = opts || NONE2;
+    const b = bucketFor2(ctx2, size);
+    const t = o.t || 0;
+    const f = Math.floor(t * 7) * 7 + Math.floor(t * 3) & 3;
+    const key = "L" + f;
+    let s = b.map.get(key);
+    if (s === void 0) {
+      s = make2(b, key, (g) => {
+        felt(g, oval(0.5, 0.86, 0.17, 0.045, { seed: 121 }), BROWN_DK, { stitch: false, hair: 0.8, puff: 0.4 });
+        paintLantern(g, 0.5, 0.17, 0.7, f, false);
+      }, { shadow: [0.5, 0.88, 0.24, 0.06, 0.6] });
+    }
+    if (!s) return;
+    blit2(ctx2, s, px, py, size, 0, 0, 1, 1, 0);
+    drawGlow(ctx2, px + size * 0.5, py + size * 0.6, size * 1.25, 0.22 + 0.16 * flicker(t));
+  }
+  function drawCreature(ctx2, type, px, py, size, opts) {
+    const o = opts || NONE2;
+    const b = bucketFor2(ctx2, size);
+    const t = o.t || 0;
+    let s;
+    if (type === "M") {
+      const lit = o.lit ? 1 : 0;
+      const f = frameOf(t, lit ? 0.55 : 3.2, 12);
+      const key = "M" + lit + "." + f;
+      s = b.map.get(key);
+      if (s === void 0) s = make2(b, key, (g) => paintMoth(g, lit, f / 12 * TAU2), lit ? void 0 : { shadow: [0.5, 0.86, 0.2, 0.06, 0.6] });
+      if (lit) {
+        const hover = (0.07 + 0.025 * Math.sin(t * 3.1)) * size;
+        drawShadow(ctx2, px + size * 0.5, py + size * 0.86, size * 0.2, size * 0.05, 0.4);
+        if (s) blit2(ctx2, s, px, py, size, 0.5, 0.5, 1, 1, -hover);
+      } else {
+        const br = 0.025 * Math.sin(t * 1.9);
+        if (s) blit2(ctx2, s, px, py, size, 0.5, 0.86, 1 - br * 0.5, 1 + br, 0);
+      }
+    } else if (type === "S") {
+      const hidden = (o.hidden === void 0 ? o.lit : o.hidden) ? 1 : 0;
+      if (hidden) {
+        s = b.map.get("SH");
+        if (s === void 0) s = make2(b, "SH", paintWhelkHidden, { shadow: [0.5, 0.875, 0.38, 0.08, 0.8] });
+        if (s) blit2(ctx2, s, px, py, size, 0, 0, 1, 1, 0);
+      } else {
+        let foot = b.map.get("SF");
+        if (foot === void 0) foot = make2(b, "SF", paintWhelkFoot, { shadow: [0.52, 0.87, 0.38, 0.06, 0.5] });
+        s = b.map.get("SS");
+        if (s === void 0) s = make2(b, "SS", paintWhelkShell);
+        const w = Math.sin(t * 2.4);
+        if (foot) blit2(ctx2, foot, px, py, size, 0.13, 0.88, 1 + 0.05 * w, 1 - 0.035 * w, 0);
+        if (s) blit2(ctx2, s, px + size * 0.012 * Math.sin(t * 2.4 - 0.9), py, size, 0.4, 0.75, 1, 1, -size * 6e-3 * (1 + Math.sin(t * 4.8)));
+      }
+    } else if (type === "T") {
+      const awake = (o.awake === void 0 ? o.lit : o.awake) ? 1 : 0;
+      const d = dirIndex(o.dir);
+      const f = awake ? frameOf(t, 1.3, 12) : 0;
+      const key = "T" + d + awake + "." + f;
+      s = b.map.get(key);
+      if (s === void 0) s = make2(b, key, (g) => paintStump(g, d, awake, f / 12 * TAU2), { shadow: [0.5, 0.87, 0.3, 0.07, 0.65] });
+      if (!s) return;
+      if (awake) blit2(ctx2, s, px, py, size, 0, 0, 1, 1, 0);
+      else {
+        const br = 0.022 * Math.sin(t * 1.5);
+        blit2(ctx2, s, px, py, size, 0.5, 0.87, 1 - br * 0.5, 1 + br, 0);
+        let z = b.map.get("Z");
+        if (z === void 0) z = make2(b, "Z", paintZed);
+        if (z) {
+          const right = d !== 1;
+          const zx = right ? 0.72 : 0.02;
+          const p = t * 0.4 % 1;
+          const al = ctx2.globalAlpha;
+          ctx2.globalAlpha = al * (p < 0.15 ? p / 0.15 : 1 - (p - 0.15) / 0.85);
+          const zs = size * (0.2 + 0.08 * p);
+          ctx2.drawImage(z.c, px + size * (zx + (right ? 0.06 : -0.06) * p) - zs * z.m, py + size * (0.02 - 0.16 * p) - zs * z.m, zs * z.k, zs * z.k);
+          ctx2.globalAlpha = al;
+        }
+      }
+    }
+  }
+
+  // dev/style-felt-frames.js
+  var ROWS = [
+    ["wren S", (c, x, y, s, t) => drawWren(c, x, y, s, { t, dir: "S", carrying: true })],
+    ["wren E", (c, x, y, s, t) => drawWren(c, x, y, s, { t, dir: "E", carrying: true })],
+    ["wren N empty", (c, x, y, s, t) => drawWren(c, x, y, s, { t, dir: "N", carrying: false })],
+    ["wren W hush", (c, x, y, s, t) => drawWren(c, x, y, s, { t, dir: "W", carrying: true, smothered: true })],
+    ["moth lit", (c, x, y, s, t) => drawCreature(c, "M", x, y, s, { t, lit: true })],
+    ["moth dark", (c, x, y, s, t) => drawCreature(c, "M", x, y, s, { t, lit: false })],
+    ["whelk out", (c, x, y, s, t) => drawCreature(c, "S", x, y, s, { t, lit: false })],
+    ["stump E awake", (c, x, y, s, t) => drawCreature(c, "T", x, y, s, { t, dir: "E", lit: true })],
+    ["stump S awake", (c, x, y, s, t) => drawCreature(c, "T", x, y, s, { t, dir: "S", lit: true })],
+    ["stump N asleep", (c, x, y, s, t) => drawCreature(c, "T", x, y, s, { t, dir: "N", lit: false })],
+    ["lantern", (c, x, y, s, t) => drawLantern(c, x, y, s, { t })]
+  ];
+  var S = 56;
+  var N = 7;
+  var cv = document.createElement("canvas");
+  var W = 40 + N * (S + 4);
+  var H = ROWS.length * (S + 6) + 8;
+  cv.width = W * 2;
+  cv.height = H * 2;
+  cv.style.width = W + "px";
+  document.body.appendChild(cv);
+  var ctx = cv.getContext("2d");
+  ctx.setTransform(2, 0, 0, 2, 0, 0);
+  drawBackdrop(ctx, W, H, { t: 0 });
+  ROWS.forEach(([name, fn], r) => {
+    const y = 4 + r * (S + 6);
+    for (let i = 0; i < N; i++) {
+      const x = 40 + i * (S + 4);
+      const t = 0.1 + i * 0.19;
+      drawTile(ctx, "floor", x, y, S, { t, seed: i + r * 9 });
+      fn(ctx, x, y, S, t);
+    }
+    ctx.fillStyle = "#F4EAD5";
+    ctx.font = "9px sans-serif";
+    ctx.fillText(name.split(" ")[0], 2, y + S / 2);
+    ctx.fillText(name.split(" ").slice(1).join(" "), 2, y + S / 2 + 11);
+  });
+  window.__done = true;
+  var probe = {};
+  var c2 = document.createElement("canvas").getContext("2d");
+  c2.setTransform(2, 0, 0, 2, 0, 0);
+  var sz = 50;
+  for (const [name, fn] of ROWS) {
+    sz += 1;
+    const a = performance.now();
+    for (let i = 0; i < 12; i++) fn(c2, 0, 0, sz, i * 0.2 + 0.01);
+    probe[name] = ((performance.now() - a) / 12).toFixed(2);
+  }
+  window.__probe = Object.assign(probe, { prof: globalThis.__fp });
+})();
+</script></body></html>

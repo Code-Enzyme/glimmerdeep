@@ -16,7 +16,6 @@ const KIND = { '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush', a:
 const params = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
 const STATIC = params.get('static') === '1';
 const only = (params.get('style') || '').split(',').filter((s) => CHAR_STYLES[s]);
-const order = only.length ? only : Object.keys(CHAR_STYLES);
 
 function sceneState() {
   const def = LEVELS.find((l) => l.id === '3-5');
@@ -64,31 +63,43 @@ const CAST = [
   ] },
 ];
 
+// Cell size for a row: its design size, shrunk to fit narrow screens.
+function cellSize(row, width) {
+  const n = row.cells.length;
+  return Math.min(row.size, Math.floor((width - (n + 1) * 3) / n));
+}
 function drawCast(ctx, mod, t, width) {
   let y = 6;
   for (const row of CAST) {
     const n = row.cells.length;
-    const gap = Math.max(2, Math.floor((width - n * row.size) / (n + 1)));
-    let x = Math.floor((width - (n * row.size + (n - 1) * gap)) / 2);
+    const size = cellSize(row, width);
+    const gap = Math.max(2, Math.floor((width - n * size) / (n + 1)));
+    let x = Math.floor((width - (n * size + (n - 1) * gap)) / 2);
     for (const c of row.cells) {
-      drawTile(ctx, c.tile, x, y, row.size, { t, seed: x + y, pressed: !!c.pressed, channel: 'a', neighbors: {} });
-      if (c.what === 'wren') mod.drawWren(ctx, x, y, row.size, { t, dir: c.dir, carrying: c.carrying, smothered: !!c.smothered });
-      else if (c.what === 'lantern') mod.drawLantern(ctx, x, y, row.size, { t });
-      else if (c.what) mod.drawCreature(ctx, c.what, x, y, row.size, { t, dir: c.dir || null, lit: c.lit, hidden: c.hidden, awake: c.awake });
+      drawTile(ctx, c.tile, x, y, size, { t, seed: x + y, pressed: !!c.pressed, channel: 'a', neighbors: {} });
+      if (c.what === 'wren') mod.drawWren(ctx, x, y, size, { t, dir: c.dir, carrying: c.carrying, smothered: !!c.smothered });
+      else if (c.what === 'lantern') mod.drawLantern(ctx, x, y, size, { t });
+      else if (c.what) mod.drawCreature(ctx, c.what, x, y, size, { t, dir: c.dir || null, lit: c.lit, hidden: c.hidden, awake: c.awake });
       if (c.label) {
         ctx.fillStyle = 'rgba(244,234,213,0.82)';
-        ctx.font = '11px system-ui, sans-serif';
+        ctx.font = (size < 60 ? 10 : 11) + 'px system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(c.label, x + row.size / 2, y + row.size + 13);
+        const fits = ctx.measureText(c.label).width <= size + gap - 4;
+        const i = c.label.indexOf(' ');
+        if (fits || i < 0) ctx.fillText(c.label, x + size / 2, y + size + 13);
+        else {
+          ctx.fillText(c.label.slice(0, i), x + size / 2, y + size + 13);
+          ctx.fillText(c.label.slice(i + 1), x + size / 2, y + size + 25);
+        }
       }
-      x += row.size + gap;
+      x += size + gap;
     }
-    y += row.size + (row.cells[0].label ? 24 : 10);
+    y += size + (row.cells[0].label ? 32 : 10);
   }
   return y;
 }
-function castHeight() {
-  return 6 + CAST.reduce((h, r) => h + r.size + (r.cells[0].label ? 24 : 10), 0);
+function castHeight(width) {
+  return 6 + CAST.reduce((h, r) => h + cellSize(r, width) + (r.cells[0].label ? 32 : 10), 0);
 }
 
 function drawScene(ctx, mod, t, width, size) {
@@ -142,8 +153,10 @@ function makeCanvas(parent, cssW, cssH) {
   return { c, ctx, dpr, cssW, cssH };
 }
 
-export function mount(root, { onPick } = {}) {
-  const width = Math.min(420, Math.max(320, root.clientWidth || 390));
+export function mount(root) {
+  const width = Math.min(420, Math.max(300, root.clientWidth || 390));
+  const want = (root.dataset.order || '').split(',').filter((k) => CHAR_STYLES[k]);
+  const order = only.length ? only : want.length ? want : Object.keys(CHAR_STYLES);
   const size = Math.floor((width - 16) / SCENE.w);
   const views = [];
   for (const key of order) {
@@ -152,19 +165,36 @@ export function mount(root, { onPick } = {}) {
     sec.className = 'style';
     sec.id = 'style-' + key;
     sec.innerHTML = `<h2>${st.name}</h2><p>${BLURBS[key] || ''}</p>`;
+    sec.dataset.key = key;
     root.appendChild(sec);
-    const cast = makeCanvas(sec, width, castHeight());
+    const cast = makeCanvas(sec, width, castHeight(width));
     const sceneLabel = document.createElement('p');
     sceneLabel.className = 'scene-label';
     sceneLabel.textContent = 'In the dark, mid-level (Many Hands, move 14)';
     sec.appendChild(sceneLabel);
     const scene = makeCanvas(sec, width, SCENE.h * size + 16);
-    views.push({ key, mod: st.mod, cast, scene });
+    views.push({ key, mod: st.mod, cast, scene, sec, visible: true });
   }
+  // Only animate what is on screen, at about 30 frames a second, so a phone stays cool.
+  if (!STATIC && typeof IntersectionObserver !== 'undefined') {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const v = views.find((x) => x.sec === e.target);
+        if (v) v.visible = e.isIntersecting;
+      }
+    });
+    for (const v of views) io.observe(v.sec);
+  }
+  const reduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const t0 = performance.now();
+  let last = -1e9;
+  let first = true;
   function frame(now) {
-    const t = STATIC ? 1.3 : (now - t0) / 1000;
+    if (!STATIC && !first && (now - last < 32 || reduced)) { if (!reduced) requestAnimationFrame(frame); return; }
+    last = now;
+    const t = STATIC || reduced ? 1.3 : (now - t0) / 1000;
     for (const v of views) {
+      if (!first && !v.visible) continue;
       setCharStyle(v.key);
       for (const [view, fn] of [[v.cast, (ctx) => drawCast(ctx, v.mod, t, width)], [v.scene, (ctx) => drawScene(ctx, v.mod, t, width, size)]]) {
         const { ctx, dpr, cssW, cssH } = view;
@@ -173,7 +203,8 @@ export function mount(root, { onPick } = {}) {
         fn(ctx);
       }
     }
-    if (!STATIC) requestAnimationFrame(frame);
+    first = false;
+    if (!STATIC && !reduced) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
   window.__preview = {
