@@ -27,7 +27,8 @@ cd android && ./gradlew assembleDebug
 ```
 
 Needs JDK 21 and the Android SDK. CI builds a debug APK on every push; download it from the run's
-artifacts (`glimmerdeep-debug-apk`) and install it with `adb install app-debug.apk`.
+artifacts (`glimmerdeep-debug-apk`) and install it with `adb install -r app-debug.apk`. All debug builds
+share one key (`android/app/debug.keystore`), so a new build updates the old one and keeps the save.
 
 ## Where things are
 

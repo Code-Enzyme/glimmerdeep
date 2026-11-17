@@ -10,3 +10,5 @@ www/
 *.jks
 *.keystore
 keystore.properties
+# ...except the shared debug key, which is public on purpose (see android/app/build.gradle)
+!android/app/debug.keystore

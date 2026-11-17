@@ -70,6 +70,8 @@ jobs:
       - name: Android lint and debug APK
         working-directory: android
         run: ./gradlew lintDebug assembleDebug
+      - name: Signed with the project debug key, so builds can update each other
+        run: tools/check-apk-key.sh
       - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
