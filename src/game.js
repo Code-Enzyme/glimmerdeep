@@ -1,6 +1,7 @@
 // Glimmerdeep: the app. Owns the DOM, input, animation flow and saving; the rules live in engine.js.
 //
 //   title screen (Play)  ->  map screen  ->  level screen (top bar, board canvas, thumb bar)  ->  result panel
+//   story pages (Wren's journal, between chapters) show on the way, and the map opens the Field Journal.
 //
 // Every legal action goes through Session.act (one engine.step), then BoardView animates the events.
 
@@ -11,12 +12,13 @@ import { initAudio, setMuted, play, setAppHidden } from './audio.js';
 import { Session } from './ui/session.js';
 import { loadSave, writeSave, recordResult, clearProgress } from './ui/store.js';
 import { BoardView } from './ui/board.js';
-import { applyIcons, setIcon, portraitUrl, mossSvg, pipSvg } from './ui/art.js';
+import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import { onBackButton, exitApp, haptic, onAppState } from './ui/native.js';
 import { TitleArt } from './ui/title.js';
 import { Tutorial, resolvePoint, STUCK_AFTER } from './ui/tutorial.js';
+import { NOTES, storyDue, journal, pageById } from './ui/story.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
@@ -56,6 +58,8 @@ const app = $('app');
 const titleEl = $('screen-title');
 const mapEl = $('screen-map');
 const levelEl = $('screen-level');
+const storyEl = $('screen-story');
+const journalEl = $('screen-journal');
 const chaptersEl = $('chapters');
 const canvas = $('board');
 const statusEl = $('status');
@@ -97,6 +101,8 @@ let gesture = null;
 let armedAt = 0;           // a rule card ignores taps until the finger that opened it has lifted
 let tutorial = null;       // this visit's guided steps (SPEC section 12), or null
 let stuck = -1;            // the stuck nudge: 0 armed, above 0 showing until that move count, -1 used up or off
+let book = null;           // story pages showing (SPEC section 13): { ids, index, reading, then }
+let journalTab = 'creatures';
 const queue = [];
 
 const titleArt = new TitleArt($('title-art'), $('title-stage'));
@@ -160,6 +166,13 @@ function pulse(button, on) {
   button.classList.toggle('pulse', !!on);
 }
 
+// A sound the app plays itself (not the board), remembered for checks like the board's cues.
+function sfx(name) {
+  heard.push(name);
+  if (heard.length > 40) heard.shift();
+  play(name);
+}
+
 // ---------------------------------------------------------------- screens
 
 function showScreen(name) {
@@ -168,6 +181,8 @@ function showScreen(name) {
   titleEl.hidden = name !== 'title';
   mapEl.hidden = name !== 'map';
   levelEl.hidden = name !== 'level';
+  storyEl.hidden = name !== 'story';
+  journalEl.hidden = name !== 'journal';
   if (name === 'level') {
     view.resize();
     startLoop();
@@ -221,7 +236,165 @@ function drawMap() {
     },
   });
   for (const lock of chaptersEl.querySelectorAll('.lock')) setIcon(lock, 'lock');
+  const j = journal(save, CHAPTERS);
+  $('btn-journal').querySelector('.val').textContent = `${j.met} of ${j.total} met`;
   syncSettings();
+}
+
+// ---------------------------------------------------------------- story pages and the Field Journal
+
+// Shows story pages as one little book, then calls `then`. reading: a page opened again from the Journal.
+function openBook(ids, opts = {}) {
+  if (!ids.length) {
+    if (opts.then) opts.then();
+    return;
+  }
+  book = { ids, index: 0, reading: !!opts.reading, then: opts.then || showMap };
+  showScreen('story');
+  showPage();
+}
+
+function showPage() {
+  const page = pageById(book.ids[book.index]);
+  if (!page) return;
+  const chapter = CHAPTERS.find((c) => c.id === page.chapter);
+  $('story-kicker').textContent = chapter ? `Chapter ${chapter.id}: ${chapter.name}` : 'Prologue';
+  $('story-title').textContent = page.title;
+  const lines = $('story-lines');
+  lines.textContent = '';
+  for (const line of page.lines) {
+    const p = document.createElement('p');
+    p.textContent = line;
+    lines.appendChild(p);
+  }
+  const url = sceneUrl(page.scene, chapter ? chapter.accent : undefined);
+  $('story-art').style.backgroundImage = url ? `url(${url})` : 'none';
+  const count = $('story-count');
+  count.hidden = book.ids.length < 2;
+  count.textContent = `Page ${book.index + 1} of ${book.ids.length}`;
+  const next = $('story-next');
+  next.textContent = book.reading ? 'Back to journal' : book.index < book.ids.length - 1 ? 'Next page' : 'Continue';
+  next.setAttribute('aria-label', next.textContent);
+  $('story-scroll').scrollTop = 0;
+  if (!book.reading && !save.seen.includes(page.id)) {
+    save.seen.push(page.id);
+    writeSave(save);
+  }
+  sfx('page');
+  try {
+    next.focus({ preventScroll: true });
+  } catch (e) {
+    // focus is a courtesy
+  }
+}
+
+function nextPage() {
+  if (!book) return;
+  if (book.index < book.ids.length - 1) {
+    book.index++;
+    showPage();
+  } else {
+    closeBook();
+  }
+}
+
+// Closes the book at once; pages it did not reach count as seen too (they stay in the Journal).
+function closeBook() {
+  if (!book) return;
+  const done = book;
+  book = null;
+  if (!done.reading) {
+    for (const id of done.ids) if (!save.seen.includes(id)) save.seen.push(id);
+    writeSave(save);
+  }
+  done.then();
+}
+
+// Leaves a result panel toward `go`, with any story pages that are due on the way.
+function leaveResult(go) {
+  const due = storyDue(save, CHAPTERS, { at: 'result' });
+  if (!due.length) {
+    go();
+    return;
+  }
+  leaveLevel();
+  openBook(due, { then: go });
+}
+
+function showJournal(tab) {
+  leaveLevel();
+  if (tab) journalTab = tab;
+  showScreen('journal');
+  renderJournal();
+}
+
+function renderJournal() {
+  const j = journal(save, CHAPTERS);
+  const list = $('journal-list');
+  list.textContent = '';
+  const creatures = journalTab === 'creatures';
+  $('tab-creatures').setAttribute('aria-selected', creatures ? 'true' : 'false');
+  $('tab-story').setAttribute('aria-selected', creatures ? 'false' : 'true');
+  list.setAttribute('aria-labelledby', creatures ? 'tab-creatures' : 'tab-story');
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  if (creatures) {
+    $('journal-count').textContent = `${j.met} of ${j.total} met`;
+    for (const c of j.creatures) {
+      const entry = el('article', 'entry paper' + (c.met ? ' met' : ' unmet'));
+      const art = el('span', 'entry-art');
+      art.setAttribute('aria-hidden', 'true');
+      const chapter = CHAPTERS.find((ch) => ch.id === c.chapter.id);
+      if (c.met) {
+        const url = portraitUrl(c.kind, chapter && chapter.accent);
+        art.style.backgroundImage = url ? `url(${url})` : 'none';
+      }
+      entry.appendChild(art);
+      const body = el('div', 'entry-body');
+      if (c.met) {
+        body.appendChild(el('span', 'kicker ink', `Met in ${c.chapter.name}`));
+        body.appendChild(el('h3', '', c.name));
+        body.appendChild(el('p', 'rule', RULE_CARDS[c.kind].text));
+        body.appendChild(el('p', 'note', NOTES[c.kind]));
+      } else {
+        body.appendChild(el('span', 'kicker ink', `Chapter ${c.chapter.id}`));
+        body.appendChild(el('h3', '', 'Not met yet'));
+        body.appendChild(el('p', 'rule', `Somewhere in ${c.chapter.name}.`));
+      }
+      entry.appendChild(body);
+      list.appendChild(entry);
+    }
+  } else {
+    const read = j.pages.filter((p) => p.unlocked).length;
+    $('journal-count').textContent = `${read} of ${j.pages.length} pages`;
+    for (const p of j.pages) {
+      const entry = el('article', 'entry paper page-entry' + (p.unlocked ? ' open' : ' dark'));
+      if (p.unlocked) {
+        const open = el('button', 'entry-open');
+        open.type = 'button';
+        open.setAttribute('aria-label', `Read: ${p.title}`);
+        open.appendChild(el('span', 'kicker ink', p.kicker));
+        open.appendChild(el('h3', '', p.title));
+        const page = pageById(p.id);
+        open.appendChild(el('p', 'preview', page.lines[0]));
+        open.addEventListener('click', () => {
+          play('ui');
+          openBook([p.id], { reading: true, then: () => showJournal('story') });
+        });
+        entry.appendChild(open);
+      } else {
+        entry.appendChild(el('span', 'kicker ink', p.kicker));
+        entry.appendChild(el('h3', '', 'Still dark'));
+        entry.appendChild(el('p', 'preview', `Light the last cavern of ${p.chapter.name} to read it.`));
+      }
+      list.appendChild(entry);
+    }
+  }
+  list.scrollTop = 0;
 }
 
 // Starts a level. -> false when the definition does not parse.
@@ -877,8 +1050,7 @@ scrim.addEventListener('click', () => {
 onClick($('result-next'), () => {
   const next = current && nextLevelAfter(current.def);
   play('ui');
-  if (next) openLevel(next);
-  else showMap();
+  leaveResult(next ? () => openLevel(next) : showMap);
 });
 onClick($('result-replay'), () => {
   play('ui');
@@ -886,14 +1058,34 @@ onClick($('result-replay'), () => {
 });
 onClick($('result-map'), () => {
   play('ui');
-  showMap();
+  leaveResult(showMap);
 });
 
 function startPlaying() {
   play('ui');
-  showMap();
+  openBook(storyDue(save, CHAPTERS, { at: 'play' }), { then: showMap });
 }
 onClick($('btn-play'), startPlaying);
+
+onClick($('story-next'), () => nextPage());
+onClick($('btn-journal'), () => {
+  play('ui');
+  showJournal('creatures');
+});
+onClick($('journal-back'), () => {
+  play('ui');
+  showMap();
+});
+onClick($('tab-creatures'), () => {
+  play('ui');
+  journalTab = 'creatures';
+  renderJournal();
+});
+onClick($('tab-story'), () => {
+  play('ui');
+  journalTab = 'story';
+  renderJournal();
+});
 
 onClick($('set-sound'), () => toggleSetting('sound'));
 onClick($('set-contrast'), () => toggleSetting('contrast'));
@@ -919,7 +1111,11 @@ onClick($('confirm-no'), () => {
 // ---------------------------------------------------------------- input: Android back button
 
 onBackButton(() => {
-  if (panel === 'result') showMap();
+  if (screen === 'story') closeBook();
+  else if (screen === 'journal') {
+    play('ui');
+    showMap();
+  } else if (panel === 'result') leaveResult(showMap);
   else if (panel) closePanel();
   else if (screen === 'level') {
     play('ui');
@@ -935,7 +1131,9 @@ onBackButton(() => {
 document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'Escape') {
-    if (panel === 'result') showMap();
+    if (screen === 'story') closeBook();
+    else if (screen === 'journal') showMap();
+    else if (panel === 'result') leaveResult(showMap);
     else if (panel) closePanel();
     else if (screen === 'map') showTitle();
     return;
@@ -1013,7 +1211,10 @@ document.addEventListener('dblclick', (e) => e.preventDefault());
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('touchmove', (e) => {
   if (!e.cancelable) return;
-  const scroller = screen === 'map' && e.target && e.target.closest && e.target.closest('.chapters');
+  const scroller = e.target && e.target.closest
+    && (screen === 'map' && e.target.closest('.chapters')
+      || screen === 'journal' && e.target.closest('.journal-list')
+      || screen === 'story' && e.target.closest('.story-scroll'));
   if (!scroller || e.touches.length > 1) e.preventDefault();
 }, { passive: false });
 
@@ -1074,6 +1275,7 @@ window.__gd = {
   contrast: () => view.highContrast,
   frames: () => view.frames,
   coach: () => (session ? coachPoint() : null),
+  story: () => (book ? { id: book.ids[book.index], index: book.index, count: book.ids.length, reading: book.reading } : null),
   tutorial: () => (tutorial ? { index: tutorial.index, done: tutorial.done } : null),
   heard: () => heard.slice(),
 };

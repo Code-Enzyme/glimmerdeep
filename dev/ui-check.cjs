@@ -81,6 +81,7 @@ async function main() {
   const engine = await import(pathToFileURL(path.join(ROOT, 'src/engine.js')).href);
   const solver = await import(pathToFileURL(path.join(ROOT, 'src/solver.js')).href);
   const { CHAPTERS, LEVELS } = await import(pathToFileURL(path.join(ROOT, 'src/levels/index.js')).href);
+  const { STORY, NOTES } = await import(pathToFileURL(path.join(ROOT, 'src/ui/story.js')).href);
   const CARDS = ruleCards();
   const first = LEVELS[0];
   const solutionOf = (def) => {
@@ -123,6 +124,8 @@ async function main() {
       // the app opens on the title screen; Play goes to the map
       toMap: async () => {
         if ((await page.evaluate(() => window.__gd.screen())) === 'title') await page.locator('#btn-play').tap();
+        // story pages that are due come first (SPEC section 13): read through them
+        for (let i = 0; i < 12 && (await page.evaluate(() => window.__gd.screen())) === 'story'; i++) await page.locator('#story-next').tap();
         await page.waitForFunction(() => window.__gd.screen() === 'map');
       },
       gd: (fn, arg) => page.evaluate(([f, a]) => window.__gd[f](a), [fn, arg]),
@@ -209,6 +212,36 @@ async function main() {
       const bar = document.querySelector('.settings').getBoundingClientRect();
       return c.bottom <= bar.top + 1 && c.top >= 0 ? true : JSON.stringify({ confirm: [c.top, c.bottom], bar: bar.top });
     });
+  };
+  // Every visible button labelled for screen readers, none but Back in the top 12 percent (out of thumb
+  // reach), no text under 14 px.
+  const auditPage = async (ph, label) => {
+    const a = await ph.page.evaluate(() => {
+      const out = { unlabeled: [], high: [], small: [] };
+      const H = window.innerHeight;
+      const seen = (el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+      };
+      for (const b of document.querySelectorAll('button')) {
+        if (!seen(b)) continue;
+        if (!(b.getAttribute('aria-label') || '').trim()) out.unlabeled.push(b.id || b.className);
+        if (b.getBoundingClientRect().top < H * 0.12 && b.id !== 'back' && b.id !== 'journal-back') out.high.push(b.id || b.className);
+      }
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.textContent.trim()) continue;
+        const el = node.parentElement;
+        if (!el || !seen(el) || el.closest('script,style,noscript,.sr')) continue;
+        const px = parseFloat(getComputedStyle(el).fontSize);
+        if (px < 14) out.small.push(`${node.textContent.trim().slice(0, 20)} (${px}px)`);
+      }
+      return out;
+    });
+    eq(`${label}: every button has an aria-label`, a.unlabeled, []);
+    eq(`${label}: no button in the top 12 percent but Back`, a.high, []);
+    eq(`${label}: no text under 14 px`, a.small, []);
   };
   const earned = (h) => h.page.locator('#result-marks li.earned').count();
 
@@ -321,7 +354,9 @@ async function main() {
       ok('title: the art is animated', (await h.gd('titleFrames')) > f0 + 3);
     }
     await h.page.locator('#btn-play').tap();
-    eq('title: Play opens the map', await h.gd('screen'), 'map');
+    eq('title: on a fresh save Play opens the prologue first', [await h.gd('screen'), ((await h.gd('story')) || {}).id], ['story', 'prologue']);
+    await h.page.locator('#story-next').tap();
+    eq('title: then the map', await h.gd('screen'), 'map');
     {
       const f0 = await h.gd('titleFrames');
       await h.page.waitForTimeout(250);
@@ -351,34 +386,7 @@ async function main() {
     ok('map: no designer note on screen', !(await h.page.evaluate(() => document.body.innerText)).includes(first.note || '\u0000'));
 
     // every button has an aria-label; nothing but paper is in the top 12 percent
-    const audit = async (label) => {
-      const a = await h.page.evaluate(() => {
-        const out = { unlabeled: [], high: [], small: [] };
-        const H = window.innerHeight;
-        const seen = (el) => {
-          const r = el.getBoundingClientRect();
-          return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
-        };
-        for (const b of document.querySelectorAll('button')) {
-          if (!seen(b)) continue;
-          if (!(b.getAttribute('aria-label') || '').trim()) out.unlabeled.push(b.id || b.className);
-          if (b.getBoundingClientRect().top < H * 0.12 && b.id !== 'back') out.high.push(b.id || b.className);
-        }
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-        while (walker.nextNode()) {
-          const node = walker.currentNode;
-          if (!node.textContent.trim()) continue;
-          const el = node.parentElement;
-          if (!el || !seen(el) || el.closest('script,style,noscript,.sr')) continue;
-          const px = parseFloat(getComputedStyle(el).fontSize);
-          if (px < 14) out.small.push(`${node.textContent.trim().slice(0, 20)} (${px}px)`);
-        }
-        return out;
-      });
-      eq(`${label}: every button has an aria-label`, a.unlabeled, []);
-      eq(`${label}: no button in the top 12 percent but Back`, a.high, []);
-      eq(`${label}: no text under 14 px`, a.small, []);
-    };
+    const audit = (label) => auditPage(h, label);
     await audit('map');
     await h.page.keyboard.press('Escape');
     await h.page.waitForFunction(() => window.__gd.screen() === 'title');
@@ -1211,6 +1219,183 @@ async function main() {
       ok(`${tag}: result panel on screen`, panel.x >= 0 && panel.y >= 0 && panel.x + panel.width <= viewport.width && panel.y + panel.height <= viewport.height, JSON.stringify(panel));
       await g.close();
     }
+  }
+
+  if (!SHOTS_ONLY) {
+    // ---------------------------------------------------------------- story pages and the Field Journal (SPEC 13)
+    console.log('story and journal');
+    const s = await phone({ tag: 'story' });
+    const text = async (sel) => ((await s.page.locator(sel).textContent()) || '').trim();
+    const chapter = (n) => CHAPTERS.find((c) => c.id === n);
+    const lastOf = (n) => chapter(n).levels[chapter(n).levels.length - 1];
+    const solveHere = async (def) => {
+      await s.gd('loadLevel', def.id);
+      if ((await s.gd('panel')) === 'card') await s.page.keyboard.press('Escape');
+      for (const m of solutionOf(def)) await s.gd('act', m);
+      await waitResult(s);
+    };
+    const onScreen = async (sel) => {
+      const b = await s.page.locator(sel).boundingBox();
+      return !!b && b.x >= 0 && b.y >= 0 && b.x + b.width <= 390 && b.y + b.height <= 844 ? true : JSON.stringify(b);
+    };
+
+    await s.open();
+    await s.page.locator('#btn-play').tap();
+    await s.page.waitForFunction(() => window.__gd.screen() === 'story');
+    const prologue = STORY[0];
+    eq('story: Play on a fresh save opens the prologue', await s.gd('story'), { id: 'prologue', index: 0, count: 1, reading: false });
+    eq('story: the page title', await text('#story-title'), prologue.title);
+    eq('story: the kicker', await text('#story-kicker'), 'Prologue');
+    eq('story: Wren\'s lines', await s.page.locator('#story-lines p').allTextContents(), prologue.lines);
+    ok('story: no page count in a one-page book', !(await s.page.locator('#story-count').isVisible()));
+    eq('story: the last page\'s button says Continue', await text('#story-next'), 'Continue');
+    ok('story: turning to it plays the page sound', (await s.gd('heard')).includes('page'), JSON.stringify(await s.gd('heard')));
+    eq('story: a page counts as seen once it shows', (await s.gd('save')).seen, ['prologue']);
+    {
+      const art = await s.page.evaluate(() => {
+        const el = document.getElementById('story-art');
+        const r = el.getBoundingClientRect();
+        return { bg: getComputedStyle(el).backgroundImage.slice(0, 30), len: getComputedStyle(el).backgroundImage.length, w: r.width, h: r.height };
+      });
+      ok('story: the page has a picture', art.bg.startsWith('url("data:image/png') && art.len > 4000 && art.w >= 240 && art.h >= 120, JSON.stringify(art));
+    }
+    eq('story: the button is on screen', await onScreen('#story-next'), true);
+    await auditPage(s, 'story');
+    await s.shot('story-prologue');
+    await s.page.locator('#story-next').tap();
+    eq('story: Continue goes on to the map', await s.gd('screen'), 'map');
+    await s.page.keyboard.press('Escape');
+    await s.page.locator('#btn-play').tap();
+    eq('story: a seen page does not show again', await s.gd('screen'), 'map');
+
+    // the Journal, fresh
+    ok('journal: the map has a Journal button', await s.page.locator('#btn-journal').isVisible());
+    eq('journal: the button is on screen, in thumb reach', [await onScreen('#btn-journal'), (await s.page.locator('#btn-journal').boundingBox()).y > 844 / 2], [true, true]);
+    eq('journal: the button counts creatures met', await text('#btn-journal .val'), '0 of 7 met');
+    await s.page.locator('#btn-journal').tap();
+    eq('journal: opens', await s.gd('screen'), 'journal');
+    eq('journal: Creatures is the first tab', await s.page.locator('#tab-creatures').getAttribute('aria-selected'), 'true');
+    eq('journal: one entry per species', await s.page.locator('#journal-list .entry').count(), 7);
+    eq('journal: nothing met on a fresh save', await s.page.locator('#journal-list .entry.met').count(), 0);
+    eq('journal: the count', await text('#journal-count'), '0 of 7 met');
+    eq('journal: an unmet creature', await s.page.locator('#journal-list .entry').first().locator('h3').textContent(), 'Not met yet');
+    ok('journal: says where to find it', (await s.page.locator('#journal-list .entry').first().textContent()).includes('Somewhere in Mossmouth.'));
+    await auditPage(s, 'journal');
+    eq('journal: the tabs are on screen, in thumb reach', [await onScreen('#tab-creatures'), await onScreen('#tab-story'),
+      (await s.page.locator('#tab-story').boundingBox()).y > 844 / 2], [true, true, true]);
+    await s.page.locator('#journal-back').tap();
+    eq('journal: its back button goes to the map', await s.gd('screen'), 'map');
+
+    // meeting the Fluffmoth
+    await solveHere(LEVELS[0]);
+    await s.page.locator('#result-map').tap();
+    eq('story: no page after a level that ends no chapter', await s.gd('screen'), 'map');
+    await s.page.locator('#btn-journal').tap();
+    eq('journal: one met after 1-1', await s.page.locator('#journal-list .entry.met').count(), 1);
+    eq('journal: the count goes up', await text('#journal-count'), '1 of 7 met');
+    {
+      const moth = s.page.locator('#journal-list .entry').first();
+      eq('journal: the Fluffmoth by name', await moth.locator('h3').textContent(), 'Fluffmoth');
+      const all = await moth.textContent();
+      ok('journal: where it was met', all.includes('Met in Mossmouth'), all);
+      ok('journal: its rule card text', all.includes(CARDS.Fluffmoth), all);
+      ok('journal: Wren\'s note', all.includes(NOTES.M), all);
+      const bg = await moth.locator('.entry-art').evaluate((el) => getComputedStyle(el).backgroundImage.slice(0, 26));
+      ok('journal: its portrait', bg.startsWith('url("data:image/png'), bg);
+    }
+    {
+      const over = await s.page.evaluate(() => [...document.querySelectorAll('#journal-list .entry')]
+        .filter((el) => { const r = el.getBoundingClientRect(); return r.left < -0.5 || r.right > window.innerWidth + 0.5; }).length);
+      eq('journal: entries fit the screen', over, 0);
+      const list = await s.page.evaluate(() => { const l = document.getElementById('journal-list'); return { sh: l.scrollHeight, ch: l.clientHeight }; });
+      ok('journal: the list scrolls inside its screen', list.sh > list.ch, JSON.stringify(list));
+      await s.swipe('N', { x: 195, y: 700 }, 260);
+      await s.page.waitForTimeout(400);
+      ok('journal: a finger scrolls the list', (await s.page.evaluate(() => document.getElementById('journal-list').scrollTop)) > 20);
+    }
+    await s.shot('journal-creatures');
+
+    // the Story tab
+    await s.page.locator('#tab-story').tap();
+    await auditPage(s, 'journal story');
+    eq('journal: the Story tab', [await s.page.locator('#tab-story').getAttribute('aria-selected'), await s.page.locator('#tab-creatures').getAttribute('aria-selected')], ['true', 'false']);
+    eq('journal: one entry per story page', await s.page.locator('#journal-list .entry').count(), STORY.length);
+    eq('journal: the count of pages', await text('#journal-count'), `1 of ${STORY.length} pages`);
+    {
+      const entries = s.page.locator('#journal-list .entry');
+      eq('journal: the prologue is there to read', await entries.nth(0).locator('h3').textContent(), prologue.title);
+      eq('journal: chapter 1\'s page is still dark', await entries.nth(1).locator('h3').textContent(), 'Still dark');
+      ok('journal: and says how to light it', (await entries.nth(1).textContent()).includes('Light the last cavern of Mossmouth to read it.'));
+      eq('journal: a dark page is not a button', await entries.nth(1).locator('button').count(), 0);
+      await entries.nth(0).locator('button').tap();
+    }
+    eq('journal: a page opens to read again', await s.gd('story'), { id: 'prologue', index: 0, count: 1, reading: true });
+    eq('journal: reading, the button goes back', await text('#story-next'), 'Back to journal');
+    await s.page.locator('#story-next').tap();
+    eq('journal: back on the Story tab', [await s.gd('screen'), await s.page.locator('#tab-story').getAttribute('aria-selected')], ['journal', 'true']);
+    await s.page.locator('#journal-list .entry button').first().tap();
+    await s.page.keyboard.press('Escape');
+    eq('journal: Escape on a page read again goes back to the journal', await s.gd('screen'), 'journal');
+    await s.page.keyboard.press('Escape');
+    eq('journal: Escape goes to the map', await s.gd('screen'), 'map');
+
+    // finishing a chapter: its page comes after the result, then on to where the player was going
+    await solveHere(lastOf(1));
+    await s.page.locator('#result-next').tap();
+    eq('story: a chapter\'s page after its last level', [await s.gd('screen'), ((await s.gd('story')) || {}).id], ['story', 'ch1']);
+    eq('story: its kicker names the chapter', await text('#story-kicker'), 'Chapter 1: Mossmouth');
+    eq('story: its title', await text('#story-title'), STORY[1].title);
+    await s.shot('story-chapter-1');
+    await s.page.locator('#story-next').tap();
+    eq('story: Continue opens the next level', [await s.gd('screen'), await text('#level-id')], ['level', `Level ${chapter(2).levels[0].id}`]);
+
+    // two chapters finished: a book of two pages
+    await solveHere(lastOf(2));
+    await solveHere(lastOf(3));
+    await s.page.locator('#result-map').tap();
+    eq('story: two pages due make a book', await s.gd('story'), { id: 'ch2', index: 0, count: 2, reading: false });
+    eq('story: page count', await text('#story-count'), 'Page 1 of 2');
+    eq('story: Next page while more follow', await text('#story-next'), 'Next page');
+    await s.page.locator('#story-next').tap();
+    eq('story: the second page', [((await s.gd('story')) || {}).id, await text('#story-count'), await text('#story-next')], ['ch3', 'Page 2 of 2', 'Continue']);
+    await s.page.locator('#story-next').tap();
+    eq('story: then the map', await s.gd('screen'), 'map');
+
+    // Back closes a book at once; its other pages count as seen
+    await solveHere(lastOf(4));
+    await solveHere(lastOf(5));
+    await s.page.keyboard.press('Escape');
+    eq('story: Back from a result shows due pages too', ((await s.gd('story')) || {}).id, 'ch4');
+    await s.page.keyboard.press('Escape');
+    eq('story: Escape closes the book and goes on', await s.gd('screen'), 'map');
+    eq('story: the closed book\'s pages count as seen', (await s.gd('save')).seen, ['prologue', 'ch1', 'ch2', 'ch3', 'ch4', 'ch5']);
+    await s.page.locator('#btn-journal').tap();
+    await s.page.locator('#tab-story').tap();
+    eq('journal: every seen page readable', await s.page.locator('#journal-list .entry button').count(), 6);
+    await s.page.locator('#journal-back').tap();
+
+    // Replay shows nothing; Reset brings the story back
+    await solveHere(lastOf(6));
+    await s.page.locator('#result-replay').tap();
+    eq('story: Replay shows no page', [await s.gd('screen'), await s.gd('panel')], ['level', null]);
+    await s.page.locator('#back').tap();
+    eq('story: the map button on a level shows no page', await s.gd('screen'), 'map');
+    await s.page.locator('#set-reset').tap();
+    await s.page.locator('#confirm-yes').tap();
+    eq('reset: clears the seen story pages', (await s.gd('save')).seen, []);
+    await s.page.keyboard.press('Escape');
+    await s.page.locator('#btn-play').tap();
+    eq('reset: the prologue shows again', ((await s.gd('story')) || {}).id, 'prologue');
+
+    // a page straight from a link never starts with the prologue
+    const fresh = await phone({ tag: 'story-link' });
+    await fresh.open(`?level=${LEVELS[0].id}`);
+    for (const m of solutionOf(LEVELS[0])) await fresh.gd('act', m);
+    await waitResult(fresh);
+    await fresh.page.locator('#result-map').tap();
+    eq('story: no prologue after a level opened from a link', await fresh.gd('screen'), 'map');
+    await fresh.close();
+    await s.close();
   }
 
   // ------------------------------------------------------------------ screenshots

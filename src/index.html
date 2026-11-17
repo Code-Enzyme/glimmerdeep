@@ -46,6 +46,12 @@
       </div>
     </div>
 
+    <div class="journal-row">
+      <button id="btn-journal" class="btn journal-open" type="button" aria-label="Field Journal">
+        <span class="ico" data-icon="book" data-tint="#24162E"></span><span class="lbl">Field Journal</span><span class="val"></span>
+      </button>
+    </div>
+
     <nav class="bar settings" aria-label="Settings">
       <button id="set-sound" class="tool" type="button" aria-pressed="true" aria-label="Sound">
         <span class="ico" data-icon="sound"></span><span class="lbl">Sound</span><span class="val">on</span>
@@ -63,6 +69,39 @@
         <span class="ico" data-icon="restart"></span><span class="lbl">Reset</span><span class="val">progress</span>
       </button>
     </nav>
+  </main>
+
+  <!-- Story: Wren's journal pages between chapters (SPEC section 13) -->
+  <main id="screen-story" class="screen story" hidden>
+    <div id="story-scroll" class="story-scroll">
+      <article class="story-page paper" aria-labelledby="story-title">
+        <div id="story-art" class="story-art" aria-hidden="true"></div>
+        <span id="story-kicker" class="kicker ink"></span>
+        <h2 id="story-title"></h2>
+        <div id="story-lines" class="story-lines"></div>
+        <p id="story-count" class="story-count" hidden></p>
+      </article>
+    </div>
+    <div class="story-foot">
+      <button id="story-next" class="btn primary" type="button">Continue</button>
+    </div>
+  </main>
+
+  <!-- Field Journal: creatures met and story pages -->
+  <main id="screen-journal" class="screen journal" hidden>
+    <header class="journal-head">
+      <button id="journal-back" class="round" type="button" aria-label="Back to map"><span class="ico" data-icon="map"></span></button>
+      <div class="heading">
+        <span class="kicker">Wren's</span>
+        <h2>Field Journal</h2>
+      </div>
+      <span id="journal-count" class="counter"></span>
+    </header>
+    <div id="journal-list" class="journal-list" role="tabpanel" aria-labelledby="tab-creatures"></div>
+    <div class="bar tabs" role="tablist" aria-label="Journal sections">
+      <button id="tab-creatures" class="tab" type="button" role="tab" aria-selected="true" aria-controls="journal-list" aria-label="Creatures">Creatures</button>
+      <button id="tab-story" class="tab" type="button" role="tab" aria-selected="false" aria-controls="journal-list" aria-label="Story">Story</button>
+    </div>
   </main>
 
   <!-- Level: top bar, board, thumb bar -->

@@ -11,6 +11,9 @@ First visits are guided: the opening levels teach the controls by pointing at th
 creature is met through its rule card, and a stuck player is nudged toward Hint and Undo. The
 Tutorials setting on the map turns all of that off.
 
+Between chapters Wren's journal tells the story: why the Heartroot is dimming, and what the Gloam
+really is. The Field Journal on the map keeps every story page and a page for each creature met.
+
 Android first, iOS later. The game is plain JavaScript drawn on a canvas, wrapped as a native app with
 [Capacitor](https://capacitorjs.com/).
 
@@ -48,7 +51,7 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |
-| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the app-shell bridge (`ui/native.js`) |
+| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the app-shell bridge (`ui/native.js`) |
 | `tools/` | Build, level verifier, icon maker |
 | `dev/` | Browser and device checks, plus the level-design search scripts |
 | `android/` | The Capacitor Android project |

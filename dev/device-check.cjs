@@ -26,9 +26,17 @@ async function openApp(device) {
   return { webview, page };
 }
 
+// Play, then read through any story pages that are due (SPEC section 13). -> how many pages showed
 async function play(page) {
   await page.evaluate(() => document.getElementById('btn-play').click());
+  let pages = 0;
+  while (pages < 12 && (await page.evaluate(() => window.__gd.screen())) === 'story') {
+    pages++;
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.getElementById('story-next').click());
+  }
   await page.waitForFunction(() => window.__gd.screen() === 'map', null, { timeout: 10000 });
+  return pages;
 }
 
 async function killApp(device, webview) {
@@ -62,10 +70,11 @@ async function killApp(device, webview) {
   await page.waitForTimeout(800);
   await device.screenshot({ path: path.join(shots, 'title.png') });
   console.log('title shown');
-  await play(page);
+  const prologue = await play(page);
+  if (prologue !== 1) fail(`Play on a fresh install showed ${prologue} story pages, not the prologue`);
   await page.waitForTimeout(400);
   await device.screenshot({ path: path.join(shots, 'map.png') });
-  console.log('Play shows the map');
+  console.log('Play shows the prologue, then the map');
 
   for (const id of LEVEL_IDS) {
     const level = LEVELS.find((l) => l.id === id);
@@ -89,10 +98,15 @@ async function killApp(device, webview) {
   // kill the app and open it again: the bests must still be there
   await killApp(device, webview);
   ({ webview, page } = await openApp(device));
-  await play(page);
+  const book = await play(page);
+  // every chapter's last level was solved, so the story so far shows as one book after the restart
+  if (book !== CHAPTERS.length) fail(`after the restart Play showed ${book} story pages, not ${CHAPTERS.length}`);
   const after = await page.evaluate(() => Object.keys(window.__gd.save().levels).sort());
   if (JSON.stringify(after) !== JSON.stringify(before)) fail(`save lost across restart: before ${before} after ${after}`);
   else console.log(`save kept across restart: ${after.join(', ')}`);
+  const seen = await page.evaluate(() => window.__gd.save().seen.length);
+  if (seen !== CHAPTERS.length + 1) fail(`${seen} story pages counted as seen, not ${CHAPTERS.length + 1}`);
+  else console.log(`story pages seen: ${seen}`);
   await device.screenshot({ path: path.join(shots, 'map-after-restart.png') });
 
   const pid = (await device.shell(`pidof ${PKG}`)).toString().trim();

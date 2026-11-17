@@ -349,7 +349,7 @@ export function play(name)               // one-shot sound; unknown names are ig
 //   names: 'step' 'blocked' 'plant' 'pickup' 'wait' 'moth' 'settle' 'whelkMove' 'whelkHide' 'whelkEmerge'
 //          'stumpStep' 'stumpBump' 'stumpWake' 'newtStep' 'newtTurn' 'newtDoze' 'newtWake'
 //          'emberWarm' 'emberCool' 'emberIgnite' 'emberStep' 'gloamDrift' 'gloamSnuff' 'aim' 'beetleCrawl' 'beetleGlint'
-//          'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint'
+//          'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint' 'page'
 export function setMusic({ playing, intensity, chapter })   // adaptive bed: intensity 0..1 = share of Glowbuds lit; chapter 1..3
 ```
 
@@ -408,9 +408,11 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - The app opens on the **title screen**: Wren holding the lit lantern (animated, still under reduced
   motion), the name, and one big **Play** button in thumb reach. Once any cavern is lit, a line under
   Play counts them ("3 of 16 caverns lit").
-- **Play** opens the **map** (choose a cavern, settings). A cavern opens the **level** screen.
+- **Play** opens the **map** (choose a cavern, settings), after any story pages that are due (section 13).
+  A cavern opens the **level** screen. The map's **Journal** button opens the **Field Journal**.
 - Back (Android back button, or Escape): result panel or any open panel first, then level → map →
-  title → leave the app. Enter or Space on the title plays.
+  title → leave the app; the Journal goes back to the map, and a story page closes its book (section 13).
+  Enter or Space on the title plays.
 - `?level=<id>` skips straight to that level; anything else in the URL still opens on the title.
 
 ## 12. Tutorials (decided 17 Nov 2026)
@@ -450,3 +452,48 @@ and never ask for a move the solution does not need.
 - `src/ui/tutorial.js` holds the step logic (no DOM), so it can be tested in Node. `checkTutorial(def)`
   lists what is wrong with a level's tutorial (unknown point, gesture or event; a species point or card the
   level does not have, or the Shutter card in a level without a shutter; `'arrive'` without an `[x, y]` point; a card step not finished by `'card'`).
+
+## 13. Story and Field Journal (decided 17 Nov 2026)
+
+The story is told in Wren's journal: short margin notes, first person, never full dialogue. Story pages
+come between chapters, and the Field Journal keeps every page and a sketch of every creature met.
+
+- **Story pages** live in `src/ui/story.js` (no DOM, tested in Node): a prologue, then one page for each
+  chapter in `CHAPTERS`, in chapter order. A page is
+  ```js
+  { id: 'ch1',            // 'prologue', or 'ch' + the chapter id
+    chapter: 1,           // 0 for the prologue
+    title: 'The shadow at Mossmouth',   // at most 40 characters
+    lines: ['...'],       // 1 to 4 margin notes, each at most 160 characters
+    scene: { cast: ['wren', 'M'], gloam: 'near', root: null } }
+  ```
+  `scene.cast` lists who stands in the picture, left to right: `'wren'` (carrying the lit lantern) and
+  species letters. `scene.gloam` is `null`, `'small'` (a young Gloamling, in a memory) or `'near'` (the
+  Gloam, huge, at the right edge). `scene.root` is `null`, `'dim'`, `'bright'` (painfully flaring) or
+  `'gentle'`: the Heartroot glowing behind them. Pictures are painted once into an image, like portraits,
+  and have no faces either.
+- **When a page unlocks:** the prologue at once; a chapter's page when the last level of that chapter is
+  solved (in the save).
+- **When pages show:** a page is **due** when it is unlocked and not yet seen. Due pages show, in order,
+  as one little book, at two moments only: when Play is tapped on the title (before the map), and when a
+  result panel is left by Next level, Map or Back (before going on). The prologue waits for Play, so a
+  level opened straight from a link never starts with it. Replay never shows them. A page
+  counts as seen as soon as it shows. The book's button reads "Next page" while more pages follow, then
+  "Continue", which goes where the player was heading. Back or Escape closes the book at once: its
+  remaining pages count as seen too, and stay readable in the Journal. A book of more than one page says
+  "Page 2 of 3".
+- **Field Journal** (from the map's Journal button): two tabs, **Creatures** and **Story**.
+  - Creatures: one entry per species, in the order the chapters bring them in. A species is **met** once
+    any level containing it is solved. A met entry shows its portrait, its name, "Met in <chapter name>",
+    its rule card text (section 8) and Wren's own note about it from `src/ui/story.js`. An entry not met
+    yet shows a dark blot and "Not met yet", with "Somewhere in <chapter name>." The heading counts
+    "4 of 7 met".
+  - Story: one entry per story page. An unlocked page shows its title and kicker ("Prologue", or
+    "Chapter 1: Mossmouth") and opens the page to read again (its button reads "Back to journal").
+    A locked page reads "Still dark" with "Light the last cavern of <chapter name> to read it."
+- **Save:** the save gains `seen`, the ids of the story pages already shown. Reset progress clears it
+  along with the levels, so the story starts over; settings are kept.
+- **Text rules** (`checkStory(chapters)` lists what is wrong): every chapter has exactly one page and
+  every species found in the levels has a note; ids are unique; titles and lines keep to their lengths;
+  cast members are known; no story text or note uses he, she, him, her, his, hers, himself or herself.
+- Turning to a story page plays `'page'`, a soft paper sound.

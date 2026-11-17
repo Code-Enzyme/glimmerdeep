@@ -1,4 +1,4 @@
-// Saving. One localStorage key holds per-level bests and the settings. Every read and write is guarded:
+// Saving. One localStorage key holds per-level bests, the story pages already shown and the settings. Every read and write is guarded:
 // the game must play the same with storage missing, full or blocked (private mode, file:// policies).
 
 export const SAVE_KEY = 'glimmerdeep.v1';
@@ -6,10 +6,10 @@ export const SAVE_KEY = 'glimmerdeep.v1';
 const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true };
 
 function freshSave() {
-  return { levels: {}, settings: { ...SETTING_DEFAULTS } };
+  return { levels: {}, seen: [], settings: { ...SETTING_DEFAULTS } };
 }
 
-// -> { levels: { [id]: { moves, stars } }, settings: { sound, contrast, unlockAll, tutorials } }
+// -> { levels: { [id]: { moves, stars } }, seen: [story page id], settings: { sound, contrast, unlockAll, tutorials } }
 export function loadSave() {
   const data = freshSave();
   try {
@@ -27,6 +27,11 @@ export function loadSave() {
         data.levels[id] = { moves: Math.floor(moves), stars: Math.max(1, Math.min(3, Math.floor(stars))) };
       }
     }
+    if (Array.isArray(parsed.seen)) {
+      for (const id of parsed.seen) {
+        if (typeof id === 'string' && id && !data.seen.includes(id)) data.seen.push(id);
+      }
+    }
     if (parsed.settings && typeof parsed.settings === 'object') {
       for (const k of Object.keys(SETTING_DEFAULTS)) {
         if (typeof parsed.settings[k] === 'boolean') data.settings[k] = parsed.settings[k];
@@ -41,7 +46,7 @@ export function loadSave() {
 // -> true when the save reached storage
 export function writeSave(data) {
   try {
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify({ levels: data.levels, settings: data.settings }));
+    window.localStorage.setItem(SAVE_KEY, JSON.stringify({ levels: data.levels, seen: data.seen || [], settings: data.settings }));
     return true;
   } catch (e) {
     return false;
@@ -58,6 +63,8 @@ export function recordResult(data, id, moves, stars) {
   return record;
 }
 
+// Reset progress: every level and the story start over; the settings stay.
 export function clearProgress(data) {
   data.levels = {};
+  data.seen = [];
 }

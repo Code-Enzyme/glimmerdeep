@@ -44,6 +44,15 @@ const { pathToFileURL } = require('url');
   if (opened !== 'title') { console.log(`FAIL the app opened on "${opened}", not the title`); bad++; }
   await page.screenshot({ path: path.join(shots, 'title.png') });
   await page.locator('#btn-play').tap();
+  // every chapter was finished above, so Play first shows the story so far as one book (SPEC section 13)
+  const book = await page.evaluate(() => window.__gd.story());
+  const want = 1 + (await import(pathToFileURL(path.join(root, 'src/levels/index.js')).href)).CHAPTERS.length;
+  if (!book || book.count !== want) { console.log(`FAIL Play showed ${JSON.stringify(book)}, not a book of ${want} story pages`); bad++; }
+  for (let i = 0; i < 12 && (await page.evaluate(() => window.__gd.screen())) === 'story'; i++) {
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: path.join(shots, `story-${i}.png`) });
+    await page.locator('#story-next').tap();
+  }
   await page.waitForFunction(() => window.__gd.screen() === 'map');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(shots, 'map.png'), fullPage: true });

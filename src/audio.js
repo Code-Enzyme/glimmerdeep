@@ -18,7 +18,7 @@ export const SOUND_NAMES = [
   'whelkEmerge', 'stumpStep', 'stumpBump', 'stumpWake', 'newtStep', 'newtTurn', 'newtDoze', 'newtWake',
   'emberWarm', 'emberCool', 'emberIgnite', 'emberStep', 'gloamDrift', 'gloamSnuff', 'aim', 'beetleCrawl', 'beetleGlint',
   'gateOpen', 'gateClose', 'budOn', 'budOff',
-  'solve', 'undo', 'restart', 'ui', 'hint',
+  'solve', 'undo', 'restart', 'ui', 'hint', 'page',
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -53,8 +53,8 @@ const LEVELS = {
   whelkMove: 0.12, whelkHide: 0.15, whelkEmerge: 0.18, stumpStep: 0.195, stumpBump: 0.28,
   stumpWake: 0.1, newtStep: 0.27, newtTurn: 0.5, newtDoze: 0.25, newtWake: 0.27,
   emberWarm: 0.5, emberCool: 0.3, emberIgnite: 0.25, emberStep: 0.235, gloamDrift: 0.24, gloamSnuff: 0.36,
-  aim: 0.3, beetleCrawl: 0.16, beetleGlint: 0.2, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
-  undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185,
+  aim: 0.3, beetleCrawl: 0.24, beetleGlint: 0.2, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
+  undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185, page: 0.34,
 };
 
 // Sounds that are only colour. They are dropped first when a turn gets busy.
@@ -66,7 +66,7 @@ const FOLEY = {
 
 // What the player's own finger did. These answer at once, even while the creatures of the
 // previous turn are still sounding off.
-const ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, aim: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1 };
+const ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, aim: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1, page: 1 };
 
 // Repeated foley that gets a few milliseconds of loose timing when it is not already staggered.
 const LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1, emberStep: 1, gloamDrift: 1, beetleCrawl: 1 };
@@ -825,6 +825,14 @@ SOUNDS.ui = function (k, t) {
   tone(k, 'sine', 1180, t, 0.8, 0.0015, 0.04);
   tone(k, 'sine', 1770, t, 0.25, 0.001, 0.02);
   hiss(k, 'bandpass', 2600, 1.5, t, 0.06, 0.001, 0.01);
+};
+
+// Page: a journal page turning. Two soft sweeps of paper, the second lower, and the faint pat of it landing.
+SOUNDS.page = function (k, t) {
+  hiss(k, 'bandpass', 3400, 0.9, t, 0.05, 0.02, 0.11);
+  hiss(k, 'bandpass', 1900, 0.8, t + 0.08, 0.06, 0.03, 0.15);
+  hiss(k, 'highpass', 5600, 0.7, t + 0.15, 0.02, 0.004, 0.06);
+  tone(k, 'sine', 170, t + 0.2, 0.09, 0.008, 0.11);
 };
 
 // Hint: two gentle notes, a fifth leaning up to the tonic.
