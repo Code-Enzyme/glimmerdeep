@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ACTIONS, DIRS, parseLevel, step, key, isLit, terrainAt, creatureAt, canEnter, isGateOpen, isHidden, isAwake,
+  ACTIONS, DIRS, parseLevel, step, key, isLit, terrainAt, creatureAt, canEnter, isGateOpen, isHidden, isAwake, beamPath,
 } from '../src/engine.js';
 import ch1 from '../src/levels/ch1.js';
 
@@ -88,8 +88,8 @@ test('parseLevel: extracts terrain and puts floor under Wren and the creatures',
 test('parseLevel: the state has exactly the documented fields and is plain JSON data', () => {
   const s = parse(['W.M', 'aA.']);
   assert.deepEqual(Object.keys(s).sort(), [
-    'bloom', 'bridges', 'buds', 'creatures', 'events', 'gates', 'h', 'lantern', 'lit', 'solved', 'tiles', 'turn', 'w',
-    'wren',
+    'bloom', 'bridges', 'buds', 'creatures', 'events', 'gates', 'h', 'lantern', 'lit', 'shutter', 'solved', 'tiles', 'turn',
+    'w', 'wren',
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(s)), s);
   assert.deepEqual(Object.keys(s.creatures[0]).sort(), ['dir', 'id', 'type', 'x', 'y']);
@@ -1281,6 +1281,262 @@ test('key: tells a Gloamling from every other creature', () => {
   assert.equal(new Set(keys).size, keys.length);
 });
 
+// ---------------------------------------------------------------- the shutter and the Mirrorbeetle (chapter 7)
+
+const shut = (map, extra) => parse(map, { shutter: true, ...extra });
+
+// The lit tiles as a sorted list of 'x,y'.
+const litTiles = (s) => {
+  const out = [];
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (isLit(s, x, y)) out.push(`${x},${y}`);
+  return out.sort();
+};
+
+test('parseLevel: shutter comes from the level and is false unless the level says true', () => {
+  assert.equal(parse(['W.']).shutter, false);
+  assert.equal(parse(['W.'], { shutter: true }).shutter, true);
+  assert.equal(parse(['W.'], { shutter: false }).shutter, false);
+});
+
+test('parseLevel: / and \\ are Mirrorbeetles, with the slant of the shell as dir', () => {
+  const s = parse(['W/.\\']);
+  assert.deepEqual(s.creatures.map((c) => ({ ...c })), [
+    { id: 'R1', type: 'R', x: 1, y: 0, dir: '/' },
+    { id: 'R2', type: 'R', x: 3, y: 0, dir: '\\' },
+  ]);
+});
+
+test('aim: L beside the planted lantern aims it away from Wren, from each side', () => {
+  //  .....
+  //  .....
+  //  .WL..     Wren west of the lantern
+  //  .....
+  const s = shut(['.....', '.....', '.WL..', '.....']);
+  const east = step(s, 'L');
+  assert.deepEqual(east.lantern, { x: 2, y: 2, carried: false, beam: 'E' });
+  assert.deepEqual(east.events, [{ type: 'aim', x: 2, y: 2, dir: 'E' }]);
+  assert.deepEqual(east.wren, { x: 1, y: 2 }, 'Wren stays where she is');
+  const south = step(run(east, ['N', 'E']), 'L');           // from the north side
+  assert.equal(south.lantern.beam, 'S');
+  const west = step(run(south, ['E', 'S']), 'L');            // from the east side
+  assert.equal(west.lantern.beam, 'W');
+  const north = step(run(west, ['S', 'W']), 'L');            // from the south side
+  assert.equal(north.lantern.beam, 'N');
+  assert.deepEqual(north.events, [{ type: 'aim', x: 2, y: 2, dir: 'N' }]);
+});
+
+test('aim: L again from the same side opens the lantern back to round light', () => {
+  const s = step(shut(['.....', '.WL..', '.....']), 'L');
+  const open = step(s, 'L');
+  assert.deepEqual(open.lantern, { x: 2, y: 1, carried: false });
+  assert.ok(!('beam' in open.lantern), 'a round lantern has no beam field');
+  assert.deepEqual(open.events, [{ type: 'aim', x: 2, y: 1, dir: null }]);
+  assert.deepEqual(litTiles(open), litTiles(shut(['.....', '.WL..', '.....'])), 'the same light as before aiming');
+});
+
+test('aim: illegal without a shutter, from a diagonal tile or from two tiles away', () => {
+  assert.equal(step(parse(['.....', '.WL..', '.....']), 'L'), null, 'no shutter');
+  assert.equal(step(shut(['.W...', '..L..', '.....']), 'L'), null, 'diagonal');
+  assert.equal(step(shut(['W.L..']), 'L'), null, 'two tiles away');
+  assert.deepEqual(step(shut(['W.L..']), 'E').lantern, { x: 2, y: 0, carried: false }, 'walking does not aim it');
+});
+
+test('aim: picking the lantern up opens it; carried and planted again it is round', () => {
+  const aimed = step(shut(['WL...']), 'L');
+  const onIt = step(aimed, 'E');
+  assert.deepEqual(onIt.lantern, { x: 1, y: 0, carried: false, beam: 'E' }, 'standing on it does not change it');
+  const held = step(onIt, 'L');
+  assert.deepEqual(held.lantern, { x: 1, y: 0, carried: true });
+  assert.deepEqual(held.events, [{ type: 'pickup', x: 1, y: 0 }]);
+  assert.deepEqual(step(held, 'L').lantern, { x: 1, y: 0, carried: false });
+});
+
+test('aim: in a shutter level, L on the lantern still picks it up and L while carrying still plants', () => {
+  const s = shut(['W....']);
+  const planted = step(s, 'L');
+  assert.deepEqual(planted.lantern, { x: 0, y: 0, carried: false });
+  assert.deepEqual(step(planted, 'L').lantern, { x: 0, y: 0, carried: true });
+});
+
+test('light: an aimed lantern lights its own tile and a beam four tiles long, and nothing round about it', () => {
+  const s = step(shut(['.........', 'WL.......', '.........']), 'L');
+  assert.deepEqual(light(s), ['000000000', '011111000', '000000000']);
+});
+
+test('light: the beam lights a wall at its end and passes over puddles, roots, gates and Wren', () => {
+  const s = step(shut(['WL~aA#..']), 'L');
+  assert.deepEqual(light(s), ['01111100']);
+  // Wren walks round into the beam, which shines on past her; then she aims it back west from there.
+  const over = run(step(shut(['.....', 'WL...', '.....']), 'L'), ['N', 'E', 'E', 'S']);
+  assert.deepEqual(over.wren, { x: 2, y: 1 });
+  assert.deepEqual(light(over), ['00000', '01111', '00000']);
+  const back = step(over, 'L');
+  assert.equal(back.lantern.beam, 'W');
+  assert.deepEqual(light(back), ['00000', '11000', '00000']);
+});
+
+test('light: the beam blooms a bud beyond the reach of round light', () => {
+  const s = shut(['WL...G..']);
+  assert.equal(isLit(s, 5, 0), false, 'round light reaches two tiles');
+  const aimed = step(s, 'L');
+  assert.equal(aimed.solved, true);
+  assert.deepEqual(aimed.events.map((e) => e.type), ['aim', 'bud', 'solved']);
+});
+
+test('light: Hush stops the beam and is not lit', () => {
+  assert.deepEqual(light(step(shut(['WL.H..']), 'L')), ['011000']);
+});
+
+test('light: a creature in the beam is lit and stops it', () => {
+  // The Stumpcap faces north, off the board, so it only bumps.
+  assert.deepEqual(light(step(shut(['WL..^.']), 'L')), ['011110']);
+});
+
+test("light: a Gloamling's shadow stops the beam, and a shadowed lantern lights nothing", () => {
+  // The Gloamling drifts from 5,0 to 4,0; its shadow then covers 3,0 to 5,0.
+  const s = step(shut(['WL...O']), 'L');
+  assert.deepEqual(where(s), ['O@4,0']);
+  assert.deepEqual(light(s), ['011000']);
+  const smothered = step(shut(['WL.', '.O.']), 'L');
+  assert.deepEqual(light(smothered), ['000', '000']);
+});
+
+test('light: a glowing Emberwick still lights round about it when the lantern is aimed', () => {
+  const s = shut(['.....', 'WL...', '.....', '...K.']);
+  const glowing = { ...s, creatures: [{ ...s.creatures[0], heat: 2 }] };
+  const aimed = step(glowing, 'L');
+  assert.equal(isLit(aimed, 1, 1), true);
+  assert.equal(isLit(aimed, 4, 1), true, 'the beam');
+  const ember = only(aimed, 'K');
+  assert.equal(isLit(aimed, ember.x, ember.y), true);
+  assert.equal(isLit(aimed, ember.x - 1, ember.y), true, 'the ember lights its neighbours');
+});
+
+test('Mirrorbeetle: a beam turns a quarter turn on its shell and travels four more tiles', () => {
+  const TURN = { '/': { E: 'N', N: 'E', W: 'S', S: 'W' }, '\\': { E: 'S', S: 'E', W: 'N', N: 'W' } };
+  const BACK = { N: 'S', E: 'W', S: 'N', W: 'E' };
+  for (const shell of ['/', '\\']) {
+    for (const dir of ['N', 'E', 'S', 'W']) {
+      // A 9 by 9 floor, the lantern in the middle, Wren on the side away from the beam, the beetle two tiles out.
+      const [dx, dy] = DIRS[dir];
+      const [bx, by] = DIRS[BACK[dir]];
+      const rows = Array.from({ length: 9 }, () => Array(9).fill('.'));
+      rows[4][4] = 'L';
+      rows[4 + by][4 + bx] = 'W';
+      rows[4 + 2 * dy][4 + 2 * dx] = shell;
+      const s = step(shut(rows.map((r) => r.join(''))), 'L');
+      assert.equal(s.lantern.beam, dir);
+      const out = TURN[shell][dir];
+      const [ox, oy] = DIRS[out];
+      const expected = ['4,4', `${4 + dx},${4 + dy}`, `${4 + 2 * dx},${4 + 2 * dy}`];
+      for (let i = 1; i <= 4; i++) expected.push(`${4 + 2 * dx + i * ox},${4 + 2 * dy + i * oy}`);
+      assert.deepEqual(litTiles(s), expected.sort(), `${shell} turns ${dir} to ${out}`);
+      assert.deepEqual(where(s), [`R${shell}@${4 + 2 * dx},${4 + 2 * dy}`], 'a lit beetle stays put');
+    }
+  }
+});
+
+test('Mirrorbeetle: a beam turns on beetle after beetle, and stops when it comes round again', () => {
+  //  x: 0123456
+  //  0: .......
+  //  1: ./...\.
+  //  2: .......
+  //  3: .\WL./.     aimed east: 3,3 > 5,3 turn north > 5,1 turn west > 1,1 turn south > 1,3 turn east > 5,3 again
+  //  4: .......
+  const s = step(shut(['.......', './...\\.', '.......', '.\\WL./.', '.......']), 'L');
+  assert.deepEqual(light(s), ['0000000', '0111110', '0100010', '0111110', '0000000']);
+  assert.equal(s.creatures.length, 4);
+  assert.deepEqual(where(s), ['R/@1,1', 'R/@5,3', 'R\\@1,3', 'R\\@5,1']);
+});
+
+test('Mirrorbeetle: in the dark it crawls toward the lantern, sideways first, and stops in the light', () => {
+  //  W....
+  //  .....
+  //  ...\.
+  let s = parse(['W....', '.....', '...\\.']);
+  const path = [];
+  for (let i = 0; i < 5; i++) {
+    s = step(s, 'Z');
+    const r = only(s, 'R');
+    path.push(`${r.x},${r.y}`);
+  }
+  assert.deepEqual(path, ['2,2', '1,2', '0,2', '0,1', '0,1'], 'next to the carried lantern it is lit and stays');
+});
+
+test('Mirrorbeetle: it crawls toward the planted lantern, not toward Wren, and never onto it', () => {
+  let s = run(parse(['W....', '.....', '.../.']), ['L', 'E', 'E', 'E']);
+  for (let i = 0; i < 4; i++) s = step(s, 'Z');
+  const r = only(s, 'R');
+  assert.equal(Math.abs(r.x) + Math.abs(r.y), 2, 'it stops at the edge of the planted light');
+});
+
+test('Mirrorbeetle: stays put while the lantern is smothered; cannot enter a puddle', () => {
+  const smothered = step(parse(['W.../'], { under: { '0,0': 'H' } }), 'Z');
+  assert.deepEqual(where(smothered), ['R/@4,0']);
+  const puddle = parse(['W.~/']);
+  assert.equal(canEnter(puddle, 'R', 2, 0), false);
+  assert.deepEqual(where(step(puddle, 'Z')), ['R/@3,0'], 'the puddle is in its way');
+});
+
+test('Mirrorbeetle: walks over a bridge', () => {
+  const bridged = step(parse(['W~./', '#M##']), 'Z');   // the moth settles at 1,0 first
+  assert.equal(terrainAt(bridged, 1, 0), 'bridge');
+  assert.equal(canEnter(bridged, 'R', 1, 0), true);
+});
+
+test('Mirrorbeetle: round light does not turn; a beetle beside a planted lantern casts a shadow', () => {
+  const s = parse(['L/..', 'W...']);
+  assert.deepEqual(light(s), ['1100', '1100']);
+});
+
+test('Mirrorbeetle: never heavy, lit or dark', () => {
+  const lit = parse(['.WA', '#/#'], { under: { '1,1': 'a' } });
+  assert.equal(isLit(lit, 1, 1), true);
+  assert.equal(isGateOpen(step(lit, 'Z'), 'A'), false);
+  const dark = parse(['W.A', '#/#'], { under: { '0,0': 'H', '1,1': 'a' } });
+  assert.equal(isGateOpen(step(dark, 'Z'), 'A'), false);
+});
+
+test('events: aim, then a glint when the beam catches a Mirrorbeetle', () => {
+  const s = shut(['WL../']);
+  assert.equal(isLit(s, 4, 0), false);
+  const aimed = step(s, 'L');
+  assert.deepEqual(aimed.events, [{ type: 'aim', x: 1, y: 0, dir: 'E' }, { type: 'glint', id: 'R1' }]);
+  const again = step(aimed, 'Z');
+  assert.deepEqual(again.events, [{ type: 'wait' }], 'a glint only when it becomes lit');
+});
+
+test('events: a beetle crawling in the dark moves', () => {
+  const s = step(parse(['W.../']), 'Z');
+  assert.deepEqual(s.events, [{ type: 'wait' }, { type: 'move', who: 'R1', from: { x: 4, y: 0 }, to: { x: 3, y: 0 } }]);
+});
+
+test('key: tells beam directions and an open lantern apart, and both shells apart', () => {
+  const s = shut(['.....', '.WL..', '.....']);
+  const east = step(s, 'L');
+  const round = step(east, 'L');
+  const south = run(step(run(east, ['N', 'E']), 'L'), ['W', 'S']);   // aimed south from the north, then back
+  assert.deepEqual(south.wren, east.wren);
+  assert.equal(south.lantern.beam, 'S');
+  assert.equal(new Set([key(east), key(round), key(south)]).size, 3);
+  assert.equal(key(round), key(s));
+  assert.notEqual(key(parse(['W/'])), key(parse(['W\\'])));
+  const keys = ['W/', 'WO', 'WM', 'WS', 'W>', 'Wn', 'WK'].map((row) => key(parse([row, '..'])));
+  assert.equal(new Set(keys).size, keys.length, 'a beetle is not another creature');
+});
+
+test('beamPath: null for a round or carried lantern; otherwise the corners of the beam', () => {
+  const s = shut(['WL......']);
+  assert.equal(beamPath(s), null);
+  assert.equal(beamPath(parse(['W...'])), null);
+  assert.deepEqual(beamPath(step(s, 'L')), [{ x: 1, y: 0 }, { x: 5, y: 0 }]);
+  assert.deepEqual(beamPath(step(shut(['WLH.']), 'L')), [{ x: 1, y: 0 }], 'Hush right in front: the lantern alone');
+  assert.deepEqual(beamPath(step(shut(['WL.#..']), 'L')), [{ x: 1, y: 0 }, { x: 3, y: 0 }], 'to the wall it lights');
+  const loop = step(shut(['.......', './...\\.', '.......', '.\\WL./.', '.......']), 'L');
+  assert.deepEqual(beamPath(loop), [{ x: 3, y: 3 }, { x: 5, y: 3 }, { x: 5, y: 1 }, { x: 1, y: 1 }, { x: 1, y: 3 }, { x: 5, y: 3 }]);
+  assert.equal(beamPath(step(shut(['WL.', '.O.']), 'L')), null, 'a shadowed lantern lights nothing');
+});
+
 test('roots: a Stumpcap presses a root whether asleep or awake', () => {
   const asleep = parse(['W.>A'], { under: { '2,0': 'a' } });
   assert.equal(isAwake(asleep, only(asleep, 'T')), false);
@@ -1710,6 +1966,29 @@ function referenceStep(s, action) {
       for (const [dx, dy] of Object.values(DIRS)) shadow.add(at(c.x + dx, c.y + dy));
     }
     const transparent = (x, y) => tile(x, y) !== '#' && tile(x, y) !== 'H' && !creatureOn(x, y) && !shadow.has(at(x, y));
+    // An aimed lantern: its own tile, then up to 4 tiles straight on, turning on every Mirrorbeetle (which
+    // starts a fresh 4) until something stops it. Coming back to a beetle from the same direction ends it.
+    const beam = (px, py, dir) => {
+      if (shadow.has(at(px, py))) return;
+      lit.add(at(px, py));
+      const turned = new Set();
+      let [x, y, d, left] = [px, py, dir, 4];
+      while (left > 0) {
+        [x, y] = [x + DIRS[d][0], y + DIRS[d][1]];
+        left--;
+        if (x < 0 || y < 0 || x >= s.w || y >= s.h || tile(x, y) === 'H' || shadow.has(at(x, y))) break;
+        lit.add(at(x, y));
+        const c = creatureOn(x, y);
+        if (c && c.type === 'R') {
+          if (turned.has(`${x},${y},${d}`)) break;
+          turned.add(`${x},${y},${d}`);
+          d = { '/': { N: 'E', E: 'N', S: 'W', W: 'S' }, '\\': { N: 'W', W: 'N', S: 'E', E: 'S' } }[c.dir][d];
+          left = 4;
+        } else if (!transparent(x, y)) {
+          break;
+        }
+      }
+    };
     const flood = (px, py, radius) => {
       if (shadow.has(at(px, py))) return;
       const mine = new Set([at(px, py)]);
@@ -1730,7 +2009,8 @@ function referenceStep(s, action) {
       }
       for (const t of mine) lit.add(t);
     };
-    if (!(lantern.carried && tile(lantern.x, lantern.y) === 'H')) flood(lantern.x, lantern.y, lantern.carried ? 1 : 2);
+    if (lantern.beam) beam(lantern.x, lantern.y, lantern.beam);
+    else if (!(lantern.carried && tile(lantern.x, lantern.y) === 'H')) flood(lantern.x, lantern.y, lantern.carried ? 1 : 2);
     for (const c of creatures) if (c.type === 'K' && c.heat === 2) flood(c.x, c.y, 1);
     return lit;
   };
@@ -1749,6 +2029,10 @@ function referenceStep(s, action) {
       lantern = { x, y, carried: false };
     } else if (lantern.x === x && lantern.y === y) {
       lantern = { x, y, carried: true };
+    } else if (s.shutter && Math.abs(lantern.x - x) + Math.abs(lantern.y - y) === 1) {
+      // aim away from Wren; aiming the way it already points opens it again
+      const dir = lantern.x > x ? 'E' : lantern.x < x ? 'W' : lantern.y > y ? 'S' : 'N';
+      lantern = lantern.beam === dir ? { x: lantern.x, y: lantern.y, carried: false } : { x: lantern.x, y: lantern.y, carried: false, beam: dir };
     } else {
       return null;
     }
@@ -1784,8 +2068,8 @@ function referenceStep(s, action) {
       else if (vy !== 0 && canEnter('K', x, y + vy)) y += vy;
       else continue;
     } else {
-      if (smothered || (c.type === 'S' && lit)) continue;
-      const toward = c.type === 'M' || c.type === 'O' ? 1 : -1;
+      if (smothered || ((c.type === 'S' || c.type === 'R') && lit)) continue;
+      const toward = c.type === 'S' ? -1 : 1;
       const hx = Math.sign(lantern.x - x) * toward;
       const vy = Math.sign(lantern.y - y) * toward;
       if (hx !== 0 && canEnter(c.type, x + hx, y)) x += hx;
@@ -1833,11 +2117,15 @@ test('step agrees with a naive reference implementation on every move of thousan
     'Emberwicks, a planted lantern and Hush': ['L.K......', '.HHH.K.G.', 'W...~....', '..b.B..S.'],
     'Gloamlings with every other species': ['W..O.v...', '.K.a.A.S.', '..e..~M..', 'G...H..OG'],
     'a Gloamling, a planted lantern, an ember and Hush': ['L.K...O..', '.HHH.S.G.', 'W...~..>.', '..b.B..a.'],
+    'Mirrorbeetles without a shutter': ['W.......\\', '.../.M...', '..#.~..SG', '\\....a.A.'],
+    'a shutter, Mirrorbeetles and a bud': { shutter: true, map: ['W.L..\\...', '.......~.', '/..#..G..', '.....\\...'] },
+    'a shutter, beetles and every other species': { shutter: true, map: ['W..L.v.\\.', '.K.a.A.S.', '/.e..~M..', 'G...H..O\\'] },
+    'a ring of beetles round an aimed lantern': { shutter: true, map: ['.......', './...\\.', '.......', '.\\WL./.', '.......'] },
   };
   const byId = (a, b) => (a.id < b.id ? -1 : 1);
-  for (const [name, map] of Object.entries(boards)) {
+  for (const [name, board] of Object.entries(boards)) {
     await t.test(name, () => {
-      const start = parse(map);
+      const start = Array.isArray(board) ? parse(board) : parse(board.map, { shutter: board.shutter });
       const seen = new Set([key(start)]);
       const queue = [start];
       let compared = 0;

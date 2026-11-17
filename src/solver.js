@@ -62,7 +62,9 @@ const SPECIES = {
   D: { chars: 'nesw', name: 'Dozer newt' },
   K: { chars: 'K', name: 'Emberwick' },
   O: { chars: 'O', name: 'Gloamling' },
+  R: { chars: '/\\', name: 'Mirrorbeetle' },
 };
+const FEATURES = 'M, S, T, D, K, O, R, L, A';
 
 // The level with every creature of one species taken out. Whatever terrain was under a creature stays.
 function withoutSpecies(levelDef, species) {
@@ -133,7 +135,7 @@ export function checkLevel(levelDef, opts) {
 
   const feature = levelDef.feature;
   if (typeof feature !== 'string' || feature.length === 0) {
-    problems.push('feature must list at least one of M, S, T, D, K, O, L');
+    problems.push(`feature must list at least one of ${FEATURES}`);
     return result;
   }
   for (const f of new Set(feature)) {
@@ -143,6 +145,13 @@ export function checkLevel(levelDef, opts) {
     if (f === 'L') {
       what = 'planting the lantern';
       without = solve(start, { ...options, actions: (options.actions || ACTIONS).filter((a) => a !== 'L') });
+    } else if (f === 'A') {
+      what = 'aiming the lantern';
+      if (!start.shutter) {
+        problems.push("feature 'A': the level has no shutter (shutter: true)");
+        continue;
+      }
+      without = solve(parseLevel({ ...levelDef, shutter: false }), options);
     } else if (Object.prototype.hasOwnProperty.call(SPECIES, f)) {
       what = `any ${SPECIES[f].name}`;
       if (!start.creatures.some((c) => c.type === f)) {
@@ -151,7 +160,7 @@ export function checkLevel(levelDef, opts) {
       }
       without = solve(parseLevel(withoutSpecies(levelDef, f)), options);
     } else {
-      problems.push(`feature '${f}' is not one of M, S, T, D, K, O, L`);
+      problems.push(`feature '${f}' is not one of ${FEATURES}`);
       continue;
     }
     result.searched += without.explored;

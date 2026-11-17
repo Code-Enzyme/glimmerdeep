@@ -16,7 +16,8 @@
 export const SOUND_NAMES = [
   'step', 'blocked', 'plant', 'pickup', 'wait', 'moth', 'settle', 'whelkMove', 'whelkHide',
   'whelkEmerge', 'stumpStep', 'stumpBump', 'stumpWake', 'newtStep', 'newtTurn', 'newtDoze', 'newtWake',
-  'emberWarm', 'emberCool', 'emberIgnite', 'emberStep', 'gloamDrift', 'gloamSnuff', 'gateOpen', 'gateClose', 'budOn', 'budOff',
+  'emberWarm', 'emberCool', 'emberIgnite', 'emberStep', 'gloamDrift', 'gloamSnuff', 'aim', 'beetleCrawl', 'beetleGlint',
+  'gateOpen', 'gateClose', 'budOn', 'budOff',
   'solve', 'undo', 'restart', 'ui', 'hint',
 ];
 
@@ -51,7 +52,8 @@ const LEVELS = {
   step: 0.24, blocked: 0.225, plant: 0.4, pickup: 0.25, wait: 0.11, moth: 0.1, settle: 0.3,
   whelkMove: 0.12, whelkHide: 0.15, whelkEmerge: 0.18, stumpStep: 0.195, stumpBump: 0.28,
   stumpWake: 0.1, newtStep: 0.27, newtTurn: 0.5, newtDoze: 0.25, newtWake: 0.27,
-  emberWarm: 0.5, emberCool: 0.3, emberIgnite: 0.25, emberStep: 0.235, gloamDrift: 0.24, gloamSnuff: 0.36, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
+  emberWarm: 0.5, emberCool: 0.3, emberIgnite: 0.25, emberStep: 0.235, gloamDrift: 0.24, gloamSnuff: 0.36,
+  aim: 0.3, beetleCrawl: 0.16, beetleGlint: 0.2, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
   undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185,
 };
 
@@ -59,15 +61,15 @@ const LEVELS = {
 const FOLEY = {
   step: 1, wait: 1, moth: 1, whelkMove: 1, whelkHide: 1, whelkEmerge: 1, stumpStep: 1,
   stumpBump: 1, stumpWake: 1, newtStep: 1, newtTurn: 1, newtDoze: 1, newtWake: 1,
-  emberWarm: 1, emberCool: 1, emberStep: 1, gloamDrift: 1,
+  emberWarm: 1, emberCool: 1, emberStep: 1, gloamDrift: 1, beetleCrawl: 1, beetleGlint: 1,
 };
 
 // What the player's own finger did. These answer at once, even while the creatures of the
 // previous turn are still sounding off.
-const ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1 };
+const ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, aim: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1 };
 
 // Repeated foley that gets a few milliseconds of loose timing when it is not already staggered.
-const LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1, emberStep: 1, gloamDrift: 1 };
+const LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1, emberStep: 1, gloamDrift: 1, beetleCrawl: 1 };
 
 // Major pentatonic. Each chapter keeps the same five-note shape and moves the drone under it,
 // which changes the mode: 1 is plain major, 2 is the relative minor, 3 hangs suspended.
@@ -693,6 +695,37 @@ SOUNDS.gloamSnuff = function (k, t) {
   const a = tone(k, 'triangle', 392, t, 0.3, 0.012, 0.34);
   a.frequency.exponentialRampToValueAtTime(196, t + 0.3);
   tone(k, 'sine', 98, t + 0.08, 0.25, 0.05, 0.4);
+};
+
+// The shutter closes round the planted lantern: a short metal slide that ends on a click, and the hum of
+// the light narrowing into a beam.
+SOUNDS.aim = function (k, t) {
+  const f = hiss(k, 'bandpass', 1800, 3, t, 0.22, 0.01, 0.12);
+  f.frequency.setValueAtTime(1800, t);
+  f.frequency.exponentialRampToValueAtTime(4200, t + 0.11);
+  hiss(k, 'highpass', 5200, 1, t + 0.12, 0.3, 0.001, 0.018);
+  woodKnock(k, t + 0.125, 620, 0.35, 0.05);
+  const o = tone(k, 'triangle', 523, t + 0.1, 0.22, 0.02, 0.3);
+  o.frequency.exponentialRampToValueAtTime(784, t + 0.32);
+};
+
+// Mirrorbeetle crawls: a dry patter of six small feet, quick and light.
+SOUNDS.beetleCrawl = function (k, t) {
+  const v = 1 + (k.r() - 0.5) * 0.18;
+  let at = t;
+  for (let i = 0; i < 4; i++) {
+    hiss(k, 'bandpass', (3400 + k.r() * 900) * v, 7, at, 0.28 * (1 - i * 0.12), 0.001, 0.012);
+    at += 0.028 + k.r() * 0.016;
+  }
+  tone(k, 'sine', 1200 * v, t, 0.08, 0.003, 0.05);
+};
+
+// A beam catches a Mirrorbeetle's shell: a small glassy ping with a shimmer over it.
+SOUNDS.beetleGlint = function (k, t) {
+  const v = 1 + (k.r() - 0.5) * 0.04;
+  tone(k, 'sine', 1568 * v, t, 0.36, 0.002, 0.35);
+  tone(k, 'sine', 2349 * v, t + 0.035, 0.22, 0.002, 0.28);
+  tone(k, 'triangle', 3136 * v, t + 0.07, 0.08, 0.002, 0.2);
 };
 
 // Root gate opens: the creak rises, then the lattice knocks into place.

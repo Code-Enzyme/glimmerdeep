@@ -2,7 +2,7 @@
 // No game rules in here. The game hands over states and events; this module decides what is where on
 // screen at a given moment and paints it with sprites.js.
 
-import { DIRS, terrainAt } from '../engine.js';
+import { DIRS, terrainAt, beamPath } from '../engine.js';
 import { drawDarkness, drawBackdrop, PALETTE } from '../sprites.js';
 import { drawTile, drawWren, drawLantern, drawCreature, drawGlow } from '../chars.js';
 
@@ -10,7 +10,10 @@ const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',
   a: 'root', b: 'root', c: 'root', A: 'gate', B: 'gate', C: 'gate',
 };
-const SOUND_OF_MOVE = { M: 'moth', S: 'whelkMove', T: 'stumpStep', D: 'newtStep', K: 'emberStep', O: 'gloamDrift' };
+const SOUND_OF_MOVE = {
+  M: 'moth', S: 'whelkMove', T: 'stumpStep', D: 'newtStep', K: 'emberStep', O: 'gloamDrift', R: 'beetleCrawl',
+};
+const BEAM_REACH = 4.6;   // how far the darkness lets an aimed lantern's glow reach, in tiles
 // an Emberwick warming, going cold and catching
 const SOUND_OF_HEAT = { warm: 'emberWarm', cool: 'emberCool', ignite: 'emberIgnite' };
 // a creature changing state: Stumpcaps wake in the light, newts wake in the dark and doze in the light
@@ -267,9 +270,15 @@ export class BoardView {
           cue(0, 'plant', { type: 'ring', x: e.x, y: e.y, grow: true });
           break;
         case 'pickup':
-          a.radius = { from: 2, to: 1 };
+          a.radius = { from: prev.lantern.beam ? BEAM_REACH : 2, to: 1 };
           cue(0, 'pickup', { type: 'ring', x: e.x, y: e.y, grow: false });
           break;
+        case 'aim':
+          a.beamAt = { from: prev.lantern.beam ? 1 : 0, to: e.dir ? 1 : 0 };
+          a.radius = { from: prev.lantern.beam ? BEAM_REACH : 2, to: e.dir ? BEAM_REACH : 2 };
+          cue(0, 'aim', { type: 'ring', x: e.x, y: e.y, grow: e.dir === null });
+          break;
+        case 'glint': once(a.settleAt, 'beetleGlint'); break;
         case 'wait':
           cue(0, 'wait', { type: 'wait', x: next.wren.x, y: next.wren.y });
           break;
@@ -314,6 +323,55 @@ export class BoardView {
     a.endAt = Math.max(a.settleAt + (a.ghosts.length ? T.drop : 0), tween ? 0 : T.hold);
     a.doneAt = Math.max(a.endAt, a.radius ? 240 : 0, a.cues.length ? a.cues[a.cues.length - 1].at : 0);
     this.anim = a;
+  }
+
+  // An aimed lantern's beam: a soft shaft of light along its path, over the darkness, so the direction reads at a
+  // glance. `grow` runs 0 to 1 while the shutter is closing (or opening, then it shrinks).
+  drawBeam(ctx, L, s, grow, change, t) {
+    if (this.beamState !== s) {
+      this.beamState = s;
+      this.beamPts = beamPath(s);
+    }
+    let pts = this.beamPts;
+    let k = 1;
+    if (change) {
+      const p = easeOut(grow);
+      k = lerp(change.from, change.to, p);
+      if (!pts && change.from === 1 && this.lastBeamPts) pts = this.lastBeamPts;
+    }
+    if (pts) this.lastBeamPts = pts;
+    if (!pts || pts.length < 2 || k <= 0) return;
+    const { size, ox, oy } = L;
+    // the end of the beam stops at the near face of whatever it lit last when that is a wall
+    const end = pts[pts.length - 1];
+    const prev = pts[pts.length - 2];
+    let ex = end.x;
+    let ey = end.y;
+    if (terrainAt(s, end.x, end.y) === '#') {
+      ex -= Math.sign(end.x - prev.x) * 0.45;
+      ey -= Math.sign(end.y - prev.y) * 0.45;
+    }
+    const path = new Path2D();
+    path.moveTo(ox + (pts[0].x + 0.5) * size, oy + (pts[0].y + 0.5) * size);
+    for (let i = 1; i < pts.length - 1; i++) path.lineTo(ox + (pts[i].x + 0.5) * size, oy + (pts[i].y + 0.5) * size);
+    path.lineTo(ox + (ex + 0.5) * size, oy + (ey + 0.5) * size);
+    const shimmer = this.reduced ? 1 : 0.92 + 0.08 * Math.sin(t * 3.1);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.16 * k * shimmer;
+    ctx.strokeStyle = '#FFC872';
+    ctx.lineWidth = size * 0.5;
+    ctx.stroke(path);
+    ctx.globalAlpha = 0.22 * k * shimmer;
+    ctx.lineWidth = size * 0.2;
+    ctx.stroke(path);
+    ctx.globalAlpha = 0.3 * k;
+    ctx.strokeStyle = '#FFF2CF';
+    ctx.lineWidth = Math.max(1, size * 0.05);
+    ctx.stroke(path);
+    ctx.restore();
   }
 
   // Lets go of the running animation. Sounds and sparkles it still owed are given at once, so a bloom
@@ -438,7 +496,7 @@ export class BoardView {
     let lit = lightState.lit;
     let source = this.source;
     const carried = lightState.lantern.carried;
-    let radius = carried ? 1 : 2;
+    let radius = carried ? 1 : lightState.lantern.beam ? BEAM_REACH : 2;
     if (a && a.radius) radius = lerp(a.radius.from, a.radius.to, easeOut(clamp01(tau / 220)));
     // the lantern lights nothing while smothered in the Hush or eaten by a Gloamling's shadow
     const smothered = !lanternLit(lightState);
@@ -576,7 +634,7 @@ export class BoardView {
       const px = ox + th.x * size;
       const py = oy + th.y * size;
       if (th.z === 0 || th.z === 3) {
-        drawLantern(ctx, px + share * 0.27 * size, py + share * 0.07 * size, size, { t, out: smothered });
+        drawLantern(ctx, px + share * 0.27 * size, py + share * 0.07 * size, size, { t, out: smothered, beam: s.lantern.beam });
       } else if (th.z === 1) {
         if (th.alpha < 1) ctx.globalAlpha = th.alpha;
         drawCreature(ctx, th.c.type, px, py + th.drop * size, size, { t, dir: th.dir, lit: th.lit, hidden: th.hidden, awake: th.awake, heat: th.heat });
@@ -589,6 +647,7 @@ export class BoardView {
     }
 
     drawDarkness(ctx, { ox, oy, size, w: s.w, h: s.h, lit, source, t, highContrast: this.highContrast });
+    if (!cel) this.drawBeam(ctx, L, lightState, a ? clamp01(tau / 200) : 1, a && a.beamAt, t);
 
     // Glowing markings shine through the dark, so creatures and Wren can be found in unlit tiles.
     for (let i = 0; i < things.length; i++) {

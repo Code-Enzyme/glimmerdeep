@@ -63,6 +63,17 @@ export class Session {
     return step(this.state, 'L') !== null;
   }
 
+  // What the lantern button (and tapping Wren) does now: 'plant' | 'pickup' | 'aim' | 'open', or null when
+  // it does nothing. Aiming is only possible in a level with a shutter, from beside the planted lantern.
+  lanternAction() {
+    const s = this.state;
+    const next = step(s, 'L');
+    if (next === null) return s.lantern.carried ? 'plant' : null;
+    const e = next.events[0];
+    if (e.type === 'aim') return e.dir === null ? 'open' : 'aim';
+    return e.type;
+  }
+
   bloomCount() {
     let n = 0;
     const bloom = this.state.bloom;

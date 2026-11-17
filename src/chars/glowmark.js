@@ -664,23 +664,54 @@ export function drawWren(ctx, px, py, size, opts) {
   }
 }
 
-// the planted lantern; `out` when a Gloamling's shadow has put it out
+// The shutter closed round a planted lantern: dark iron leaves over the glass, open only on the side the
+// beam leaves by (d: 0 N, 1 E, 2 S, 3 W). North is away from the viewer, so the front is covered and only the
+// top of the glass shows; south faces the viewer, so both side leaves stand open.
+function paintShutter(p, d, on) {
+  const cx = 0.5;
+  const top = 0.3 + 0.28 * 0.6;
+  const bot = 0.3 + 0.84 * 0.6;
+  const leaf = (x0, x1) => roundPoly([[x0, top], [x1, top], [x1, bot], [x0, bot]], 0.02);
+  const leaves = [];
+  if (d === 0) leaves.push(leaf(cx - 0.17, cx + 0.17));
+  else if (d === 1) leaves.push(leaf(cx - 0.19, cx + 0.04));
+  else if (d === 3) leaves.push(leaf(cx - 0.04, cx + 0.19));
+  else { leaves.push(leaf(cx - 0.2, cx - 0.1)); leaves.push(leaf(cx + 0.1, cx + 0.2)); }
+  for (const l of leaves) {
+    p.body(l, cx, (top + bot) / 2, 0.2, T_METAL, 0.01);
+    if (on) p.line(l, AMBER, 0.01, 0.5, 0.03);
+  }
+  // a little arrow of light on the open side, so the aim reads even when the beam is short
+  if (!on) return;
+  const ray = new Path2D();
+  const my = (top + bot) / 2;
+  if (d === 1) { ray.moveTo(cx + 0.2, my); ray.lineTo(cx + 0.34, my); }
+  else if (d === 3) { ray.moveTo(cx - 0.2, my); ray.lineTo(cx - 0.34, my); }
+  else if (d === 0) { ray.moveTo(cx, top - 0.02); ray.lineTo(cx, top - 0.12); }
+  else { ray.moveTo(cx, bot + 0.01); ray.lineTo(cx, bot + 0.08); }
+  p.line(ray, '#FFE7A8', 0.03, 0.9, 0.08);
+}
+
+// the planted lantern; `out` when a Gloamling's shadow has put it out; `beam` ('N' | 'E' | 'S' | 'W') when aimed
 export function drawLantern(ctx, px, py, size, opts) {
   const o = opts || {};
   const t = o.t || 0;
   const b = bucket(ctx, size);
   const on = !o.out;
   const f = on ? Math.floor(t * 8) & 3 : 0;
-  const s = get(b, 'L' + (on ? f : 'out'), (p) => {
+  const d = DIRS[o.beam] === undefined ? -1 : DIRS[o.beam];
+  const s = get(b, 'L' + (on ? f : 'out') + (d < 0 ? '' : 'b' + d), (p) => {
     groundShadow(p, 0.5, 0.9, 0.26, 0.065, 0.7);
     // a little iron foot pushed into the floor
     const foot = roundPoly([[0.4, 0.86], [0.6, 0.86], [0.66, 0.92], [0.34, 0.92]], 0.02);
     p.body(foot, 0.5, 0.88, 0.15, T_METAL, 0.01);
     paintLantern(p, 0.5, 0.3, 0.36, 0.6, on, f);
+    if (d >= 0) paintShutter(p, d, on);
   });
   if (!s) return;
   put(ctx, s, px, py, size, on ? 0.85 + 0.15 * flicker(t) : 0);
-  if (on) halo(ctx, b, px + 0.5 * size, py + 0.64 * size, size * 1.35, 0.32 + 0.14 * flicker(t));
+  // aimed, the round halo shrinks: the light goes out along the beam instead
+  if (on) halo(ctx, b, px + 0.5 * size, py + 0.64 * size, size * (d < 0 ? 1.35 : 0.8), (d < 0 ? 0.32 : 0.2) + 0.14 * flicker(t));
 }
 
 // ---------------------------------------------------------------------------
@@ -1343,6 +1374,65 @@ function paintGloam(p, f) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Mirrorbeetle: a round, low beetle whose back is a mirror, slanted like its map character (/ or \).
+// No head markings at all: the only bright thing on it is the mirror bar, so the slant reads first.
+// ---------------------------------------------------------------------------
+
+const T_BEETLE = ['#3C5A70', '#203246', '#0C1622'];
+const T_BEETLE_LEG = ['#2E3C4E', '#1A2433', '#0B1018'];
+const MIRROR = '#D8F0FF';
+const RIM_BEETLE = '#7FB6D2';
+
+function paintBeetle(p, shell, lit, f) {
+  const g = p.g;
+  const dm = lit ? 0.9 : 0.55;
+  groundShadow(p, 0.5, 0.84, 0.36, 0.07, 0.75);
+  // six short legs, three a side, that shuffle while it crawls (frames 0 and 1); still while it basks
+  const legs = new Path2D();
+  for (let i = 0; i < 3; i++) {
+    const y = 0.64 + i * 0.075;
+    const k = lit ? 0 : ((f + i) & 1 ? 0.018 : -0.018);
+    legs.moveTo(0.3, y);
+    legs.quadraticCurveTo(0.2, y + 0.01 + k, 0.165, y + 0.05 + k);
+    legs.moveTo(0.7, y);
+    legs.quadraticCurveTo(0.8, y + 0.01 - k, 0.835, y + 0.05 - k);
+  }
+  p.strokeBody(legs, T_BEETLE_LEG[2], 0.028);
+  // the front plate, plain, then the domed back
+  const front = ell(0.5, 0.49, 0.12, 0.075);
+  p.body(front, 0.5, 0.48, 0.12, T_BEETLE_LEG, 0.012);
+  const back = ell(0.5, 0.67, 0.28, 0.19);
+  p.body(back, 0.5, 0.64, 0.28, T_BEETLE, 0.02);
+  // a fine silver rim round the back, so the dome reads in the dark
+  p.line(ell(0.5, 0.67, 0.255, 0.168), MIRROR, 0.008, dm * 0.45, 0.03);
+  // the mirror: a bright bar across the back, slanted like the map character
+  const m = new Path2D();
+  const [x0, y0, x1, y1] = shell ? [0.31, 0.55, 0.69, 0.79] : [0.31, 0.79, 0.69, 0.55];
+  m.moveTo(x0, y0);
+  m.lineTo(x1, y1);
+  p.strokeBody(m, '#0A0610', 0.085);
+  p.line(m, MIRROR, 0.052, dm, 0.09);
+  // basking, a glint runs along the mirror
+  if (lit) {
+    const u = (f % 8) / 8;
+    const gx = x0 + (x1 - x0) * u;
+    const gy = y0 + (y1 - y0) * u;
+    p.dot(gx, gy, 0.012 + 0.018 * Math.sin(Math.PI * u), '#FFFFFF', 0.95, 0.05);
+  }
+  if (!p.glow) {
+    // a soft sheen on the upper flank of the dome
+    g.save();
+    g.clip(back);
+    g.strokeStyle = 'rgba(190,225,255,0.12)';
+    g.lineWidth = p.lw(0.02);
+    g.beginPath();
+    g.ellipse(0.47, 0.64, 0.2, 0.12, 0, Math.PI * 1.1, Math.PI * 1.6);
+    g.stroke();
+    g.restore();
+  }
+}
+
 function paintZ(p) {
   const z = new Path2D();
   z.moveTo(0.3, 0.32);
@@ -1431,6 +1521,19 @@ function creatureSpec(b, type, o) {
       sp.sx = 1 + 0.012 * br;
       sp.sy = 1 - 0.015 * br;
       sp.ay = 0.86;
+    }
+  } else if (type === 'R') {
+    const shell = o.dir === '\\' ? 1 : 0;
+    const f = lit ? Math.floor(t * 5) % 8 : Math.floor(t * 3) & 1;
+    sp.s = get(b, 'R' + shell + lit + '.' + f, (p) => paintBeetle(p, shell, lit, f), lit ? RIM_WARM : RIM_BEETLE, lit ? 0 : 0.34);
+    if (lit) {
+      sp.glowA = 0.85 + 0.15 * Math.sin(t * 3);
+    } else {
+      const br = Math.sin(t * 1.6);
+      sp.sx = 1 + 0.012 * br;
+      sp.sy = 1 - 0.015 * br;
+      sp.ay = 0.86;
+      sp.emitA = 0.62 + 0.08 * br;
     }
   } else if (type === 'O') {
     // always in its own shadow: it hovers, sways and is known by its edge and the motes it swallows

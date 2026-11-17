@@ -1,5 +1,5 @@
-// Chapter 5 and 6 level-design search (scratch tooling, not shipped).
-//   node dev/levels-ch5-search.js <skeleton> [--set=ch6] [--min=6] [--max=40] [--top=12] [--states=120000]
+// Chapter 5 to 7 level-design search (scratch tooling, not shipped).
+//   node dev/levels-ch5-search.js <skeleton> [--set=ch6|ch7] [--min=6] [--max=40] [--top=12] [--states=120000]
 // The skeleton is a map with some pieces left out. `place` lists the pieces to put on it (for example
 // ['W', 'K'] or ['W', 'K', 'S']); each goes on every free floor cell, or on the cells listed under its
 // character in `cells`. Every placement is solved; those that pass checkLevel are listed, longest first,
@@ -18,7 +18,7 @@ const name = args.find((a) => !a.startsWith('--'));
 const sk = SKELETONS[name];
 if (!sk) throw new Error(`no skeleton ${name}; have ${Object.keys(SKELETONS).join(', ')}`);
 const base = sk.map;
-const feature = opt('feature', sk.feature || (set === 'ch6' ? 'O' : 'K'));
+const feature = opt('feature', sk.feature || ({ ch6: 'O', ch7: 'R' }[set] || 'K'));
 const min = Number(opt('min', 6));
 const max = Number(opt('max', 40));
 const top = Number(opt('top', 12));
@@ -33,16 +33,19 @@ const floor = [];
 for (let y = 0; y < base.length; y++) for (let x = 0; x < base[0].length; x++) if (base[y][x] === '.') floor.push([x, y]);
 const cellsOf = (ch) => (sk.cells && sk.cells[ch]) || floor;
 // a piece char may stand for several variants (a newt's four facings, say)
-const VARIANTS = { D: 'nesw', T: '^>v<' };
+const VARIANTS = { D: 'nesw', T: '^>v<', R: '/\\' };
 
 function story(def, moves) {
   let s = parseLevel(def);
-  const n = { ignite: -1, plant: 0, Z: 0 };
+  const n = { ignite: -1, plant: 0, Z: 0, aim: 0 };
   moves.forEach((m, i) => {
     if (m === 'Z') n.Z++;
     if (m === 'L') n.plant++;
     s = step(s, m);
-    for (const e of s.events) if (e.type === 'ignite' && n.ignite < 0) n.ignite = i + 1;
+    for (const e of s.events) {
+      if (e.type === 'ignite' && n.ignite < 0) n.ignite = i + 1;
+      if (e.type === 'aim') n.aim++;
+    }
   });
   const opp = { N: 'S', S: 'N', E: 'W', W: 'E' };
   n.idle = n.Z;
@@ -56,7 +59,7 @@ const why = { unsolvable: 0, 'too big': 0, 'par out of range': 0 };
 function rec(map, i, used, last) {
   if (i === place.length) {
     if (placed++ % shardN !== shardI) return;
-    const def = { id: 'x', name, map, par: 0, feature, under: sk.under };
+    const def = { id: 'x', name, map, par: 0, feature, under: sk.under, shutter: sk.shutter };
     let st;
     try { st = parseLevel(def); } catch (e) { return; }
     if (st.solved) return;

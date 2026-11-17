@@ -852,6 +852,51 @@ async function main() {
       ok('ad-hoc gloam: the lantern looks out on screen', snuffed < shining * 0.5, JSON.stringify({ shining, snuffed }));
       await h.shot('gloam-snuffed');
     }
+    // beam: the Shutter and Mirrorbeetle cards; beside the planted lantern the button aims it; the beam reaches
+    // further on screen; a beetle's mirror shows in the dark, it crawls and glints with sounds of its own
+    {
+      const bright = (x, y, over) => h.page.evaluate(([tx, ty, o]) => {
+        const L = window.__gd.layout();
+        const c = document.querySelector('#screen-level canvas');
+        const k = L.dpr;
+        const d = c.getContext('2d').getImageData(Math.round((L.ox + tx * L.size) * k), Math.round((L.oy + ty * L.size) * k),
+          Math.round(L.size * k), Math.round(L.size * k)).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > o) n++;
+        return n / (d.length / 4);
+      }, [x, y, over]);
+      const def = { id: 'T-9', name: 'Beam Test', shutter: true, map: ['#########', '#WL....\\#', '#########'] };
+      await h.gd('loadLevelDef', def);
+      await h.page.waitForTimeout(300);
+      eq('ad-hoc beam: the beetle starts in the dark', engine.parseLevel(def).lit[1 * 9 + 7], 0);
+      const onBeetle = await bright(7, 1, 300);
+      const onFloor = await bright(5, 1, 300);
+      ok('ad-hoc beam: a beetle\'s mirror shows in the dark', onBeetle > 0.006 && onBeetle > onFloor * 4, JSON.stringify({ onBeetle, onFloor }));
+      await cardCheck('Mirrorbeetle', 7, 1, 'Mirrorbeetle', CARDS.Mirrorbeetle);
+      await cardCheck('shutter lantern', 2, 1, 'Shutter', CARDS.Shutter);
+      eq('ad-hoc beam: beside the lantern the button aims', await h.page.locator('#btn-lantern .lbl').textContent(), 'Aim');
+      eq('ad-hoc beam: and says so to a screen reader', await h.page.locator('#btn-lantern').getAttribute('aria-label'), 'Aim the lantern');
+      await h.gd('act', 'Z');
+      await h.idle();
+      eq('ad-hoc beam: in the dark the beetle crawls toward the lantern', (await h.gd('state')).creatures[0].x, 6);
+      ok('ad-hoc beam: it crawls with a sound of its own', (await h.gd('heard')).includes('beetleCrawl'), JSON.stringify(await h.gd('heard')));
+      await h.page.waitForTimeout(200);
+      const before = await bright(5, 1, 450);
+      await h.tap(await h.wren());
+      await h.idle();
+      await h.page.waitForTimeout(250);
+      eq('ad-hoc beam: tapping Wren aims the lantern away from her', (await h.gd('state')).lantern.beam, 'E');
+      const heard = await h.gd('heard');
+      ok('ad-hoc beam: the shutter has a sound', heard.includes('aim'), JSON.stringify(heard));
+      ok('ad-hoc beam: the beam catching the beetle has a sound', heard.includes('beetleGlint'), JSON.stringify(heard));
+      eq('ad-hoc beam: aimed back at it, the button opens it', await h.page.locator('#btn-lantern .lbl').textContent(), 'Open');
+      const after = await bright(5, 1, 450);
+      ok('ad-hoc beam: the beam reaches past round light on screen', after > before * 3 && after > 0.05, JSON.stringify({ before, after }));
+      await h.shot('beam-mirror');
+      await h.page.locator('#btn-lantern').tap();
+      await h.idle();
+      eq('ad-hoc beam: the button opens it back to round light', (await h.gd('state')).lantern.beam, undefined);
+    }
     // trio: starts with a planted lantern, has Hush and two buds
     await h.gd('loadLevelDef', ADHOC.trio);
     {

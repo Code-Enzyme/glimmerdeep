@@ -229,6 +229,33 @@ test('checkTutorial: knows the Gloamling', () => {
   assert.ok(checkTutorial(def(MOTH, [{ card: 'O', until: 'card' }])).length, 'no Gloamling on the map');
 });
 
+test('checkTutorial: knows the Shutter card, aiming, the Mirrorbeetle and its glint', () => {
+  const beam = def(['WL../'], [
+    { card: 'A', until: 'card' },
+    { say: 'Tap Wren to aim the lantern.', point: 'wren', gesture: 'tap', until: 'aim' },
+  ], { feature: 'A', shutter: true });
+  assert.deepEqual(checkTutorial(beam), []);
+  const t = new Tutorial(beam.tutorial);
+  t.cardClosed();
+  play(beam, t, ['L']);
+  assert.equal(t.done, true, 'aiming finishes an aim step');
+
+  const beetle = def(['WL../'], [
+    { card: 'R', until: 'card' },
+    { say: 'Catch the beetle in the beam.', point: 'R', until: 'glint' },
+  ], { feature: 'R', shutter: true });
+  assert.deepEqual(checkTutorial(beetle), []);
+  assert.deepEqual(resolvePoint('R', parseLevel(beetle)), { kind: 'creature', id: 'R1', x: 4, y: 0 });
+  const u = new Tutorial(beetle.tutorial);
+  u.cardClosed();
+  play(beetle, u, ['L']);
+  assert.equal(u.done, true, 'the beam catching the beetle finishes a glint step');
+  assert.deepEqual(checkTutorial(def(['W.\\'], [{ card: 'R', until: 'card' }])), [], 'a back-slanted shell is a beetle too');
+
+  assert.ok(checkTutorial(def(MOTH, [{ card: 'R', until: 'card' }])).length, 'no Mirrorbeetle on the map');
+  assert.ok(checkTutorial(def(MOTH, [{ card: 'A', until: 'card' }])).length, 'no shutter in the level');
+});
+
 test('stuck nudge comes six moves after par', () => {
   assert.equal(STUCK_AFTER, 6);
 });

@@ -26,6 +26,19 @@ const HINT_BUDGET = 150000;
 const STUCK_TEXT = 'Stuck? Hint shows the next move, and Undo steps back.';
 const STUCK_FOR = 4;       // moves the stuck nudge stays up
 const DIR_WORD = { N: 'north', E: 'east', S: 'south', W: 'west' };
+// The lantern button: [label, screen-reader label] and the hint for each thing it can do (session.lanternAction()).
+const LANTERN_LABEL = {
+  plant: ['Plant', 'Plant the lantern'],
+  pickup: ['Pick up', 'Pick up the lantern'],
+  aim: ['Aim', 'Aim the lantern'],
+  open: ['Open', 'Open the lantern'],
+};
+const LANTERN_HINT = {
+  plant: 'Hint: set the lantern down here.',
+  pickup: 'Hint: pick the lantern up.',
+  aim: 'Hint: aim the lantern from here.',
+  open: 'Hint: open the lantern again.',
+};
 const KEYS = {
   ArrowUp: 'N', w: 'N', W: 'N',
   ArrowRight: 'E', d: 'E', D: 'E',
@@ -286,13 +299,13 @@ function refreshHud() {
   setDisabled(btn.restart, !session.canUndo && session.state === session.start);
   setDisabled(btn.wait, over);
   setDisabled(btn.hint, over);
-  const carried = session.state.lantern.carried;
+  const action = session.lanternAction() || 'pickup';
   setDisabled(btn.lantern, over || !session.canUseLantern());
-  const label = carried ? 'Plant' : 'Pick up';
+  const label = LANTERN_LABEL[action];
   const lbl = btn.lantern.querySelector('.lbl');
-  if (lbl.textContent !== label) {
-    lbl.textContent = label;
-    btn.lantern.setAttribute('aria-label', carried ? 'Plant the lantern' : 'Pick up the lantern');
+  if (lbl.textContent !== label[0]) {
+    lbl.textContent = label[0];
+    btn.lantern.setAttribute('aria-label', label[1]);
   }
 
   refreshCoach();
@@ -590,7 +603,7 @@ function showHint(move) {
     message = `Hint: step ${DIR_WORD[move]}.`;
   } else if (move === 'L') {
     view.hint = { ring: true };
-    message = session.state.lantern.carried ? 'Hint: set the lantern down here.' : 'Hint: pick the lantern up.';
+    message = LANTERN_HINT[session.lanternAction()] || 'Hint: pick the lantern up.';
     pulse(btn.lantern, true);
   } else {
     view.hint = { ring: true };

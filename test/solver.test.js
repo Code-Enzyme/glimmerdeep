@@ -245,6 +245,31 @@ test('checkLevel: knows the Gloamling as a feature', () => {
   assert.ok(missing.problems.some((p) => p.includes('no Gloamling')), missing.problems.join('; '));
 });
 
+test('checkLevel: aiming (A) is necessary when the level has no solution without its shutter', () => {
+  // The bud is three tiles past the last tile Wren can reach, so only a beam reaches it: one L, aimed east.
+  const beam = checkLevel(def(['WL.~~G'], { feature: 'A', par: 1, shutter: true }));
+  assert.deepEqual(beam.featureOk, { A: true });
+  assert.equal(beam.ok, true, beam.problems.join('; '));
+  // With the bud one tile nearer, planting the lantern at 2,0 reaches it too.
+  const near = checkLevel(def(['WL.~G.'], { feature: 'A', par: 1, shutter: true }));
+  assert.deepEqual(near.featureOk, { A: false });
+  assert.match(near.problems.join('; '), /'A' is not necessary/);
+  const none = checkLevel(def(['W.~G'], { feature: 'LA', par: 2 }));
+  assert.deepEqual(none.featureOk, { L: true, A: false });
+  assert.match(none.problems.join('; '), /no shutter/);
+});
+
+test('checkLevel: Mirrorbeetle necessity', () => {
+  // Aimed east, the beam turns south on the beetle at 3,0 and reaches the bud three tiles down.
+  const map = ['WL.\\', '#~~~', '#~~~', '#~~G'];
+  const result = checkLevel(def(map, { feature: 'RA', par: 1, shutter: true }));
+  assert.deepEqual(result.featureOk, { R: true, A: true });
+  assert.equal(result.ok, true, result.problems.join('; '));
+  const missing = checkLevel(def(HAND_MADE.newtGate.map, { feature: 'R', par: 7 }));
+  assert.deepEqual(missing.featureOk, { R: false });
+  assert.ok(missing.problems.some((p) => p.includes('no Mirrorbeetle')), missing.problems.join('; '));
+});
+
 test('checkLevel: removing a species leaves the `under` terrain in place', () => {
   // The whelk gate again, but channel A has a second root (4,2) with a walled-in Stumpcap asleep on it.
   // Take the Stumpcap away and its root is still there, unpressed, so the gate never opens: the Stumpcap

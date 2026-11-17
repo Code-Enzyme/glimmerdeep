@@ -54,7 +54,8 @@ export function setIcon(node, name, tint) {
 
 const portraitCache = new Map();
 
-// A fully lit portrait for a rule card. kind: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'bud' | 'root' | 'gate' | 'puddle' | 'hush'
+// A fully lit portrait for a rule card. kind: 'wren' | 'lantern' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R' | 'A' | 'bud' | 'root' | 'gate' |
+// 'puddle' | 'hush' ('A' is the Shutter: a lantern aimed east)
 export function portraitUrl(kind, accent) {
   const k = kind + '|' + (accent || '') + '|' + charStyle();
   let url = portraitCache.get(k);
@@ -84,6 +85,8 @@ export function portraitUrl(kind, accent) {
         drawCreature(g, 'O', px, py, size, { t });
         drawGlow(g, 'O', px, py, size, { t, lit: false });
         break;
+      case 'R': drawCreature(g, 'R', px, py, size, { t, dir: '/', lit: true }); break;
+      case 'A': drawLantern(g, px, py, size, { t, beam: 'E' }); break;
       case 'bud': drawTile(g, 'bud', px, py, size, { t, seed: 3, lit: true, accent }); break;
       case 'root': drawTile(g, 'root', px, py, size, { t, seed: 3, channel: 'a', pressed: false }); break;
       case 'gate': drawTile(g, 'gate', px, py, size, { t, seed: 3, channel: 'A', open: false }); break;

@@ -50,8 +50,14 @@ Wren may stand on the planted lantern's tile (that is how it is picked up).
 | Action | Meaning | Legal when |
 | --- | --- | --- |
 | `N` `E` `S` `W` | Wren steps one tile (N is y-1, E is x+1) | target is in bounds, terrain allows Wren, no creature there |
-| `L` | Plant the lantern on Wren's tile, or pick it up | plant: carrying, and Wren's terrain is floor, bridge or root. Pick up: lantern is planted on Wren's tile |
+| `L` | Plant the lantern on Wren's tile, pick it up, or aim it | plant: carrying, and Wren's terrain is floor, bridge or root. Pick up: lantern is planted on Wren's tile. Aim: the level has a shutter and the lantern is planted on a tile next to Wren (below) |
 | `Z` | Wait | always |
+
+**Aiming (levels with `shutter: true`, chapter 7, decided 17 Nov 2026).** `L` while Wren stands on a tile
+orthogonally next to the planted lantern closes its shutter, so it shines a beam (section 4) pointing away
+from Wren: from the lantern's west side it aims east, and so on. If it already aims that way, `L` opens it
+back to round light; from another side it turns the beam to the new direction. Picking the lantern up opens
+it again: a carried lantern is always round. In a level without a shutter, `L` next to the lantern is illegal.
 
 An illegal action returns `null` and spends no turn. A legal action runs these phases in order:
 
@@ -62,7 +68,7 @@ An illegal action returns `null` and spends no turn. A legal action runs these p
    already moved this turn. Rules in section 3.
 4. **Light B.** Recompute the light map with the new creature positions. This is the light stored in the state.
 5. **Roots and gates.** A root is pressed if a Stumpcap or a Dozer newt stands on it, or a Shellwhelk that
-   is lit in Light B stands on it. Wren, moths, Emberwicks, Gloamlings and the lantern never press roots. A channel's gates are open iff the
+   is lit in Light B stands on it. Wren, moths, Emberwicks, Gloamlings, Mirrorbeetles and the lantern never press roots. A channel's gates are open iff the
    channel has at least one root and all of its roots are pressed. Gate state is stored and used for
    movement during the NEXT turn. Closing a gate never hurts anything: whoever stands in a gate tile stays
    and may step out later.
@@ -78,9 +84,10 @@ After a level is solved, `step` returns `null` for every action.
 
 ## 3. Creatures
 
-"The lantern position" `P` below means the lantern's tile (Wren's tile when carried).
+"The lantern position" `P` below means the lantern's tile (Wren's tile when carried). Aiming the lantern
+does not change `P`.
 The lantern is **smothered** when Wren carries it on a Hush tile: then the lantern lights nothing (a glowing
-Emberwick still does), and no creature reacts to the lantern (moths, whelks and Gloamlings stay put). Creatures that go by light alone act as in any darkness:
+Emberwick still does), and no creature reacts to the lantern (moths, whelks, Gloamlings and Mirrorbeetles stay put). Creatures that go by light alone act as in any darkness:
 Stumpcaps sleep and Dozer newts wander.
 
 Two creatures use the same greedy step, taken from classic chase puzzles. Given a wanted horizontal
@@ -133,12 +140,20 @@ creature, no other creature is there, Wren is not there, and a planted lantern i
   Wren gets away from it. The board plays `'gloamSnuff'` when the lantern's own tile goes dark that way.
 - Never heavy.
 
+### Mirrorbeetle `R` (chapter 7, decided 17 Nov 2026)
+- Its shell is a mirror, slanted `/` or `\` (its map character). The slant never changes.
+- If its tile is lit in Light A, it basks and does not move. If not, it crawls toward the lantern:
+  `hx = sign(P.x - x)`, `vy = sign(P.y - y)`, greedy step. It stays put while the lantern is smothered.
+- A beam that reaches it turns a quarter turn on its shell (section 4). Round light does not turn: a beetle
+  at the edge of round light is lit and casts a shadow like any creature.
+- Never heavy. Cannot enter puddles, walks over bridges.
+
 No creature can be pushed, pulled or hurt.
 
 ## 4. Light
 
-Light sources: the lantern at `P`, radius `r` **1 while carried, 2 while planted**, and every glowing
-Emberwick, radius 1 from its own tile. A smothered lantern lights nothing. The light map is the union of
+Light sources: the lantern at `P`, radius `r` **1 while carried, 2 while planted**, or a beam while it is
+aimed (below), and every glowing Emberwick, radius 1 from its own tile. A smothered lantern lights nothing. The light map is the union of
 what every source lights; each source floods as below, with itself as `P`.
 
 Every Gloamling shadows its own tile and its four neighbours. A shadowed tile is never lit and never passes
@@ -155,6 +170,17 @@ Light floods outward from `P`, one tile per step, up to `r` steps (4-neighbour s
 
 So with radius 2, light bends around a corner if either of the two in-between tiles is transparent, and a
 creature next to a planted lantern casts a one-tile shadow behind itself.
+
+**Beam (chapter 7).** An aimed lantern lights its own tile `P` and a beam, and nothing round about it. The
+beam leaves `P` in the aimed direction and travels straight, one tile at a time, **up to 4 tiles**:
+
+- Each tile the beam reaches is lit, and the beam goes on only from a transparent tile.
+- A Hush tile or a shadowed tile stops the beam, and is not lit.
+- A Mirrorbeetle's tile is lit and the beam turns there: a `/` shell turns east-going light north, north to
+  east, west to south and south to west; a `\` shell turns east to south, south to east, west to north and
+  north to west. From the beetle the beam travels up to 4 more tiles, by the same rules.
+- If the beam reaches a beetle from a direction it already came from on this beam, it stops there (it would
+  only go round in a loop).
 
 ## 5. Worked example (level 1-1, par 5)
 
@@ -189,18 +215,23 @@ feature-removed variants) must stay under 150,000 positions, so that hints are i
   note: 'One sentence: what the player learns or the trick.',   // for designers; never shown to players
   tip: 'Swipe to walk.',  // optional: one short player-facing line shown when the level opens (no spoilers)
   tutorial: [ ... ],      // optional: guided steps for a player's first visit (section 12)
+  shutter: true,          // optional: the lantern can be aimed (section 2)
 }
 ```
 
 Map characters: the terrain chars from section 1, plus things that stand on floor (or on `under` terrain):
 `W` Wren carrying the lantern (exactly one), `M` Fluffmoth, `S` Shellwhelk, Stumpcaps by facing
 `^` north, `>` east, `v` south, `<` west, Dozer newts by starting facing `n` north, `e` east, `s` south,
-`w` west (lower case), `K` an Emberwick (cold), `O` a Gloamling, and optionally `L` a lantern that starts planted (then Wren
-starts without it; at most one `L`).
+`w` west (lower case), `K` an Emberwick (cold), `O` a Gloamling, Mirrorbeetles by shell `/` and `\` (written `'\\'`
+in a JavaScript string), and optionally `L` a lantern that starts planted (then Wren starts without it; at most one
+`L`). A planted lantern always starts round.
 
-`feature` is a string of one or more of: `M`, `S`, `T`, `D`, `K`, `O` (the species), `L` (planting the lantern).
-Necessity check, run for each listed character: for a species, the level with every creature of that
-species removed must be unsolvable; for `L`, the level must be unsolvable without the `L` action.
+`feature` is a string of one or more of: `M`, `S`, `T`, `D`, `K`, `O`, `R` (the species), `L` (planting the
+lantern), `A` (aiming it). Necessity check, run for each listed character: for a species, the level with every
+creature of that species removed must be unsolvable; for `L`, the level must be unsolvable without the `L`
+action; for `A`, the level with `shutter: false` must be unsolvable.
+
+Optional `shutter: true` lets the lantern be aimed (section 2). Only levels that teach or use aiming have it.
 
 ## 7. Module contracts
 
@@ -216,10 +247,12 @@ export function key(state)                  // -> string that identifies the pos
 export function isLit(state, x, y)          // -> boolean, from the stored light map
 export function terrainAt(state, x, y)      // -> one of '#', '.', '~', 'bridge', 'G', 'H', 'a'..'c', 'A'..'C'; '#' when out of bounds
 export function creatureAt(state, x, y)     // -> creature object or null
-export function canEnter(state, who, x, y)  // who: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O'. Terrain and occupancy check used by the rules.
+export function canEnter(state, who, x, y)  // who: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R'. Terrain and occupancy check used by the rules.
 export function isGateOpen(state, channel)  // channel: 'A' | 'B' | 'C'
 export function isHidden(state, creature)   // true for a Shellwhelk whose tile is lit
 export function isAwake(state, creature)    // true for a Stumpcap whose tile is lit, and for a Dozer newt whose tile is dark
+export function beamPath(state)             // -> null, or the beam's corners for drawing: [{x, y}, ...] from P, through each
+                                            //    beetle it turns on, to the last tile it lights (P alone if nothing beyond is lit)
 ```
 
 State (plain JSON-safe data; treat as immutable):
@@ -229,14 +262,16 @@ State (plain JSON-safe data; treat as immutable):
   w, h,
   tiles: ['#########', ...],   // terrain only: creatures, Wren and L replaced by floor or the `under` terrain; never changes
   wren: { x, y },
-  lantern: { x, y, carried },  // when carried, x and y equal Wren's
-  creatures: [ { id, type: 'M' | 'S' | 'T' | 'D' | 'K' | 'O', x, y, dir } ],   // id is stable for the whole level; dir is 'N'|'E'|'S'|'W' for T and D, null otherwise
+  lantern: { x, y, carried },  // when carried, x and y equal Wren's; an aimed lantern also has beam: 'N'|'E'|'S'|'W'
+  creatures: [ { id, type: 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R', x, y, dir } ],   // id is stable for the whole level; dir is 'N'|'E'|'S'|'W' for T and D,
+                               // '/' or '\\' (the shell) for R, null otherwise
                                // an Emberwick also has `heat`: 0 cold, 1 warm, 2 glowing
   bridges: [ 'x,y', ... ],     // puddles that became bridges, sorted
   lit: [0, 1, ...],            // length w*h, index y*w+x, Light B
   gates: { A: false, ... },    // only channels present in the level
   buds: [ { x, y } ],          // Glowbud positions (static, reading order)
   bloom: [0, 1, ...],          // parallel to buds: 1 once that bud has been lit; never goes back to 0
+  shutter: false,              // from the level: whether the lantern can be aimed
   turn: 0,
   solved: false,
   events: [ ... ],             // what happened in the step that produced this state, in order (empty at turn 0)
@@ -248,6 +283,7 @@ Events (the UI animates and plays sounds from these; emit them in the order thin
 ```js
 { type: 'move', who: 'wren' | <creature id>, from: {x, y}, to: {x, y} }
 { type: 'plant', x, y }            { type: 'pickup', x, y }      { type: 'wait' }
+{ type: 'aim', x, y, dir }         // the planted lantern at x,y now beams toward dir, or is open again (dir null)
 { type: 'settle', id, x, y }       // moth became a bridge (after its 'move')
 { type: 'bump', id }               // lit Stumpcap could not walk
 { type: 'hide', id }  { type: 'emerge', id }    // Shellwhelk lit state changed between the previous stored light and Light B
@@ -255,12 +291,13 @@ Events (the UI animates and plays sounds from these; emit them in the order thin
                                                 //   becomes lit; a newt dozes off ('sleep') when it becomes lit and wakes when dark
 { type: 'turn', id, dir }          // a newt was blocked and turned clockwise; dir is its new facing
 { type: 'warm', id }  { type: 'cool', id }  { type: 'ignite', id }   // an Emberwick's heat went 0 to 1, 1 to 0, 1 to 2
+{ type: 'glint', id }              // a Mirrorbeetle became lit, same comparison as hide
 { type: 'gate', channel, open }    // a channel's gates changed
 { type: 'bud', x, y, lit: true }   // a Glowbud came into bloom (emitted once per bud)
 { type: 'solved' }
 ```
 
-`key(state)` must include Wren, the lantern (position and carried), every creature (type, position, facing, heat;
+`key(state)` must include Wren, the lantern (position, carried and beam), every creature (type, position, facing or shell, heat;
 order-independent), the bridges and the bloom flags. It must not depend on `turn`, `events` or creature ids.
 
 ### `src/solver.js` (pure)
@@ -292,8 +329,9 @@ export function drawTile(ctx, kind, px, py, size, opts)
 //   kind: 'floor' | 'wall' | 'puddle' | 'bridge' | 'bud' | 'hush' | 'root' | 'gate'
 //   opts: { t, seed, lit, open, pressed, channel, accent, neighbors: {n, e, s, w} (true where the same kind adjoins) }
 export function drawWren(ctx, px, py, size, { t, dir, carrying })
-export function drawLantern(ctx, px, py, size, { t, out })            // planted lantern; out: in a Gloamling's shadow
-export function drawCreature(ctx, type, px, py, size, { t, dir, lit, hidden, awake, heat })   // type 'M' | 'S' | 'T' | 'D' | 'K' | 'O'
+export function drawLantern(ctx, px, py, size, { t, out, beam })      // planted lantern; out: in a Gloamling's shadow;
+                                                                      //   beam: 'N'|'E'|'S'|'W' when aimed (hooded, open on that side)
+export function drawCreature(ctx, type, px, py, size, { t, dir, lit, hidden, awake, heat })   // type 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R'
 export function drawDarkness(ctx, { ox, oy, size, w, h, lit, source, t, highContrast })
 //   Paints the darkness over an already-drawn board whose top-left is (ox, oy). `lit` is the engine's array.
 //   `source` is { x, y, radius } in tile units (fractional allowed while animating) or null when the lantern lights nothing (smothered, or in a Gloamling's shadow).
@@ -310,7 +348,7 @@ export function setMuted(muted)          export function isMuted()
 export function play(name)               // one-shot sound; unknown names are ignored
 //   names: 'step' 'blocked' 'plant' 'pickup' 'wait' 'moth' 'settle' 'whelkMove' 'whelkHide' 'whelkEmerge'
 //          'stumpStep' 'stumpBump' 'stumpWake' 'newtStep' 'newtTurn' 'newtDoze' 'newtWake'
-//          'emberWarm' 'emberCool' 'emberIgnite' 'emberStep' 'gloamDrift' 'gloamSnuff'
+//          'emberWarm' 'emberCool' 'emberIgnite' 'emberStep' 'gloamDrift' 'gloamSnuff' 'aim' 'beetleCrawl' 'beetleGlint'
 //          'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint'
 export function setMusic({ playing, intensity, chapter })   // adaptive bed: intensity 0..1 = share of Glowbuds lit; chapter 1..3
 ```
@@ -329,6 +367,8 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - **Dozer newt:** "Wanders in the dark and turns right whenever something blocks it. Light makes it doze off where it stands. Always heavy."
 - **Emberwick:** "Keep it in the light for two turns in a row and it catches. Then it glows like a little lantern and follows Wren everywhere. Never heavy."
 - **Gloamling:** "Drifts toward your lantern and eats light: the tiles around it stay dark, your lantern's too. It waits while the lantern is smothered. Never heavy."
+- **Mirrorbeetle:** "Crawls toward your lantern in the dark and stops in the light. Its mirror shell turns a beam around a corner. Never heavy."
+- **Shutter:** "Stand beside the planted lantern and tap Wren to aim its light, away from you, as a beam four tiles long. Tap again from the same side to open it."
 - **Glowbud:** "Light every Glowbud. Once lit, it stays in bloom."
 - **Pressure root and gate:** "A gate opens while something heavy rests on its root."
 - **Puddle:** "Too deep for Wren. A Fluffmoth can bridge it."
@@ -341,7 +381,7 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - `state.gates` lists every channel that has a gate or a root. A channel with no root never opens.
 - A moth that settles makes the bridge at once: creatures acting later in the same turn may step onto it.
 - Event order within a step: the player's event; then for each creature in acting order `move`, `settle`,
-  `bump`, `turn`, `warm`, `cool`, `ignite`; then `hide` / `emerge` / `wake` / `sleep`; then `gate`, `bud`, `solved`. A Stumpcap can `move`
+  `bump`, `turn`, `warm`, `cool`, `ignite`; then `hide` / `emerge` / `wake` / `sleep` / `glint`; then `gate`, `bud`, `solved`. A Stumpcap can `move`
   without a `wake` (lit in Light A, walked out of the light). `bump` repeats on every lit, blocked turn.
 - `parseLevel` throws on maps over 9 by 11, on `under` entries where nothing stands, and on start positions
   the terrain table forbids.
@@ -387,16 +427,18 @@ and never ask for a move the solution does not need.
     point: 'wren',             // optional: what it points at, see below
     gesture: 'swipe-E',        // optional: 'swipe-N' | 'swipe-E' | 'swipe-S' | 'swipe-W' | 'tap' | 'hold', drawn at the point
     when: 'planted',           // optional: the step only shows while this holds: 'planted' | 'carried'
-    card: 'S',                 // optional: opens that creature's rule card when the step comes up ("meet" card)
+    card: 'S',                 // optional: opens that creature's rule card when the step comes up ("meet" card);
+                               //   'A' opens the Shutter card, in a level with a shutter
     until: 'step' }            // what finishes the step, see below
   ```
-- **point:** `'wren'`; `'lantern'` (the planted lantern); a species letter `M` `S` `T` `D` `K` `O` (the first such
+- **point:** `'wren'`; `'lantern'` (the planted lantern); a species letter `M` `S` `T` `D` `K` `O` `R` (the first such
   creature in reading order, followed as it moves); `'bud'` (the first Glowbud not in bloom); `'root'`;
   `'gate'`; `[x, y]` (a tile); or a thumb-bar button `'plant'` (the lantern button), `'wait'`, `'undo'`,
   `'hint'`. A board point is a soft ring with the gesture drawn on it; a button point makes it pulse.
 - **until:** `'move'` (any legal action), `'step'` (Wren walks), `'arrive'` (Wren stands on the `[x, y]`
   point), `'plant'`, `'pickup'`, `'wait'`, `'settle'` (a moth became a bridge), `'hide'`, `'wake'`,
-  `'sleep'`, `'turn'`, `'ignite'` (an Emberwick catches), `'gate'` (a gate opens), `'bud'` (a Glowbud comes into bloom), `'card'` (the
+  `'sleep'`, `'turn'`, `'ignite'` (an Emberwick catches), `'aim'` (the lantern is aimed or opened), `'glint'` (a Mirrorbeetle
+  becomes lit), `'gate'` (a gate opens), `'bud'` (a Glowbud comes into bloom), `'card'` (the
   step's card was closed), `'solved'`. The events are the engine's (section 7).
 - **Undo** never takes a step back. **Restart** goes back to the first step that is not a card step.
 - **Stuck nudge:** on a level that has never been solved, with Tutorials on, once per visit: when the move
@@ -407,4 +449,4 @@ and never ask for a move the solution does not need.
   tutorial back, because the levels are no longer solved.
 - `src/ui/tutorial.js` holds the step logic (no DOM), so it can be tested in Node. `checkTutorial(def)`
   lists what is wrong with a level's tutorial (unknown point, gesture or event; a species point or card the
-  level does not have; `'arrive'` without an `[x, y]` point; a card step not finished by `'card'`).
+  level does not have, or the Shutter card in a level without a shutter; `'arrive'` without an `[x, y]` point; a card step not finished by `'card'`).

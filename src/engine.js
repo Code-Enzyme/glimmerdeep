@@ -26,8 +26,14 @@ const TERRAIN_CODE = { '#': WALL, '.': FLOOR, '~': PUDDLE, G: BUD, H: HUSH, a: 5
 const FACING = { '^': 'N', '>': 'E', v: 'S', '<': 'W' };           // Stumpcaps
 const NEWT_FACING = { n: 'N', e: 'E', s: 'S', w: 'W' };            // Dozer newts
 const CLOCKWISE = { N: 'E', E: 'S', S: 'W', W: 'N' };
-const SPECIES_NAME = { M: 'Fluffmoth', S: 'Shellwhelk', T: 'Stumpcap', D: 'Dozer newt', K: 'Emberwick', O: 'Gloamling' };
+const SPECIES_NAME = {
+  M: 'Fluffmoth', S: 'Shellwhelk', T: 'Stumpcap', D: 'Dozer newt', K: 'Emberwick', O: 'Gloamling', R: 'Mirrorbeetle',
+};
 const GLOWING = 2;   // an Emberwick's heat once it has caught (section 3)
+const BEAM_LENGTH = 4;   // tiles an aimed lantern's beam travels, and again after each Mirrorbeetle (section 4)
+const DIR_INDEX = { N: 0, E: 1, S: 2, W: 3 };
+// How a Mirrorbeetle's shell turns a beam: TURN[shell][the beam's direction] is its new direction.
+const TURN = { '/': { N: 'E', E: 'N', S: 'W', W: 'S' }, '\\': { N: 'W', W: 'N', S: 'E', E: 'S' } };
 
 const own = (object, k) => Object.prototype.hasOwnProperty.call(object, k);
 
@@ -113,7 +119,7 @@ export function parseLevel(levelDef) {
   const tiles = [];
   const creatures = [];
   const buds = [];
-  const counters = { M: 0, S: 0, T: 0, D: 0, K: 0, O: 0 };
+  const counters = { M: 0, S: 0, T: 0, D: 0, K: 0, O: 0, R: 0 };
   let wren = null;
   let planted = null;
   let wrens = 0;
@@ -139,9 +145,9 @@ export function parseLevel(levelDef) {
         lanterns++;
         planted = { x, y, carried: false };
         standing.push(['lantern', x, y, base]);
-      } else if (ch === 'M' || ch === 'S' || ch === 'K' || ch === 'O' || own(FACING, ch) || own(NEWT_FACING, ch)) {
-        const type = own(FACING, ch) ? 'T' : own(NEWT_FACING, ch) ? 'D' : ch;
-        const dir = type === 'T' ? FACING[ch] : type === 'D' ? NEWT_FACING[ch] : null;
+      } else if (ch === 'M' || ch === 'S' || ch === 'K' || ch === 'O' || own(TURN, ch) || own(FACING, ch) || own(NEWT_FACING, ch)) {
+        const type = own(FACING, ch) ? 'T' : own(NEWT_FACING, ch) ? 'D' : own(TURN, ch) ? 'R' : ch;
+        const dir = type === 'T' ? FACING[ch] : type === 'D' ? NEWT_FACING[ch] : type === 'R' ? ch : null;
         const id = `${type}${++counters[type]}`;
         creatures.push(type === 'K' ? { id, type, x, y, dir, heat: 0 } : { id, type, x, y, dir });
         standing.push([SPECIES_NAME[type], x, y, base]);
@@ -178,6 +184,7 @@ export function parseLevel(levelDef) {
     gates: {},
     buds,
     bloom: null,
+    shutter: levelDef.shutter === true,
     turn: 0,
     solved: false,
     events: [],
@@ -199,7 +206,10 @@ export function parseLevel(levelDef) {
 function lightOf(meta, lantern, creatures) {
   const shade = shadowOf(meta, creatures);
   let base;
-  if (shade === null) {
+  if (lantern.beam !== undefined) {
+    const lit = new Array(meta.n).fill(0);
+    base = traceBeam(meta, lantern, creatures, shade, lit, null) ? Object.freeze(lit) : meta.dark;
+  } else if (shade === null) {
     base = lightMap(meta, lantern, creatures);
   } else {
     const p = lantern.y * meta.w + lantern.x;
@@ -256,6 +266,52 @@ function shadeNear(meta, shade, p, radius) {
     if (Math.abs(x - px) + Math.abs((t - x) / w - py) <= radius) return true;
   }
   return false;
+}
+
+// The beam of an aimed lantern (section 4): its own tile, then up to BEAM_LENGTH tiles straight on, turning on
+// every Mirrorbeetle, which starts a fresh run. Writes 1 into `lit` for every tile it lights and, when
+// `corners` is an array, pushes the lantern's tile, each beetle the beam turns on and the last tile it lights
+// (when that is not already the last corner). -> false when the lantern's own tile is shadowed (it lights nothing).
+function traceBeam(meta, lantern, creatures, shade, lit, corners) {
+  const { w, h, terr } = meta;
+  let x = lantern.x;
+  let y = lantern.y;
+  const p = y * w + x;
+  if (shade !== null && shade[p] === 1) return false;
+  lit[p] = 1;
+  if (corners) corners.push({ x, y });
+  let dir = lantern.beam;
+  let left = BEAM_LENGTH;
+  let turned = null;   // tile * 4 + direction for every turn so far, to stop a beam going round a loop
+  while (left > 0) {
+    const d = DIRS[dir];
+    const nx = x + d[0];
+    const ny = y + d[1];
+    if (nx < 0 || ny < 0 || nx >= w || ny >= h) break;
+    const t = ny * w + nx;
+    if (terr[t] === HUSH || (shade !== null && shade[t] === 1)) break;
+    lit[t] = 1;
+    x = nx;
+    y = ny;
+    left--;
+    if (terr[t] === WALL) break;
+    const i = creatureIndexAt(creatures, x, y);
+    if (i < 0) continue;
+    const c = creatures[i];
+    if (c.type !== 'R') break;               // any other creature is lit and stops it
+    const k = t * 4 + DIR_INDEX[dir];
+    if (turned === null) turned = [];
+    else if (turned.includes(k)) break;
+    turned.push(k);
+    if (corners) corners.push({ x, y });
+    dir = TURN[c.dir][dir];
+    left = BEAM_LENGTH;
+  }
+  if (corners) {
+    const last = corners[corners.length - 1];
+    if (last.x !== x || last.y !== y) corners.push({ x, y });
+  }
+  return true;
 }
 
 // A source of radius 1 lights its own tile and its four neighbours (Hush excepted), whatever stands there.
@@ -402,6 +458,17 @@ export function isAwake(state, creature) {
   return false;
 }
 
+// The corners of an aimed lantern's beam, for drawing: [{x, y}, ...] from the lantern through every beetle it
+// turns on to the last tile it lights. null when the lantern is not aimed or lights nothing.
+export function beamPath(state) {
+  const lantern = state.lantern;
+  if (lantern.beam === undefined) return null;
+  const meta = metaOf(state);
+  const corners = [];
+  const scratch = new Array(meta.n).fill(0);
+  return traceBeam(meta, lantern, state.creatures, shadowOf(meta, state.creatures), scratch, corners) ? corners : null;
+}
+
 function hasBridge(state, x, y) {
   return state.bridges.length !== 0 && state.bridges.includes(`${x},${y}`);
 }
@@ -488,10 +555,22 @@ export function step(state, action) {
         if (!plantable) return null;
         lantern = { x, y, carried: false };
         events = [{ type: 'plant', x, y }];
-      } else {
-        if (lantern0.x !== x || lantern0.y !== y) return null;
+      } else if (lantern0.x === x && lantern0.y === y) {
         lantern = { x, y, carried: true };
         events = [{ type: 'pickup', x, y }];
+      } else {
+        // Aiming (section 2): only in a shutter level, from a tile next to the lantern, away from Wren.
+        const dx = lantern0.x - x;
+        const dy = lantern0.y - y;
+        if (!state.shutter || Math.abs(dx) + Math.abs(dy) !== 1) return null;
+        const dir = dx === 1 ? 'E' : dx === -1 ? 'W' : dy === 1 ? 'S' : 'N';
+        if (lantern0.beam === dir) {
+          lantern = { x: lantern0.x, y: lantern0.y, carried: false };
+          events = [{ type: 'aim', x: lantern0.x, y: lantern0.y, dir: null }];
+        } else {
+          lantern = { x: lantern0.x, y: lantern0.y, carried: false, beam: dir };
+          events = [{ type: 'aim', x: lantern0.x, y: lantern0.y, dir }];
+        }
       }
       break;
     }
@@ -526,6 +605,7 @@ export function step(state, action) {
     gates: state.gates,
     buds: state.buds,
     bloom: state.bloom,
+    shutter: state.shutter,
     turn: state.turn + 1,
     solved: false,
     events,
@@ -596,7 +676,8 @@ export function step(state, action) {
         if (smothered) continue;
         let hx;
         let vy;
-        if (type === 'M' || type === 'O') {                        // toward the lantern
+        if (type === 'M' || type === 'O' || type === 'R') {        // toward the lantern
+          if (type === 'R' && lightA[y * w + x] === 1) continue;   // a lit beetle basks
           hx = sign(lantern.x - x);
           vy = sign(lantern.y - y);
         } else {
@@ -637,7 +718,9 @@ export function step(state, action) {
       const c1 = after[i];
       const was = lit0[c0.y * w + c0.x] === 1;
       const now = lit[c1.y * w + c1.x] === 1;
-      if (was !== now) {
+      if (c0.type === 'R') {
+        if (now && !was) events.push({ type: 'glint', id: c0.id });
+      } else if (was !== now) {
         let type;
         if (c0.type === 'S') type = now ? 'hide' : 'emerge';
         else if (c0.type === 'D') type = now ? 'sleep' : 'wake';   // a newt dozes off in the light
@@ -689,21 +772,26 @@ export function step(state, action) {
 
 // ---------------------------------------------------------------- key (SPEC section 7)
 
-// One-character strings for the small numbers a key is made of (all below 99 * 16).
-const CHAR = Array.from({ length: 1600 }, (_, i) => String.fromCharCode(48 + i));
-// Creature and bridge kinds in a key code: moth, whelk, Stumpcap by facing, newt by facing, bridge.
-const KIND = { M: 0, S: 1, TN: 2, TE: 3, TS: 4, TW: 5, DN: 6, DE: 7, DS: 8, DW: 9, K0: 10, K1: 11, K2: 12, O: 13 };
-const BRIDGE_KIND = 15;
+// One-character strings for the small numbers a key is made of (all below 100 * 32).
+const CHAR = Array.from({ length: 3200 }, (_, i) => String.fromCharCode(48 + i));
+// Creature and bridge kinds in a key code: moth, whelk, Stumpcap by facing, newt by facing, Emberwick by heat,
+// Gloamling, Mirrorbeetle by shell, bridge.
+const KIND = {
+  M: 0, S: 1, TN: 2, TE: 3, TS: 4, TW: 5, DN: 6, DE: 7, DS: 8, DW: 9, K0: 10, K1: 11, K2: 12, O: 13, 'R/': 14, 'R\\': 15,
+};
+const BRIDGE_KIND = 16;
+// The lantern in a key: its tile * 6 + 0 planted and round, 1 carried, 2 to 5 aimed N, E, S, W.
+const lanternMode = (lantern) => (lantern.carried ? 1 : lantern.beam === undefined ? 0 : 2 + DIR_INDEX[lantern.beam]);
 const CODES = [];   // scratch for key()
 
-// Identifies a position: Wren, the lantern (tile and carried), the bloom flags, every creature (species,
-// tile, facing) and every bridge. Light, gates and `solved` follow from those, so they are not part of it;
+// Identifies a position: Wren, the lantern (tile, carried, beam), the bloom flags, every creature (species,
+// tile, facing, shell, heat) and every bridge. Light, gates and `solved` follow from those, so they are not part of it;
 // `turn`, `events` and creature ids are deliberately left out. Two characters, one more per nine buds, and
 // one per creature and per bridge.
 export function key(state) {
   const w = state.w;
   const lantern = state.lantern;
-  let k = CHAR[state.wren.y * w + state.wren.x] + CHAR[(lantern.y * w + lantern.x) * 2 + (lantern.carried ? 1 : 0)];
+  let k = CHAR[state.wren.y * w + state.wren.x] + CHAR[(lantern.y * w + lantern.x) * 6 + lanternMode(lantern)];
   // The bloom flags, nine to a character. A level has a fixed number of buds, so this part has a fixed
   // length and cannot be confused with the creature and bridge codes that follow it.
   const bloom = state.bloom;
@@ -717,18 +805,18 @@ export function key(state) {
   const n = creatures.length + bridges.length;
   if (n === 0) return k;
 
-  // One code per creature and per bridge: tile index * 16 + kind. The codes are sorted, which makes the
+  // One code per creature and per bridge: tile index * 32 + kind. The codes are sorted, which makes the
   // key independent of the order of the creatures array.
   for (let i = 0; i < n; i++) {
     let code;
     if (i < creatures.length) {
       const c = creatures[i];
       const kind = c.type === 'M' || c.type === 'S' || c.type === 'O' ? KIND[c.type] : c.type === 'K' ? KIND[`K${c.heat}`] : KIND[c.type + c.dir];
-      code = (c.y * w + c.x) * 16 + kind;
+      code = (c.y * w + c.x) * 32 + kind;
     } else {
       const b = bridges[i - creatures.length];
       const comma = b.indexOf(',');
-      code = (+b.slice(comma + 1) * w + +b.slice(0, comma)) * 16 + BRIDGE_KIND;
+      code = (+b.slice(comma + 1) * w + +b.slice(0, comma)) * 32 + BRIDGE_KIND;
     }
     let j = i - 1;
     while (j >= 0 && CODES[j] > code) {

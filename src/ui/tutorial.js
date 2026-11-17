@@ -1,12 +1,13 @@
 // Tutorials (SPEC section 12): a level's guided steps for a player's first visit. No DOM in here; the
 // game asks which step to show and feeds every turn's events in, and BoardView draws the pointer.
 
-const SPECIES = ['M', 'S', 'T', 'D', 'K', 'O'];
+const SPECIES = ['M', 'S', 'T', 'D', 'K', 'O', 'R'];
+const CARDS = [...SPECIES, 'A'];   // the species, and 'A' for the Shutter
 const BUTTONS = ['plant', 'wait', 'undo', 'hint'];
 const PLACES = ['wren', 'lantern', 'bud', 'root', 'gate'];
 const GESTURES = ['swipe-N', 'swipe-E', 'swipe-S', 'swipe-W', 'tap', 'hold'];
 const UNTIL = ['move', 'step', 'arrive', 'plant', 'pickup', 'wait', 'settle', 'hide', 'wake', 'sleep', 'turn', 'ignite',
-  'gate', 'bud', 'card', 'solved'];
+  'aim', 'glint', 'gate', 'bud', 'card', 'solved'];
 const WHEN = ['planted', 'carried'];
 const SAY_MAX = 120;   // two lines of the status row on a small phone
 
@@ -129,7 +130,10 @@ export function checkTutorial(def) {
   const h = map.length;
   const w = h ? map[0].length : 0;
   const text = map.join('');
-  const has = { M: /M/.test(text), S: /S/.test(text), T: /[\^>v<]/.test(text), D: /[nesw]/.test(text), K: /K/.test(text), O: /O/.test(text) };
+  const has = {
+    M: /M/.test(text), S: /S/.test(text), T: /[\^>v<]/.test(text), D: /[nesw]/.test(text), K: /K/.test(text), O: /O/.test(text),
+    R: /[/\\]/.test(text), A: def.shutter === true,
+  };
   const problems = [];
   steps.forEach((s, i) => {
     const at = `step ${i + 1}`;
@@ -139,8 +143,10 @@ export function checkTutorial(def) {
     }
     if (!UNTIL.includes(s.until)) problems.push(`${at}: unknown until '${s.until}'`);
     if (s.card !== undefined) {
-      if (!SPECIES.includes(s.card)) problems.push(`${at}: unknown card '${s.card}'`);
-      else if (!has[s.card]) problems.push(`${at}: card '${s.card}' but the level has no such creature`);
+      if (!CARDS.includes(s.card)) problems.push(`${at}: unknown card '${s.card}'`);
+      else if (!has[s.card]) {
+        problems.push(s.card === 'A' ? `${at}: the Shutter card but the level has no shutter` : `${at}: card '${s.card}' but the level has no such creature`);
+      }
       if (s.until !== 'card') problems.push(`${at}: a card step must end with 'card'`);
     } else {
       if (s.until === 'card') problems.push(`${at}: 'card' without a card`);

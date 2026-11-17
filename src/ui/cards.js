@@ -37,6 +37,14 @@ export const RULE_CARDS = {
     title: 'Gloamling',
     text: 'Drifts toward your lantern and eats light: the tiles around it stay dark, your lantern\'s too. It waits while the lantern is smothered. Never heavy.',
   },
+  R: {
+    title: 'Mirrorbeetle',
+    text: 'Crawls toward your lantern in the dark and stops in the light. Its mirror shell turns a beam around a corner. Never heavy.',
+  },
+  A: {
+    title: 'Shutter',
+    text: 'Stand beside the planted lantern and tap Wren to aim its light, away from you, as a beam four tiles long. Tap again from the same side to open it.',
+  },
   bud: {
     title: 'Glowbud',
     text: 'Light every Glowbud. Once lit, it stays in bloom.',
@@ -60,7 +68,7 @@ export function cardKindAt(state, x, y) {
   if (state.wren.x === x && state.wren.y === y) return 'wren';
   const creature = creatureAt(state, x, y);
   if (creature) return creature.type;
-  if (!state.lantern.carried && state.lantern.x === x && state.lantern.y === y) return 'lantern';
+  if (!state.lantern.carried && state.lantern.x === x && state.lantern.y === y) return state.shutter ? 'A' : 'lantern';
   const terrain = terrainAt(state, x, y);
   if (terrain === 'G') return 'bud';
   if (terrain === '~' || terrain === 'bridge') return 'puddle';
