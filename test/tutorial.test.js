@@ -200,6 +200,25 @@ test('checkTutorial: catches what would break or mislead', () => {
   assert.ok(bad([{ say: 'x'.repeat(130), until: 'move' }]), 'too long for the status row');
 });
 
+test('checkTutorial: knows the Emberwick and its ignite event', () => {
+  const ember = def(['######', '#L~K.#', '###..#', '#G...#', '##.W.#', '######'], [
+    { card: 'K', until: 'card' },
+    { say: 'Wait while it catches.', point: 'K', until: 'ignite' },
+  ], { feature: 'K' });
+  assert.deepEqual(checkTutorial(ember), []);
+  const t = new Tutorial(ember.tutorial);
+  t.cardClosed();
+  let s = parseLevel(ember);
+  assert.deepEqual(resolvePoint('K', s), { kind: 'creature', id: 'K1', x: 3, y: 1 });
+  s = step(s, 'Z');
+  t.advance(s.events, s);
+  assert.equal(t.index, 1, 'warming is not catching');
+  s = step(s, 'Z');
+  t.advance(s.events, s);
+  assert.equal(t.done, true);
+  assert.ok(checkTutorial(def(MOTH, [{ card: 'K', until: 'card' }])).length, 'no Emberwick on the map');
+});
+
 test('stuck nudge comes six moves after par', () => {
   assert.equal(STUCK_AFTER, 6);
 });

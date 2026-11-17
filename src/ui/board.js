@@ -10,7 +10,9 @@ const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',
   a: 'root', b: 'root', c: 'root', A: 'gate', B: 'gate', C: 'gate',
 };
-const SOUND_OF_MOVE = { M: 'moth', S: 'whelkMove', T: 'stumpStep', D: 'newtStep' };
+const SOUND_OF_MOVE = { M: 'moth', S: 'whelkMove', T: 'stumpStep', D: 'newtStep', K: 'emberStep' };
+// an Emberwick warming, going cold and catching
+const SOUND_OF_HEAT = { warm: 'emberWarm', cool: 'emberCool', ignite: 'emberIgnite' };
 // a creature changing state: Stumpcaps wake in the light, newts wake in the dark and doze in the light
 const SOUND_OF_STATE = { wake: { T: 'stumpWake', D: 'newtWake' }, sleep: { D: 'newtDoze' } };
 
@@ -275,6 +277,16 @@ export class BoardView {
           if (who) once(a.settleAt, SOUND_OF_STATE[e.type][who.type]);
           break;
         }
+        case 'warm':
+        case 'cool':
+          if (!tween) once(a.settleAt, SOUND_OF_HEAT[e.type]);
+          break;
+        case 'ignite': {
+          const who = findById(next.creatures, e.id);
+          if (!tween) once(a.settleAt, 'emberIgnite');
+          if (who) cue(a.settleAt, null, { type: 'ring', x: who.x, y: who.y, grow: true });
+          break;
+        }
         case 'gate': once(a.settleAt, e.open ? 'gateOpen' : 'gateClose'); break;
         case 'bud': {
           const index = next.buds.findIndex((b) => b.x === e.x && b.y === e.y);
@@ -482,6 +494,7 @@ export class BoardView {
         lit: cellLit,
         hidden: c.type === 'S' && cellLit && !moving,
         awake: c.type === 'T' ? cellLit || moving : c.type === 'D' && (!cellLit || moving),
+        heat: c.heat,
       });
     }
     if (a) {
@@ -554,7 +567,7 @@ export class BoardView {
         drawLantern(ctx, px + share * 0.27 * size, py + share * 0.07 * size, size, { t });
       } else if (th.z === 1) {
         if (th.alpha < 1) ctx.globalAlpha = th.alpha;
-        drawCreature(ctx, th.c.type, px, py + th.drop * size, size, { t, dir: th.dir, lit: th.lit, hidden: th.hidden, awake: th.awake });
+        drawCreature(ctx, th.c.type, px, py + th.drop * size, size, { t, dir: th.dir, lit: th.lit, hidden: th.hidden, awake: th.awake, heat: th.heat });
         ctx.globalAlpha = 1;
       } else {
         drawWren(ctx, px + (sx - share * 0.15) * size, py + (sy - hop - celebrateHop) * size, size, {
@@ -572,7 +585,7 @@ export class BoardView {
       const py = oy + th.y * size;
       if (th.z === 1) {
         if (th.alpha < 1) ctx.globalAlpha = th.alpha;
-        drawGlow(ctx, th.c.type, px, py + th.drop * size, size, { t, dir: th.dir, lit: th.lit, hidden: th.hidden, awake: th.awake });
+        drawGlow(ctx, th.c.type, px, py + th.drop * size, size, { t, dir: th.dir, lit: th.lit, hidden: th.hidden, awake: th.awake, heat: th.heat });
         ctx.globalAlpha = 1;
       } else if (th.z === 2) {
         const tx = Math.round(th.x);

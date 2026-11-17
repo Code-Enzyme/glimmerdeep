@@ -34,7 +34,7 @@ export function drawCreature(ctx, type, px, py, size, opts) {
 }
 
 // Optional emissive pass, drawn AFTER the darkness so glowing markings show in the dark.
-// who: 'wren' | 'M' | 'S' | 'T' | 'D'; opts as for drawWren / drawCreature, plus lit (the tile is lit).
+// who: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K'; opts as for drawWren / drawCreature, plus lit (the tile is lit).
 export function drawGlow(ctx, who, px, py, size, opts) {
   const mod = CHAR_STYLES[current].mod;
   if (mod.drawGlow) mod.drawGlow(ctx, who, px, py, size, opts);

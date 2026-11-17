@@ -1,12 +1,12 @@
 // Tutorials (SPEC section 12): a level's guided steps for a player's first visit. No DOM in here; the
 // game asks which step to show and feeds every turn's events in, and BoardView draws the pointer.
 
-const SPECIES = ['M', 'S', 'T', 'D'];
+const SPECIES = ['M', 'S', 'T', 'D', 'K'];
 const BUTTONS = ['plant', 'wait', 'undo', 'hint'];
 const PLACES = ['wren', 'lantern', 'bud', 'root', 'gate'];
 const GESTURES = ['swipe-N', 'swipe-E', 'swipe-S', 'swipe-W', 'tap', 'hold'];
-const UNTIL = ['move', 'step', 'arrive', 'plant', 'pickup', 'wait', 'settle', 'hide', 'wake', 'sleep', 'turn', 'gate',
-  'bud', 'card', 'solved'];
+const UNTIL = ['move', 'step', 'arrive', 'plant', 'pickup', 'wait', 'settle', 'hide', 'wake', 'sleep', 'turn', 'ignite',
+  'gate', 'bud', 'card', 'solved'];
 const WHEN = ['planted', 'carried'];
 const SAY_MAX = 120;   // two lines of the status row on a small phone
 
@@ -129,7 +129,7 @@ export function checkTutorial(def) {
   const h = map.length;
   const w = h ? map[0].length : 0;
   const text = map.join('');
-  const has = { M: /M/.test(text), S: /S/.test(text), T: /[\^>v<]/.test(text), D: /[nesw]/.test(text) };
+  const has = { M: /M/.test(text), S: /S/.test(text), T: /[\^>v<]/.test(text), D: /[nesw]/.test(text), K: /K/.test(text) };
   const problems = [];
   steps.forEach((s, i) => {
     const at = `step ${i + 1}`;

@@ -58,6 +58,9 @@ const HAND_MADE = {
   stumpGate: { map: ['W>.a#.G', '....A..'], shortest: 7 },
   // The newt patrols over the root and holds gate A open only while it stands there: a timing puzzle.
   newtGate: { map: ['W..A.G', '###.##', '##ea.#'], shortest: 7 },
+  // The lantern is planted out of reach across a puddle, but it lights the Emberwick: wait while it catches,
+  // then lead it round so it glows next to the bud.
+  emberLight: { map: ['######', '#L~K.#', '###..#', '#G...#', '##.W.#', '######'], shortest: 5 },
 };
 const handMade = (name) => parse(HAND_MADE[name].map, { under: HAND_MADE[name].under });
 
@@ -225,6 +228,15 @@ test('checkLevel: Dozer newt necessity (every newt facing is removed)', () => {
   const missing = checkLevel(def(HAND_MADE.stumpGate.map, { feature: 'D', par: 7 }));
   assert.deepEqual(missing.featureOk, { D: false });
   assert.ok(missing.problems.some((p) => p.includes('no Dozer newt')), missing.problems.join('; '));
+});
+
+test('checkLevel: Emberwick necessity', () => {
+  const ember = checkLevel(def(HAND_MADE.emberLight.map, { feature: 'K', par: 5 }));
+  assert.deepEqual(ember.featureOk, { K: true });
+  assert.equal(ember.ok, true, ember.problems.join('; '));
+  const missing = checkLevel(def(HAND_MADE.newtGate.map, { feature: 'K', par: 7 }));
+  assert.deepEqual(missing.featureOk, { K: false });
+  assert.ok(missing.problems.some((p) => p.includes('no Emberwick')), missing.problems.join('; '));
 });
 
 test('checkLevel: removing a species leaves the `under` terrain in place', () => {

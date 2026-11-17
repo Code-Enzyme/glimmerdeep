@@ -26,7 +26,8 @@ const TERRAIN_CODE = { '#': WALL, '.': FLOOR, '~': PUDDLE, G: BUD, H: HUSH, a: 5
 const FACING = { '^': 'N', '>': 'E', v: 'S', '<': 'W' };           // Stumpcaps
 const NEWT_FACING = { n: 'N', e: 'E', s: 'S', w: 'W' };            // Dozer newts
 const CLOCKWISE = { N: 'E', E: 'S', S: 'W', W: 'N' };
-const SPECIES_NAME = { M: 'Fluffmoth', S: 'Shellwhelk', T: 'Stumpcap', D: 'Dozer newt' };
+const SPECIES_NAME = { M: 'Fluffmoth', S: 'Shellwhelk', T: 'Stumpcap', D: 'Dozer newt', K: 'Emberwick' };
+const GLOWING = 2;   // an Emberwick's heat once it has caught (section 3)
 
 const own = (object, k) => Object.prototype.hasOwnProperty.call(object, k);
 
@@ -112,7 +113,7 @@ export function parseLevel(levelDef) {
   const tiles = [];
   const creatures = [];
   const buds = [];
-  const counters = { M: 0, S: 0, T: 0, D: 0 };
+  const counters = { M: 0, S: 0, T: 0, D: 0, K: 0 };
   let wren = null;
   let planted = null;
   let wrens = 0;
@@ -138,10 +139,11 @@ export function parseLevel(levelDef) {
         lanterns++;
         planted = { x, y, carried: false };
         standing.push(['lantern', x, y, base]);
-      } else if (ch === 'M' || ch === 'S' || own(FACING, ch) || own(NEWT_FACING, ch)) {
+      } else if (ch === 'M' || ch === 'S' || ch === 'K' || own(FACING, ch) || own(NEWT_FACING, ch)) {
         const type = own(FACING, ch) ? 'T' : own(NEWT_FACING, ch) ? 'D' : ch;
         const dir = type === 'T' ? FACING[ch] : type === 'D' ? NEWT_FACING[ch] : null;
-        creatures.push({ id: `${type}${++counters[type]}`, type, x, y, dir });
+        const id = `${type}${++counters[type]}`;
+        creatures.push(type === 'K' ? { id, type, x, y, dir, heat: 0 } : { id, type, x, y, dir });
         standing.push([SPECIES_NAME[type], x, y, base]);
       } else {
         fail(`unknown map character '${ch}' at ${x},${y}`);
@@ -182,7 +184,7 @@ export function parseLevel(levelDef) {
   };
   // Phases 4 to 6 run once for the initial state (section 2): a bud lit at the start is already in bloom.
   const meta = metaOf(state);
-  state.lit = lightMap(meta, state.lantern, creatures);
+  state.lit = lightOf(meta, state.lantern, creatures);
   for (const c of meta.channels) state.gates[CHANNELS[c]] = channelOpen(meta, c, creatures, state.lit);
   state.bloom = meta.buds.map((b) => state.lit[b]);
   state.solved = allInBloom(state.bloom);
@@ -190,6 +192,31 @@ export function parseLevel(levelDef) {
 }
 
 // ---------------------------------------------------------------- light (SPEC section 4)
+
+// The whole light map: the lantern's, plus a radius-1 cross around every glowing Emberwick. Embers are rare,
+// so the lantern's cached map is returned as it is when there are none.
+function lightOf(meta, lantern, creatures) {
+  const base = lightMap(meta, lantern, creatures);
+  let out = base;
+  for (let i = 0; i < creatures.length; i++) {
+    const c = creatures[i];
+    if (c === null || c.type !== 'K' || c.heat !== GLOWING) continue;
+    if (out === base) out = base.slice();
+    glow(meta, out, c.x, c.y);
+  }
+  return out === base ? base : Object.freeze(out);
+}
+
+// A source of radius 1 lights its own tile and its four neighbours (Hush excepted), whatever stands there.
+function glow(meta, lit, x, y) {
+  const { w, h, terr } = meta;
+  const p = y * w + x;
+  lit[p] = 1;
+  if (y > 0 && terr[p - w] !== HUSH) lit[p - w] = 1;
+  if (x + 1 < w && terr[p + 1] !== HUSH) lit[p + 1] = 1;
+  if (y + 1 < h && terr[p + w] !== HUSH) lit[p + w] = 1;
+  if (x > 0 && terr[p - 1] !== HUSH) lit[p - 1] = 1;
+}
 
 // The light map for a lantern position and a set of creatures: an array of 0/1, index y*w+x.
 //
@@ -460,7 +487,7 @@ export function step(state, action) {
 
   if (count > 0) {
     // Phase 2: Light A, with the new Wren and lantern positions and the creatures where they stood.
-    const lightA = lightMap(meta, lantern, before);
+    const lightA = lightOf(meta, lantern, before);
     const smothered = lantern.carried && terr[lantern.y * w + lantern.x] === HUSH;
 
     // Phase 3: every creature acts once, in reading order of its position at the start of the phase.
@@ -497,6 +524,22 @@ export function step(state, action) {
           events.push({ type: 'bump', id: c.id });
           continue;
         }
+      } else if (type === 'K' && c.heat !== GLOWING) {
+        const heat = lightA[y * w + x] === 1 ? c.heat + 1 : 0;   // two lit turns in a row and it catches
+        if (heat === c.heat) continue;
+        if (after === before) {
+          after = before.slice();
+          next.creatures = after;
+        }
+        after[i] = { id: c.id, type, x, y, dir, heat };
+        events.push({ type: heat === GLOWING ? 'ignite' : heat === 1 ? 'warm' : 'cool', id: c.id });
+        continue;
+      } else if (type === 'K') {                                   // glowing: follows Wren, not the lantern
+        const hx = sign(wren.x - x);
+        const vy = sign(wren.y - y);
+        if (hx !== 0 && enterable(meta, next, type, x + hx, y)) x += hx;
+        else if (vy !== 0 && enterable(meta, next, type, x, y + vy)) y += vy;
+        else continue;
       } else {
         if (smothered) continue;
         let hx;
@@ -525,20 +568,20 @@ export function step(state, action) {
         next.bridges = next.bridges.concat(`${x},${y}`).sort();
         events.push({ type: 'settle', id: c.id, x, y });
       } else {
-        after[i] = { id: c.id, type, x, y, dir };
+        after[i] = type === 'K' ? { id: c.id, type, x, y, dir, heat: c.heat } : { id: c.id, type, x, y, dir };
       }
     }
   }
 
   // Phase 4: Light B, the light stored in the state.
   const lit0 = state.lit;
-  const lit = lightMap(meta, lantern, after);
+  const lit = lightOf(meta, lantern, after);
   next.lit = lit;
   if (count > 0) {
     for (let k = 0; k < count; k++) {
       const i = order[k];
       const c0 = before[i];
-      if (c0.type === 'M') continue;
+      if (c0.type === 'M' || c0.type === 'K') continue;
       const c1 = after[i];
       const was = lit0[c0.y * w + c0.x] === 1;
       const now = lit[c1.y * w + c1.x] === 1;
@@ -597,7 +640,7 @@ export function step(state, action) {
 // One-character strings for the small numbers a key is made of (all below 99 * 16).
 const CHAR = Array.from({ length: 1600 }, (_, i) => String.fromCharCode(48 + i));
 // Creature and bridge kinds in a key code: moth, whelk, Stumpcap by facing, newt by facing, bridge.
-const KIND = { M: 0, S: 1, TN: 2, TE: 3, TS: 4, TW: 5, DN: 6, DE: 7, DS: 8, DW: 9 };
+const KIND = { M: 0, S: 1, TN: 2, TE: 3, TS: 4, TW: 5, DN: 6, DE: 7, DS: 8, DW: 9, K0: 10, K1: 11, K2: 12 };
 const BRIDGE_KIND = 15;
 const CODES = [];   // scratch for key()
 
@@ -628,7 +671,7 @@ export function key(state) {
     let code;
     if (i < creatures.length) {
       const c = creatures[i];
-      const kind = c.type === 'M' || c.type === 'S' ? KIND[c.type] : KIND[c.type + c.dir];
+      const kind = c.type === 'M' || c.type === 'S' ? KIND[c.type] : c.type === 'K' ? KIND[`K${c.heat}`] : KIND[c.type + c.dir];
       code = (c.y * w + c.x) * 16 + kind;
     } else {
       const b = bridges[i - creatures.length];

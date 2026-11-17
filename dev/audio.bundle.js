@@ -49,6 +49,10 @@ var GAudio = (() => {
     "newtTurn",
     "newtDoze",
     "newtWake",
+    "emberWarm",
+    "emberCool",
+    "emberIgnite",
+    "emberStep",
     "gateOpen",
     "gateClose",
     "budOn",
@@ -94,6 +98,10 @@ var GAudio = (() => {
     newtTurn: 0.5,
     newtDoze: 0.25,
     newtWake: 0.27,
+    emberWarm: 0.5,
+    emberCool: 0.3,
+    emberIgnite: 0.25,
+    emberStep: 0.235,
     gateOpen: 0.13,
     gateClose: 0.133,
     budOn: 0.27,
@@ -117,10 +125,13 @@ var GAudio = (() => {
     newtStep: 1,
     newtTurn: 1,
     newtDoze: 1,
-    newtWake: 1
+    newtWake: 1,
+    emberWarm: 1,
+    emberCool: 1,
+    emberStep: 1
   };
   var ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1 };
-  var LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1 };
+  var LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1, emberStep: 1 };
   var PENT = [0, 2, 4, 7, 9];
   var CHAPTERS = [
     null,
@@ -593,6 +604,45 @@ var GAudio = (() => {
     const b = tone(k, "sine", 860 * v, t + 0.09, 0.55, 4e-3, 0.12);
     b.frequency.exponentialRampToValueAtTime(1280 * v, t + 0.16);
     hiss(k, "bandpass", 2400, 2, t, 0.05, 3e-3, 0.03);
+  };
+  SOUNDS.emberWarm = function(k, t) {
+    const n = 3 + Math.floor(k.r() * 2);
+    let at = t;
+    for (let i = 0; i < n; i++) {
+      hiss(k, "bandpass", 2600 + k.r() * 1800, 6, at, 0.3 * (1 - i * 0.15), 2e-3, 0.018 + k.r() * 0.012);
+      at += 0.035 + k.r() * 0.045;
+    }
+    const v = 1 + (k.r() - 0.5) * 0.1;
+    tone(k, "sine", 210 * v, t, 0.18, 0.04, 0.22 + k.r() * 0.06);
+  };
+  SOUNDS.emberCool = function(k, t) {
+    const v = 1 + (k.r() - 0.5) * 0.12;
+    const len = 0.22 + k.r() * 0.08;
+    const f = hiss(k, "bandpass", 3e3 * v, 2.2, t, 0.26, 0.015, len);
+    f.frequency.setValueAtTime(3e3 * v, t);
+    f.frequency.exponentialRampToValueAtTime(1200 * v, t + len);
+    const o = tone(k, "sine", 330 * v, t, 0.12, 0.01, len * 0.8);
+    o.frequency.exponentialRampToValueAtTime(220 * v, t + len * 0.8);
+  };
+  SOUNDS.emberIgnite = function(k, t) {
+    const w = hiss(k, "lowpass", 400, 1.5, t, 0.45, 0.06, 0.42);
+    w.frequency.setValueAtTime(400, t);
+    w.frequency.exponentialRampToValueAtTime(2600, t + 0.12);
+    w.frequency.exponentialRampToValueAtTime(900, t + 0.4);
+    tone(k, "triangle", 294, t + 0.06, 0.32, 0.05, 0.55);
+    tone(k, "sine", 440, t + 0.14, 0.28, 0.05, 0.5);
+    let at = t + 0.2;
+    for (let i = 0; i < 4; i++) {
+      hiss(k, "bandpass", 2800 + k.r() * 1600, 6, at, 0.16 * (1 - i * 0.18), 2e-3, 0.02);
+      at += 0.06 + k.r() * 0.05;
+    }
+  };
+  SOUNDS.emberStep = function(k, t) {
+    const v = 1 + (k.r() - 0.5) * 0.16;
+    hiss(k, "lowpass", 700 * v, 1, t, 0.3, 3e-3, 0.05);
+    const o = tone(k, "sine", 260 * v, t, 0.42, 3e-3, 0.08);
+    o.frequency.exponentialRampToValueAtTime(190 * v, t + 0.06);
+    hiss(k, "bandpass", 3200 + k.r() * 1200, 6, t + 0.03 + k.r() * 0.03, 0.12, 2e-3, 0.015);
   };
   SOUNDS.gateOpen = function(k, t) {
     creak(

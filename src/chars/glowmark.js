@@ -1239,6 +1239,71 @@ function paintNewt(p, d, awake, f, lit) {
   p.line(chevron(hx, hy, dx, dy, 0.042, 0.05), AMBER, 0.026, Math.min(1, dm + 0.12), 0.05);
 }
 
+// ---------------------------------------------------------------------------
+// Emberwick: a stubby wax creature with a wick on top and no face. Cold, only its wax drips glow faintly;
+// warm, a coal sits on the wick; once it catches, a flame burns there and it lights the tiles around it.
+// ---------------------------------------------------------------------------
+
+const T_WAX = ['#8E6157', '#52323A', '#23131C'];
+const EMBER = '#FF9A5A';
+
+function paintEmber(p, heat, f, lit) {
+  const g = p.g;
+  const dm = lit ? 0.8 : 0.45;
+  groundShadow(p, 0.5, 0.865, 0.27, 0.075, 0.8);
+  // two stubby feet
+  for (const k of [-1, 1]) {
+    const x = 0.5 + k * 0.12;
+    p.body(ell(x, 0.852, 0.062, 0.032), x, 0.852, 0.05, T_WAX, 0.006);
+  }
+  // the body: a squat candle stub with soft shoulders and a slumped, uneven top
+  const body = smooth([
+    [0.31, 0.845], [0.275, 0.73], [0.285, 0.6], [0.315, 0.49], [0.37, 0.44], [0.45, 0.425], [0.53, 0.44],
+    [0.61, 0.43], [0.675, 0.475], [0.71, 0.58], [0.725, 0.72], [0.69, 0.845], [0.5, 0.87],
+  ]);
+  p.body(body, 0.5, 0.62, 0.3, T_WAX, 0.02);
+  if (!p.glow) {
+    // a pool of softer wax around the wick
+    g.fillStyle = 'rgba(255,214,186,0.1)';
+    g.fill(ell(0.505, 0.455, 0.12, 0.03));
+  }
+  // wax drips down the sides, uneven lengths; they are its glowing markings
+  const glowDm = Math.min(1, dm + (heat === 0 ? 0.15 : 0.3));
+  const drips = new Path2D();
+  for (const [x, top, len] of [[0.33, 0.5, 0.22], [0.43, 0.445, 0.05], [0.6, 0.45, 0.16], [0.675, 0.5, 0.08]]) {
+    drips.moveTo(x, top);
+    drips.quadraticCurveTo(x + 0.008, top + len * 0.6, x, top + len);
+  }
+  p.line(drips, EMBER, 0.032, glowDm, 0.05);
+  for (const [x, y] of [[0.33, 0.72], [0.6, 0.61]]) p.dot(x, y + 0.006, 0.022, EMBER, glowDm, 0.05);
+  // the wick: a little curl out of the top
+  const wick = smooth([[0.505, 0.44], [0.51, 0.385], [0.495, 0.345], [0.51, 0.31]], false);
+  p.strokeBody(wick, '#1A0F14', 0.032);
+  if (heat === 1) p.dot(0.51, 0.31, 0.026, '#FF6A3A', 1, 0.09);   // a coal on the wick
+  if (heat === 2) {
+    const wob = [0, 0.012, -0.008, 0.006][f];
+    const flame = smooth([
+      [0.505 + wob * 2.4, 0.075, 1], [0.565, 0.17], [0.575, 0.245], [0.505, 0.315], [0.435, 0.245], [0.445, 0.17],
+    ]);
+    const gr = g.createRadialGradient(0.505, 0.25, 0.01, 0.505, 0.22, 0.13);
+    gr.addColorStop(0, '#FFFDF0');
+    gr.addColorStop(0.45, '#FFD98A');
+    gr.addColorStop(1, '#FF8A3A');
+    g.save();
+    if (p.glow) {
+      g.shadowColor = AMBER;
+      g.shadowBlur = p.P * 0.14;
+    }
+    g.fillStyle = gr;
+    g.fill(flame);
+    g.restore();
+    if (!p.glow) {
+      g.fillStyle = '#FFFDF0';
+      g.fill(smooth([[0.505 + wob, 0.17, 1], [0.53, 0.235], [0.505, 0.29], [0.48, 0.235]]));
+    }
+  }
+}
+
 function paintZ(p) {
   const z = new Path2D();
   z.moveTo(0.3, 0.32);
@@ -1252,7 +1317,7 @@ function paintZ(p) {
 function creatureSpec(b, type, o) {
   const t = o.t || 0;
   const lit = o.lit ? 1 : 0;
-  const sp = { s: null, dy: 0, sx: 1, sy: 1, ax: 0.5, ay: 0.9, glowA: 0, hover: false, zed: false, emitA: 0.6 };
+  const sp = { s: null, dy: 0, sx: 1, sy: 1, ax: 0.5, ay: 0.9, glowA: 0, hover: false, zed: false, emitA: 0.6, flame: 0 };
   if (type === 'M') {
     const f = lit ? Math.floor(t * 26) % 12 : 0;
     sp.s = get(b, 'M' + lit + '.' + f, (p) => paintMoth(p, lit, f), lit ? RIM_WARM : RIM_COOL, lit ? 0 : 0.34);
@@ -1311,6 +1376,23 @@ function creatureSpec(b, type, o) {
       sp.zed = true;
       sp.emitA = 0.48 + 0.06 * br;
     }
+  } else if (type === 'K') {
+    const heat = o.heat === 1 || o.heat === 2 ? o.heat : 0;
+    const gl = heat === 2 ? 1 : lit;
+    const f = heat === 2 ? Math.floor(t * 10) & 3 : 0;
+    sp.s = get(b, 'K' + heat + gl + '.' + f, (p) => paintEmber(p, heat, f, gl), gl ? RIM_WARM : RIM_COOL, gl ? 0 : 0.34);
+    const br = Math.sin(t * 1.3);
+    if (heat === 2) {
+      sp.glowA = 0.8 + 0.2 * flicker(t);
+      sp.flame = 0.45 + 0.15 * flicker(t + 1.3);
+      sp.dy = -Math.abs(Math.sin(t * 2.2)) * 0.012;
+    } else {
+      sp.glowA = gl ? (heat === 1 ? 0.75 + 0.2 * Math.sin(t * 7) : 0.55) : 0;
+      sp.emitA = heat === 1 ? 0.75 + 0.2 * Math.sin(t * 7) : 0.5 + 0.08 * br;
+      sp.sx = 1 + 0.012 * br;
+      sp.sy = 1 - 0.015 * br;
+      sp.ay = 0.86;
+    }
   }
   return sp;
 }
@@ -1335,6 +1417,7 @@ export function drawCreature(ctx, type, px, py, size, opts) {
   if (sp.hover !== false) shadow(ctx, b, px + 0.5 * size, py + 0.88 * size, (0.5 - 0.04 * sp.hover) * size, 0.12 * size, 0.38);
   put(ctx, sp.s, px, py + sp.dy * size, size, sp.glowA, sp.sx, sp.sy, sp.ax, sp.ay);
   if (sp.zed) drawZed(ctx, b, px, py, size, o.t || 0, false);
+  if (sp.flame > 0) halo(ctx, b, px + 0.505 * size, py + (0.22 + sp.dy) * size, size * 0.9, sp.flame);   // a glowing Emberwick's flame
 }
 
 // Emissive pass, drawn after the darkness. On an unlit tile only the luminous markings and a faint rim

@@ -40,6 +40,10 @@ const ADHOC = {
     id: 'T-5', name: 'Newt Gate',
     map: ['########', '#W..A.G#', '####.###', '###ea.##', '########'],
   },
+  ember: {
+    id: 'T-6', name: 'Ember Light',
+    map: ['######', '#L~K.#', '###..#', '#G...#', '##.W.#', '######'],
+  },
   trio: {
     id: 'T-3', name: 'All Three',
     map: ['#########', '#G.....G#', '#A##H##.#', '#.W.L.S.#', '#.#~#.#.#', '#.M...>a#', '#########'],
@@ -712,7 +716,7 @@ async function main() {
     // ---------------------------------------------------------------- 12. ad-hoc levels
     console.log('ad-hoc levels');
     await h.open();
-    for (const name of ['whelk', 'stump', 'newt', 'trio']) {
+    for (const name of ['whelk', 'stump', 'newt', 'ember', 'trio']) {
       const def = ADHOC[name];
       const moves = solutionOf(def);
       eq(`ad-hoc ${name}: loads`, await h.gd('loadLevelDef', def), true);
@@ -775,6 +779,41 @@ async function main() {
       const onNewt = await bright(n.x, n.y);
       const onFloor = await bright(n.x + 2, n.y);
       ok('ad-hoc newt: its markings glow in the dark', onNewt > 0.01 && onNewt > onFloor * 4, JSON.stringify({ onNewt, onFloor }));
+    }
+    // ember: its card; cold, its drips glow in the dark; caught, a flame burns on its wick
+    {
+      const bright = (x, y, over) => h.page.evaluate(([tx, ty, o]) => {
+        const L = window.__gd.layout();
+        const c = document.querySelector('#screen-level canvas');
+        const k = L.dpr;
+        const d = c.getContext('2d').getImageData(Math.round((L.ox + tx * L.size) * k), Math.round((L.oy + ty * L.size) * k),
+          Math.round(L.size * k), Math.round(L.size * k)).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > o) n++;
+        return n / (d.length / 4);
+      }, [x, y, over]);
+      // the floor it is measured against is two steps from both the ember and the lantern's light
+      const dark = { id: 'T-7', name: 'Cold Ember', map: ['#########', '#W....K.#', '#########'] };
+      await h.gd('loadLevelDef', dark);
+      await h.page.waitForTimeout(300);
+      eq('ad-hoc ember: starts in the dark', engine.parseLevel(dark).lit[1 * 9 + 6], 0);
+      const onEmber = await bright(6, 1, 300);
+      const onFloor = await bright(4, 1, 300);
+      ok('ad-hoc ember: a cold one\'s drips glow in the dark', onEmber > 0.006 && onEmber > onFloor * 4, JSON.stringify({ onEmber, onFloor }));
+      await h.gd('loadLevelDef', ADHOC.ember);
+      const s = engine.parseLevel(ADHOC.ember);
+      const k = s.creatures[0];
+      await cardCheck('Emberwick', k.x, k.y, 'Emberwick', CARDS.Emberwick);
+      await h.page.waitForTimeout(200);
+      const cold = await bright(k.x, k.y, 690);
+      await h.gd('act', 'Z');
+      await h.gd('act', 'Z');
+      await h.idle();
+      eq('ad-hoc ember: two lit turns and it catches', (await h.gd('state')).creatures[0].heat, 2);
+      await h.page.waitForTimeout(200);
+      const flame = await bright(k.x, k.y, 690);
+      ok('ad-hoc ember: a flame burns on its wick once it catches', flame > 0.01 && flame > cold * 3, JSON.stringify({ cold, flame }));
+      await h.shot('ember-glowing');
     }
     // trio: starts with a planted lantern, has Hush and two buds
     await h.gd('loadLevelDef', ADHOC.trio);

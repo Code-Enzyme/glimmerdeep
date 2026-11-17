@@ -1038,6 +1038,139 @@ test('key: tells a newt from a Stumpcap and every newt facing apart', () => {
 
 // ---------------------------------------------------------------- roots and gates (SPEC section 2, phase 5)
 
+// ---------------------------------------------------------------- Emberwick (SPEC section 3)
+
+const heat = (s) => s.creatures.filter((c) => c.type === 'K').map((c) => `${c.id}:${c.heat}@${c.x},${c.y}`).sort();
+const kinds = (s, ...types) => s.events.filter((e) => types.includes(e.type)).map((e) => `${e.type}:${e.id}`);
+
+test('parseLevel: K is an Emberwick, cold, with no facing', () => {
+  const s = parse(['W.K.K']);
+  assert.deepEqual(s.creatures.map((c) => ({ ...c })), [
+    { id: 'K1', type: 'K', x: 2, y: 0, dir: null, heat: 0 },
+    { id: 'K2', type: 'K', x: 4, y: 0, dir: null, heat: 0 },
+  ]);
+  assert.deepEqual(heat(parse(['WK'])), ['K1:0@1,0'], 'lit at the start, but warming happens in the creature phase');
+});
+
+test('Emberwick: two lit turns in a row and it catches; it does not move while it warms', () => {
+  const s = parse(['WK..', '....']);
+  const a = step(s, 'Z');
+  assert.deepEqual(heat(a), ['K1:1@1,0']);
+  assert.deepEqual(kinds(a, 'warm', 'cool', 'ignite'), ['warm:K1']);
+  const b = step(a, 'Z');
+  assert.deepEqual(heat(b), ['K1:2@1,0'], 'caught, and it does not move on the turn it catches');
+  assert.deepEqual(kinds(b, 'warm', 'cool', 'ignite'), ['ignite:K1']);
+  assert.deepEqual(kinds(step(b, 'Z'), 'warm', 'cool', 'ignite'), [], 'nothing more to report once it glows');
+});
+
+test('Emberwick: a dark turn in between and it goes cold again', () => {
+  // Wren steps next to it, steps away, steps back: never two lit turns in a row.
+  const s = parse(['K...', 'W...', '....']);
+  const a = step(s, 'Z');
+  assert.deepEqual(heat(a), ['K1:1@0,0']);
+  const b = step(a, 'S');
+  assert.deepEqual(heat(b), ['K1:0@0,0']);
+  assert.deepEqual(kinds(b, 'warm', 'cool', 'ignite'), ['cool:K1']);
+  const c = step(b, 'N');
+  assert.deepEqual(heat(c), ['K1:1@0,0']);
+  assert.deepEqual(heat(step(c, 'Z')), ['K1:2@0,0']);
+  assert.deepEqual(heat(step(parse(['K..W']), 'Z')), ['K1:0@0,0'], 'a cold one in the dark stays cold and quiet');
+  assert.deepEqual(step(parse(['K..W']), 'Z').events.map((e) => e.type), ['wait']);
+});
+
+test('Emberwick: glowing, it is a light of radius 1 from its own tile', () => {
+  // Wren lights it twice, then walks off east with the lantern; it follows one step behind.
+  const s = run(parse(['.K.....', '.W.....', '.......']), ['Z', 'Z']);
+  assert.deepEqual(heat(s), ['K1:2@1,0']);
+  assert.deepEqual(light(s), ['1110000', '1110000', '0100000'], 'its cross and the lantern\'s');
+  const away = run(s, ['E', 'E', 'E', 'E']);
+  assert.deepEqual(heat(away), ['K1:2@5,0']);
+  assert.deepEqual(light(away), ['0000111', '0000111', '0000010'], 'two crosses: around the ember, around Wren');
+});
+
+test('Emberwick: glowing, it follows Wren with the greedy step, sideways first, and stays next to her', () => {
+  const lit = run(parse(['KW....', '......', '......']), ['Z', 'Z']);
+  assert.deepEqual(heat(lit), ['K1:2@0,0']);
+  assert.deepEqual(heat(step(lit, 'Z')), ['K1:2@0,0'], 'next to Wren it stays put');
+  const e = run(lit, ['E', 'E', 'E']);
+  assert.deepEqual(heat(e), ['K1:2@3,0'], 'one step behind');
+  const down = run(e, ['S', 'S']);
+  // Wren at 4,2. From 3,0 it wants east and south: east first (4,0), then south (4,1).
+  assert.deepEqual(heat(step(e, 'S')), ['K1:2@4,0']);
+  assert.deepEqual(heat(down), ['K1:2@4,1']);
+  // sideways blocked by a wall, it goes down instead
+  const walled = run(parse(['K..', 'W#.', '...']), ['Z', 'Z', 'S', 'E']);
+  assert.deepEqual(heat(walled), ['K1:2@0,2']);
+});
+
+test('Emberwick: it follows Wren, not the lantern, and keeps glowing in the dark and while the lantern is smothered', () => {
+  // Plant the lantern, walk away: the ember comes along.
+  const s = run(parse(['K.....', 'W.....']), ['Z', 'Z', 'L', 'E', 'E', 'E']);
+  assert.equal(s.lantern.carried, false);
+  assert.deepEqual(heat(s), ['K1:2@3,0']);
+  // Into the Hush: the lantern is smothered, the ember still glows and still follows.
+  const h = run(parse(['KW.H.', '.....']), ['Z', 'Z', 'E', 'E']);
+  assert.deepEqual(h.wren, { x: 3, y: 0 });
+  assert.deepEqual(heat(h), ['K1:2@2,0']);
+  assert.deepEqual(light(h), ['01100', '00100'], 'only the ember lights anything; Hush is never lit');
+});
+
+test('Emberwick: its light blooms buds, hides whelks, wakes Stumpcaps and makes newts doze', () => {
+  // The bud at 0,0 is out of Wren's reach until the ember beside it catches.
+  const bud = parse(['GK.', '#.W']);
+  const a = step(bud, 'W');
+  assert.deepEqual([heat(a), a.bloom], [['K1:1@1,0'], [0]]);
+  const b = step(a, 'Z');
+  assert.deepEqual([heat(b), b.bloom, b.solved], [['K1:2@1,0'], [1], true]);
+  // A whelk, a Stumpcap and a newt around a glowing ember that Wren left behind a wall.
+  // x: 0123456
+  // 0: .S.....
+  // 1: vK#....
+  // 2: .W#....
+  const s = run(parse(['.S.....', 'vK#....', '.W#....'], { under: {} }), ['Z']);
+  assert.deepEqual(heat(s), ['K1:1@1,1']);
+  const glow = step(s, 'Z');
+  assert.deepEqual(heat(glow), ['K1:2@1,1']);
+  assert.equal(isHidden(glow, only(glow, 'S')), true, 'the whelk is lit by the ember (Light B)');
+  assert.equal(isAwake(glow, only(glow, 'T')), true, 'so is the Stumpcap');
+  const n = step(parse(['#s#', '.K.', '.W.']), 'Z');
+  const n2 = step(n, 'Z');
+  assert.equal(isAwake(n2, only(n2, 'D')), false, 'a newt beside a glowing ember dozes');
+});
+
+test('Emberwick: a glowing ember warms another one', () => {
+  // K1 is next to Wren; K2 only gets light from K1.
+  const s = parse(['KW', 'K.']);
+  const t = run(s, ['Z', 'Z']);
+  assert.deepEqual(heat(t), ['K1:2@0,0', 'K2:0@0,1']);
+  assert.deepEqual(heat(run(t, ['Z', 'Z'])), ['K1:2@0,0', 'K2:2@0,1']);
+});
+
+test('Emberwick: never heavy, cold, warm or glowing', () => {
+  let s = parse(['WK', '.A'], { under: { '1,0': 'a' } });
+  for (let i = 0; i < 4; i++) {
+    assert.equal(isGateOpen(s, 'A'), false, `turn ${s.turn}`);
+    s = step(s, 'Z');
+  }
+  assert.deepEqual(heat(s), ['K1:2@1,0']);
+  assert.equal(isGateOpen(s, 'A'), false);
+});
+
+test('canEnter: an Emberwick cannot enter a puddle, but walks over a bridge', () => {
+  const s = parse(['W~K']);
+  assert.equal(canEnter(s, 'K', 1, 0), false);
+  assert.equal(canEnter({ ...s, bridges: ['1,0'] }, 'K', 1, 0), true);
+  for (let x = 0; x < s.w; x++) assert.equal(canEnter(s, 'K', x, 0), canEnter(s, 'T', x, 0), `${x}`);
+});
+
+test('key: tells cold, warm and glowing Emberwicks apart', () => {
+  const s = parse(['WK', '..']);
+  const a = step(s, 'Z');
+  const b = step(a, 'Z');
+  assert.equal(new Set([key(s), key(a), key(b)]).size, 3);
+  assert.notEqual(key(parse(['WK'])), key(parse(['WS'])));
+});
+
 test('roots: a Stumpcap presses a root whether asleep or awake', () => {
   const asleep = parse(['W.>A'], { under: { '2,0': 'a' } });
   assert.equal(isAwake(asleep, only(asleep, 'T')), false);
@@ -1456,25 +1589,30 @@ function referenceStep(s, action) {
     return lantern.carried || lantern.x !== x || lantern.y !== y;
   };
 
+  // Every source floods on its own (section 4); the light map is the union.
   const light = () => {
     const lit = new Set();
-    if (lantern.carried && tile(lantern.x, lantern.y) === 'H') return lit;   // smothered
     const transparent = (x, y) => tile(x, y) !== '#' && tile(x, y) !== 'H' && !creatureOn(x, y);
-    lit.add(at(lantern.x, lantern.y));
-    let frontier = [[lantern.x, lantern.y]];
-    for (let d = 0; d < (lantern.carried ? 1 : 2); d++) {
-      const next = [];
-      for (const [x, y] of frontier) {
-        if (d > 0 && !transparent(x, y)) continue;
-        for (const [dx, dy] of Object.values(DIRS)) {
-          const [nx, ny] = [x + dx, y + dy];
-          if (nx < 0 || ny < 0 || nx >= s.w || ny >= s.h || tile(nx, ny) === 'H' || lit.has(at(nx, ny))) continue;
-          lit.add(at(nx, ny));
-          next.push([nx, ny]);
+    const flood = (px, py, radius) => {
+      const mine = new Set([at(px, py)]);
+      let frontier = [[px, py]];
+      for (let d = 0; d < radius; d++) {
+        const next = [];
+        for (const [x, y] of frontier) {
+          if (d > 0 && !transparent(x, y)) continue;
+          for (const [dx, dy] of Object.values(DIRS)) {
+            const [nx, ny] = [x + dx, y + dy];
+            if (nx < 0 || ny < 0 || nx >= s.w || ny >= s.h || tile(nx, ny) === 'H' || mine.has(at(nx, ny))) continue;
+            mine.add(at(nx, ny));
+            next.push([nx, ny]);
+          }
         }
+        frontier = next;
       }
-      frontier = next;
-    }
+      for (const t of mine) lit.add(t);
+    };
+    if (!(lantern.carried && tile(lantern.x, lantern.y) === 'H')) flood(lantern.x, lantern.y, lantern.carried ? 1 : 2);
+    for (const c of creatures) if (c.type === 'K' && c.heat === 2) flood(c.x, c.y, 1);
     return lit;
   };
 
@@ -1509,6 +1647,23 @@ function referenceStep(s, action) {
       if (!lit || !canEnter('T', x + DIRS[c.dir][0], y + DIRS[c.dir][1])) continue;
       x += DIRS[c.dir][0];
       y += DIRS[c.dir][1];
+    } else if (c.type === 'D') {
+      if (lit) continue;
+      if (!canEnter('D', x + DIRS[c.dir][0], y + DIRS[c.dir][1])) {
+        c.dir = { N: 'E', E: 'S', S: 'W', W: 'N' }[c.dir];
+        continue;
+      }
+      x += DIRS[c.dir][0];
+      y += DIRS[c.dir][1];
+    } else if (c.type === 'K' && c.heat < 2) {
+      c.heat = lit ? c.heat + 1 : 0;
+      continue;
+    } else if (c.type === 'K') {
+      const hx = Math.sign(wren.x - x);
+      const vy = Math.sign(wren.y - y);
+      if (hx !== 0 && canEnter('K', x + hx, y)) x += hx;
+      else if (vy !== 0 && canEnter('K', x, y + vy)) y += vy;
+      else continue;
     } else {
       if (smothered || (c.type === 'S' && lit)) continue;
       const toward = c.type === 'M' ? 1 : -1;
@@ -1535,7 +1690,7 @@ function referenceStep(s, action) {
     for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (tile(x, y) === channel.toLowerCase()) roots.push([x, y]);
     gates[channel] = roots.length > 0 && roots.every(([x, y]) => {
       const c = creatureOn(x, y);
-      return c !== undefined && (c.type === 'T' || (c.type === 'S' && lightB.has(at(x, y))));
+      return c !== undefined && (c.type === 'T' || c.type === 'D' || (c.type === 'S' && lightB.has(at(x, y))));
     });
   }
   const lit = [];
@@ -1554,6 +1709,9 @@ test('step agrees with a naive reference implementation on every move of thousan
     'moths and puddles': ['W.......M', '.~.~.~.~.', 'M...M...M', '.........'],
     'buds far apart, with a whelk and a moth': ['G...W...G', '.S.....M.', '....G....', 'G.......#'],
     'four Stumpcaps and two buds': ['..v.G....', '.W.>.a.A.', '..^.S..G.', '.<..~M...'],
+    'newts on roots, a gate and a whelk': ['W..e.....', '.a..A..S.', '..s...~..', 'G....w..G'],
+    'Emberwicks with every other species': ['WK..v....', '.K.a.A.S.', '..e..~M..', 'G...H..KG'],
+    'Emberwicks, a planted lantern and Hush': ['L.K......', '.HHH.K.G.', 'W...~....', '..b.B..S.'],
   };
   const byId = (a, b) => (a.id < b.id ? -1 : 1);
   for (const [name, map] of Object.entries(boards)) {
