@@ -1057,6 +1057,188 @@ function paintStump(p, d, awake, f, lit) {
   p.line(chevron(cx - dx * 0.08, ccy - dy * 0.065, dx, dy, 0.06, 0.09), AMBER, 0.03, dm * 0.75, 0.05);
 }
 
+// ---------------------------------------------------------------------------
+// Dozer newt: a long, low velvet newt seen from above. A row of paired glowing spots runs down its
+// back and one amber chevron sits on its head for its facing; the head is a plain rounded spade, with
+// no eyes. Wandering (in the dark) it swings in an S that travels down to the tail and its legs paddle
+// in diagonal pairs. Dozing (in the light) it lies curled with its tail round its side.
+// ---------------------------------------------------------------------------
+
+const T_NEWT = ['#80505E', '#4A2A39', '#200F19'];
+const T_NEWT_LEG = ['#5E3C4C', '#38202E', '#190C15'];
+const NEWT_MARK = '#A9B6FF';
+const NEWT_FY = 0.74;    // the ground plane is squashed for the three-quarter view
+const NEWT_LEN = 0.84;
+// half-width along the body, snout (0) to tail tip (1): head, neck, shoulders, belly, hips, tail
+const NEWT_W = [[0, 0.05], [0.04, 0.08], [0.09, 0.097], [0.14, 0.09], [0.19, 0.072], [0.25, 0.092],
+  [0.33, 0.114], [0.43, 0.116], [0.52, 0.098], [0.6, 0.072], [0.7, 0.05], [0.8, 0.033], [0.9, 0.018], [1, 0.005]];
+
+function newtWidth(s) {
+  for (let i = 1; i < NEWT_W.length; i++) {
+    const [s1, w1] = NEWT_W[i];
+    if (s <= s1) {
+      const [s0, w0] = NEWT_W[i - 1];
+      const k = (s - s0) / (s1 - s0);
+      return w0 + (w1 - w0) * (0.5 - 0.5 * Math.cos(Math.PI * k));
+    }
+  }
+  return NEWT_W[NEWT_W.length - 1][1];
+}
+
+// The spine in ground units: u forward, v to the newt's left. Returns n + 1 points from snout to tail.
+function newtSpine(awake, f, n) {
+  const pts = [];
+  if (awake) {
+    const phase = f * Math.PI * 0.5;
+    for (let i = 0; i <= n; i++) {
+      const s = i / n;
+      const swing = 0.05 * Math.pow(s, 0.8) * Math.sin(TAU * 0.85 * s - phase);
+      pts.push([0.4 - NEWT_LEN * s, swing]);
+    }
+    return pts;
+  }
+  // curled: the bend tightens toward the tail, so the tail wraps round its left side
+  let u = 0;
+  let v = 0;
+  let a = Math.PI;
+  const ds = NEWT_LEN / n;
+  pts.push([u, v]);
+  for (let i = 1; i <= n; i++) {
+    const s = (i - 0.5) / n;
+    a -= (2.2 + 7.5 * s * s) * ds;
+    u += Math.cos(a) * ds;
+    v += Math.sin(a) * ds;
+    pts.push([u, v]);
+  }
+  let mu = 0;
+  let mv = 0;
+  for (const q of pts) {
+    mu += q[0];
+    mv += q[1];
+  }
+  mu /= pts.length;
+  mv /= pts.length;
+  return pts.map((q) => [q[0] - mu + 0.02, q[1] - mv]);
+}
+
+function paintNewt(p, d, awake, f, lit) {
+  const [dx, dy] = DV[d];
+  const lx = -dy;   // the newt's left, on screen
+  const ly = dx;
+  const dm = lit ? 0.8 : 0.45;
+  const lift = awake ? 0.045 : 0.03;
+  const cx = 0.5;
+  const cy = 0.65;
+  // ground point -> canvas, raised by h
+  const P = (u, v, h = lift) => [cx + dx * u + lx * v, cy + (dy * u + ly * v) * NEWT_FY - h];
+  const N = 28;
+  const spine = newtSpine(awake, f, N);
+  const at = (s) => {
+    const x = s * N;
+    const i = Math.min(N - 1, Math.floor(x));
+    const k = x - i;
+    const a = spine[i];
+    const b = spine[i + 1];
+    const tu = b[0] - a[0];
+    const tv = b[1] - a[1];
+    const m = Math.hypot(tu, tv) || 1;
+    // point, unit tangent (toward the tail), unit normal (to the left)
+    return { u: a[0] + tu * k, v: a[1] + tv * k, tu: tu / m, tv: tv / m, nu: tv / m, nv: -tu / m };
+  };
+
+  // contact shadow under the whole body
+  let su = 0;
+  let sv = 0;
+  for (const q of spine) {
+    su += q[0];
+    sv += q[1];
+  }
+  const sc = P(su / spine.length, sv / spine.length, 0);
+  const longX = dx !== 0;
+  groundShadow(p, sc[0], sc[1] + 0.01, awake ? (longX ? 0.42 : 0.17) : 0.27, awake ? (longX ? 0.085 : 0.27) : 0.15, 0.7);
+
+  // legs, front pair at the shoulders and hind pair at the hips, feet on the ground
+  const legs = new Path2D();
+  const feet = [];
+  for (const [ls, front] of [[0.25, 1], [0.53, -1]]) {
+    const q = at(ls);
+    for (const k of [-1, 1]) {
+      const w = newtWidth(ls);
+      const paddle = awake ? [1, 0, -1, 0][f] * k * front : 0;
+      const reach = awake ? 0.085 : 0.045;
+      const root = P(q.u + q.nu * k * w * 0.6, q.v + q.nv * k * w * 0.6);
+      const ku = q.u + q.nu * k * (w + reach * 0.55) - q.tu * (front * 0.02 - paddle * 0.03);
+      const kv = q.v + q.nv * k * (w + reach * 0.55) - q.tv * (front * 0.02 - paddle * 0.03);
+      const knee = P(ku, kv, lift * 0.7);
+      const fu = q.u + q.nu * k * (w + reach) - q.tu * (front * 0.045 - paddle * 0.05);
+      const fv = q.v + q.nv * k * (w + reach) - q.tv * (front * 0.045 - paddle * 0.05);
+      const foot = P(fu, fv, 0);
+      legs.moveTo(root[0], root[1]);
+      legs.quadraticCurveTo(knee[0], knee[1], foot[0], foot[1]);
+      feet.push(foot);
+    }
+  }
+  p.strokeBody(legs, T_NEWT_LEG[1], 0.046);
+  for (const [x, y] of feet) p.body(ell(x, y, 0.03, 0.021), x, y, 0.035, T_NEWT_LEG, 0.006);
+
+  // the body outline: left edge snout to tail, right edge back again, with a round snout
+  const left = [];
+  const right = [];
+  for (let i = 0; i <= N; i++) {
+    const s = i / N;
+    const q = at(Math.min(s, 0.9999));
+    const w = newtWidth(s);
+    left.push(P(q.u + q.nu * w, q.v + q.nv * w));
+    right.push(P(q.u - q.nu * w, q.v - q.nv * w));
+  }
+  const q0 = at(0);
+  const snout = P(q0.u - q0.tu * 0.03, q0.v - q0.tv * 0.03);
+  const outline = [snout, ...left.slice(0, N), [...left[N], 1], ...right.slice(0, N).reverse()];
+  const bodyPath = smooth(outline);
+  // the flank: the same shape a little lower and darker, so the body has some height
+  if (!p.glow) {
+    p.g.save();
+    p.g.translate(0, lift * 0.55);
+    p.g.fillStyle = '#12080F';
+    p.g.fill(bodyPath);
+    p.g.restore();
+  }
+  const mid = at(0.4);
+  const mc = P(mid.u, mid.v);
+  p.body(bodyPath, mc[0], mc[1], 0.3, T_NEWT, 0.014);
+
+  // a soft ridge down the back
+  const ridge = [];
+  for (let i = 3; i <= Math.round(N * 0.8); i += 2) {
+    const q = at(i / N);
+    ridge.push(P(q.u, q.v));
+  }
+  if (!p.glow) {
+    p.g.strokeStyle = 'rgba(255,214,230,0.07)';
+    p.g.lineWidth = p.lw(0.02);
+    p.g.stroke(smooth(ridge, false));
+  }
+
+  // paired spots down the back, a single file on the tail
+  for (const [ss, r] of [[0.29, 0.019], [0.37, 0.021], [0.45, 0.02], [0.53, 0.017], [0.62, 0.014]]) {
+    const q = at(ss);
+    const off = newtWidth(ss) * 0.5;
+    for (const k of [-1, 1]) {
+      const [x, y] = P(q.u + q.nu * k * off, q.v + q.nv * k * off);
+      p.dot(x, y, r, NEWT_MARK, dm, 0.04);
+    }
+  }
+  for (const [ss, r] of [[0.72, 0.013], [0.81, 0.011], [0.89, 0.008]]) {
+    const q = at(ss);
+    const [x, y] = P(q.u, q.v);
+    p.dot(x, y, r, NEWT_MARK, dm * 0.85, 0.035);
+  }
+  // the chevron on the head: where it will walk
+  const hq = at(0.08);
+  const [hx, hy] = P(hq.u, hq.v);
+  p.line(chevron(hx, hy, dx, dy, 0.042, 0.05), AMBER, 0.026, Math.min(1, dm + 0.12), 0.05);
+}
+
 function paintZ(p) {
   const z = new Path2D();
   z.moveTo(0.3, 0.32);
@@ -1108,6 +1290,24 @@ function creatureSpec(b, type, o) {
       sp.sx = 1 + 0.012 * br;
       sp.sy = 1 + 0.025 * br;
       sp.ay = 0.86;
+      sp.zed = true;
+      sp.emitA = 0.48 + 0.06 * br;
+    }
+  } else if (type === 'D') {
+    const awake = (o.awake === undefined ? !o.lit : o.awake) ? 1 : 0;
+    const gl = o.lit === undefined ? 1 - awake : lit;
+    const d = DIRS[o.dir] === undefined ? 2 : DIRS[o.dir];
+    const f = awake ? Math.floor(t * 5) & 3 : 0;
+    sp.s = get(b, 'D' + d + awake + gl + '.' + f, (p) => paintNewt(p, d, awake, f, gl), gl ? RIM_WARM : RIM_COOL, gl ? 0 : 0.34);
+    if (awake) {
+      sp.glowA = gl ? 0.85 + 0.15 * Math.sin(t * 3.4) : 0;
+      sp.emitA = 0.55 + 0.08 * Math.sin(t * 2.2);
+    } else {
+      const br = Math.sin(t * 1.2);
+      sp.glowA = gl ? 0.7 : 0;
+      sp.sx = 1 + 0.014 * br;
+      sp.sy = 1 + 0.018 * br;
+      sp.ay = 0.7;
       sp.zed = true;
       sp.emitA = 0.48 + 0.06 * br;
     }

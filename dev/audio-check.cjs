@@ -24,6 +24,13 @@ const PEAK_LIMIT = 0.9;
 const ORDINARY_LIMIT = 1.2;
 const SOLVE_LIMIT = 3.5;
 const API = ['initAudio', 'setMuted', 'isMuted', 'play', 'setMusic'];
+// the sound names listed under play() in SPEC.md section 7
+const SPEC_NAMES = (() => {
+  const spec = fs.readFileSync(path.join(ROOT, 'SPEC.md'), 'utf8');
+  const at = spec.indexOf('export function play(name)');
+  const block = spec.slice(at, spec.indexOf('export function setMusic', at));
+  return [...block.matchAll(/'([A-Za-z]+)'/g)].map((m) => m[1]);
+})();
 
 let failures = 0;
 function check(ok, label, detail) {
@@ -695,7 +702,8 @@ async function offline(page) {
         ' worst peak ' + f3(r.worstPeak) + ' chain peak ' + f3(r.wetPeak) + ' ' + r.errors.join(' | '));
     }
   }
-  check(s.rows.length === 22, 'all 22 SPEC names render', s.rows.length + ' sounds');
+  check(SPEC_NAMES.length >= 22 && JSON.stringify(s.rows.map((r) => r.name)) === JSON.stringify(SPEC_NAMES),
+    'all ' + SPEC_NAMES.length + ' SPEC names render, in SPEC order', s.rows.length + ' sounds');
   check(s.rows.every((r) => !r.silent && r.peak > 0.02 && r.rms > 0.004), 'every sound is non-silent');
   check(s.rows.every((r) => r.worstPeak < PEAK_LIMIT && r.wetPeak < PEAK_LIMIT), 'no peak above ' + PEAK_LIMIT,
     'loudest dry ' + f3(Math.max(...s.rows.map((r) => r.worstPeak))) + ', loudest through the chain ' + f3(Math.max(...s.rows.map((r) => r.wetPeak))));
@@ -764,7 +772,7 @@ async function offline(page) {
   check(b.most <= 6, 'never more than 6 one-shots at once', 'most at once: ' + b.most);
   check(b.played.some((p) => p.startsWith('solve@')) && b.played.some((p) => p.startsWith('budOn@')), "'budOn' and 'solve' are never dropped");
   check(b.peak < PEAK_LIMIT, 'busy turn stays under the peak limit', 'peak ' + f3(b.peak) + ', rms ' + f3(b.rms));
-  check(b.floodPeak < PEAK_LIMIT, 'flood (all 22 sounds, four times, one frame) stays under the peak limit',
+  check(b.floodPeak < PEAK_LIMIT, 'flood (all ' + SPEC_NAMES.length + ' sounds, four times, one frame) stays under the peak limit',
     'peak ' + f3(b.floodPeak) + ', played ' + b.floodPlayed + ', dropped ' + b.floodDropped + ', replaced ' + b.floodStolen);
   check(b.errors.length === 0, 'no exceptions', b.errors.join(' | '));
 

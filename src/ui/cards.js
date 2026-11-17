@@ -25,6 +25,10 @@ export const RULE_CARDS = {
     title: 'Stumpcap',
     text: 'Sleeps in the dark. In the light it marches straight ahead until something stands in its way. Always heavy.',
   },
+  D: {
+    title: 'Dozer newt',
+    text: 'Wanders in the dark and turns right whenever something blocks it. Light makes it doze off where it stands. Always heavy.',
+  },
   bud: {
     title: 'Glowbud',
     text: 'Light every Glowbud. Once lit, it stays in bloom.',

@@ -285,7 +285,8 @@ export function initAudio()              // call from the first user gesture; id
 export function setMuted(muted)          export function isMuted()
 export function play(name)               // one-shot sound; unknown names are ignored
 //   names: 'step' 'blocked' 'plant' 'pickup' 'wait' 'moth' 'settle' 'whelkMove' 'whelkHide' 'whelkEmerge'
-//          'stumpStep' 'stumpBump' 'stumpWake' 'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint'
+//          'stumpStep' 'stumpBump' 'stumpWake' 'newtStep' 'newtTurn' 'newtDoze' 'newtWake'
+//          'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint'
 export function setMusic({ playing, intensity, chapter })   // adaptive bed: intensity 0..1 = share of Glowbuds lit; chapter 1..3
 ```
 

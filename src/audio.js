@@ -15,7 +15,7 @@
 
 export const SOUND_NAMES = [
   'step', 'blocked', 'plant', 'pickup', 'wait', 'moth', 'settle', 'whelkMove', 'whelkHide',
-  'whelkEmerge', 'stumpStep', 'stumpBump', 'stumpWake', 'gateOpen', 'gateClose', 'budOn', 'budOff',
+  'whelkEmerge', 'stumpStep', 'stumpBump', 'stumpWake', 'newtStep', 'newtTurn', 'newtDoze', 'newtWake', 'gateOpen', 'gateClose', 'budOn', 'budOff',
   'solve', 'undo', 'restart', 'ui', 'hint',
 ];
 
@@ -49,14 +49,14 @@ const BUD_TOP = 10; // highest step of the Glowbud scale walk (two octaves)
 const LEVELS = {
   step: 0.24, blocked: 0.225, plant: 0.4, pickup: 0.25, wait: 0.11, moth: 0.1, settle: 0.3,
   whelkMove: 0.12, whelkHide: 0.15, whelkEmerge: 0.18, stumpStep: 0.195, stumpBump: 0.28,
-  stumpWake: 0.1, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
+  stumpWake: 0.1, newtStep: 0.27, newtTurn: 0.5, newtDoze: 0.25, newtWake: 0.27, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
   undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185,
 };
 
 // Sounds that are only colour. They are dropped first when a turn gets busy.
 const FOLEY = {
   step: 1, wait: 1, moth: 1, whelkMove: 1, whelkHide: 1, whelkEmerge: 1, stumpStep: 1,
-  stumpBump: 1, stumpWake: 1,
+  stumpBump: 1, stumpWake: 1, newtStep: 1, newtTurn: 1, newtDoze: 1, newtWake: 1,
 };
 
 // What the player's own finger did. These answer at once, even while the creatures of the
@@ -64,7 +64,7 @@ const FOLEY = {
 const ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1 };
 
 // Repeated foley that gets a few milliseconds of loose timing when it is not already staggered.
-const LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1 };
+const LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1 };
 
 // Major pentatonic. Each chapter keeps the same five-note shape and moves the drone under it,
 // which changes the mode: 1 is plain major, 2 is the relative minor, 3 hangs suspended.
@@ -580,6 +580,49 @@ SOUNDS.stumpWake = function (k, t) {
   o.connect(lp);
   lp.connect(g);
   g.connect(k.out);
+};
+
+// Dozer newt wandering: two quick damp pats, front feet then back, lighter than a Stumpcap.
+SOUNDS.newtStep = function (k, t) {
+  const v = 1 + (k.r() - 0.5) * 0.2;
+  for (const [dt, a] of [[0, 1], [0.075 + k.r() * 0.02, 0.7]]) {
+    hiss(k, 'bandpass', 900 * v, 2.5, t + dt, 0.22 * a, 0.004, 0.06);
+    const o = tone(k, 'sine', 330 * v, t + dt, 0.45 * a, 0.003, 0.07);
+    o.frequency.exponentialRampToValueAtTime(220 * v, t + dt + 0.05);
+  }
+};
+
+// Dozer newt blocked: a little scuffle of claws as it swings round, and a soft chirp.
+SOUNDS.newtTurn = function (k, t) {
+  const v = 1 + (k.r() - 0.5) * 0.1;
+  const f = hiss(k, 'bandpass', 1400 * v, 4, t, 0.2, 0.01, 0.14);
+  f.frequency.setValueAtTime(1400 * v, t);
+  f.frequency.exponentialRampToValueAtTime(2600 * v, t + 0.12);
+  const c = tone(k, 'sine', 1180 * v, t + 0.1, 0.3, 0.004, 0.08);
+  c.frequency.exponentialRampToValueAtTime(1560 * v, t + 0.15);
+};
+
+// Dozer newt dozes off: a slow breath out that falls away under a sinking hum.
+SOUNDS.newtDoze = function (k, t) {
+  const b = hiss(k, 'bandpass', 900, 1.4, t, 0.12, 0.12, 0.6);
+  b.frequency.setValueAtTime(900, t);
+  b.frequency.exponentialRampToValueAtTime(420, t + 0.55);
+  const o = osc(k, 'sine', 260, t, t + 0.75);
+  o.frequency.exponentialRampToValueAtTime(150, t + 0.65);
+  const g = gain(k);
+  swellEnv(g.gain, t, 0.5, 0.15, 0.12, 0.42);
+  o.connect(g);
+  g.connect(k.out);
+};
+
+// Dozer newt wakes in the dark: a quick bright double blip, up and up.
+SOUNDS.newtWake = function (k, t) {
+  const v = 1 + (k.r() - 0.5) * 0.06;
+  const a = tone(k, 'sine', 640 * v, t, 0.6, 0.004, 0.09);
+  a.frequency.exponentialRampToValueAtTime(900 * v, t + 0.06);
+  const b = tone(k, 'sine', 860 * v, t + 0.09, 0.55, 0.004, 0.12);
+  b.frequency.exponentialRampToValueAtTime(1280 * v, t + 0.16);
+  hiss(k, 'bandpass', 2400, 2, t, 0.05, 0.003, 0.03);
 };
 
 // Root gate opens: the creak rises, then the lattice knocks into place.

@@ -36,6 +36,10 @@ const ADHOC = {
     id: 'T-2', name: 'Stump March',
     map: ['#######', '#W>..b#', '####B##', '####.##', '####G##', '#######'],
   },
+  newt: {
+    id: 'T-5', name: 'Newt Gate',
+    map: ['########', '#W..A.G#', '####.###', '###ea.##', '########'],
+  },
   trio: {
     id: 'T-3', name: 'All Three',
     map: ['#########', '#G.....G#', '#A##H##.#', '#.W.L.S.#', '#.#~#.#.#', '#.M...>a#', '#########'],
@@ -677,7 +681,7 @@ async function main() {
     // ---------------------------------------------------------------- 12. ad-hoc levels
     console.log('ad-hoc levels');
     await h.open();
-    for (const name of ['whelk', 'stump', 'trio']) {
+    for (const name of ['whelk', 'stump', 'newt', 'trio']) {
       const def = ADHOC[name];
       const moves = solutionOf(def);
       eq(`ad-hoc ${name}: loads`, await h.gd('loadLevelDef', def), true);
@@ -717,6 +721,29 @@ async function main() {
       const s = engine.parseLevel(ADHOC.stump);
       const t = s.creatures[0];
       await cardCheck('Stumpcap', t.x, t.y, 'Stumpcap', CARDS.Stumpcap);
+    }
+    // newt: its card, and its markings glow in the dark where it wanders
+    await h.gd('loadLevelDef', ADHOC.newt);
+    {
+      const s = engine.parseLevel(ADHOC.newt);
+      const n = s.creatures[0];
+      eq('ad-hoc newt: starts in the dark', s.lit[n.y * s.w + n.x], 0);
+      await cardCheck('Dozer newt', n.x, n.y, 'Dozer newt', CARDS['Dozer newt']);
+      await h.page.waitForTimeout(300);
+      // bright pixels in a tile: the newt's tile against a plain dark floor tile two steps east
+      const bright = (x, y) => h.page.evaluate(([tx, ty]) => {
+        const L = window.__gd.layout();
+        const c = document.querySelector('#screen-level canvas');
+        const k = L.dpr;
+        const d = c.getContext('2d').getImageData(Math.round((L.ox + tx * L.size) * k), Math.round((L.oy + ty * L.size) * k),
+          Math.round(L.size * k), Math.round(L.size * k)).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 300) n++;
+        return n / (d.length / 4);
+      }, [x, y]);
+      const onNewt = await bright(n.x, n.y);
+      const onFloor = await bright(n.x + 2, n.y);
+      ok('ad-hoc newt: its markings glow in the dark', onNewt > 0.01 && onNewt > onFloor * 4, JSON.stringify({ onNewt, onFloor }));
     }
     // trio: starts with a planted lantern, has Hush and two buds
     await h.gd('loadLevelDef', ADHOC.trio);

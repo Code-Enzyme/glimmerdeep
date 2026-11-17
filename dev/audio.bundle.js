@@ -27,6 +27,7 @@ var GAudio = (() => {
     initAudio: () => initAudio,
     isMuted: () => isMuted,
     play: () => play,
+    setAppHidden: () => setAppHidden,
     setMusic: () => setMusic,
     setMuted: () => setMuted
   });
@@ -44,6 +45,10 @@ var GAudio = (() => {
     "stumpStep",
     "stumpBump",
     "stumpWake",
+    "newtStep",
+    "newtTurn",
+    "newtDoze",
+    "newtWake",
     "gateOpen",
     "gateClose",
     "budOn",
@@ -85,6 +90,10 @@ var GAudio = (() => {
     stumpStep: 0.195,
     stumpBump: 0.28,
     stumpWake: 0.1,
+    newtStep: 0.27,
+    newtTurn: 0.5,
+    newtDoze: 0.25,
+    newtWake: 0.27,
     gateOpen: 0.13,
     gateClose: 0.133,
     budOn: 0.27,
@@ -104,10 +113,14 @@ var GAudio = (() => {
     whelkEmerge: 1,
     stumpStep: 1,
     stumpBump: 1,
-    stumpWake: 1
+    stumpWake: 1,
+    newtStep: 1,
+    newtTurn: 1,
+    newtDoze: 1,
+    newtWake: 1
   };
   var ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1 };
-  var LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1 };
+  var LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1 };
   var PENT = [0, 2, 4, 7, 9];
   var CHAPTERS = [
     null,
@@ -545,6 +558,41 @@ var GAudio = (() => {
     o.connect(lp);
     lp.connect(g);
     g.connect(k.out);
+  };
+  SOUNDS.newtStep = function(k, t) {
+    const v = 1 + (k.r() - 0.5) * 0.2;
+    for (const [dt, a] of [[0, 1], [0.075 + k.r() * 0.02, 0.7]]) {
+      hiss(k, "bandpass", 900 * v, 2.5, t + dt, 0.22 * a, 4e-3, 0.06);
+      const o = tone(k, "sine", 330 * v, t + dt, 0.45 * a, 3e-3, 0.07);
+      o.frequency.exponentialRampToValueAtTime(220 * v, t + dt + 0.05);
+    }
+  };
+  SOUNDS.newtTurn = function(k, t) {
+    const v = 1 + (k.r() - 0.5) * 0.1;
+    const f = hiss(k, "bandpass", 1400 * v, 4, t, 0.2, 0.01, 0.14);
+    f.frequency.setValueAtTime(1400 * v, t);
+    f.frequency.exponentialRampToValueAtTime(2600 * v, t + 0.12);
+    const c = tone(k, "sine", 1180 * v, t + 0.1, 0.3, 4e-3, 0.08);
+    c.frequency.exponentialRampToValueAtTime(1560 * v, t + 0.15);
+  };
+  SOUNDS.newtDoze = function(k, t) {
+    const b = hiss(k, "bandpass", 900, 1.4, t, 0.12, 0.12, 0.6);
+    b.frequency.setValueAtTime(900, t);
+    b.frequency.exponentialRampToValueAtTime(420, t + 0.55);
+    const o = osc(k, "sine", 260, t, t + 0.75);
+    o.frequency.exponentialRampToValueAtTime(150, t + 0.65);
+    const g = gain(k);
+    swellEnv(g.gain, t, 0.5, 0.15, 0.12, 0.42);
+    o.connect(g);
+    g.connect(k.out);
+  };
+  SOUNDS.newtWake = function(k, t) {
+    const v = 1 + (k.r() - 0.5) * 0.06;
+    const a = tone(k, "sine", 640 * v, t, 0.6, 4e-3, 0.09);
+    a.frequency.exponentialRampToValueAtTime(900 * v, t + 0.06);
+    const b = tone(k, "sine", 860 * v, t + 0.09, 0.55, 4e-3, 0.12);
+    b.frequency.exponentialRampToValueAtTime(1280 * v, t + 0.16);
+    hiss(k, "bandpass", 2400, 2, t, 0.05, 3e-3, 0.03);
   };
   SOUNDS.gateOpen = function(k, t) {
     creak(
@@ -1161,6 +1209,10 @@ var GAudio = (() => {
   var engine = null;
   var failed = false;
   var wanted = { muted: false, music: { playing: false, intensity: 0, chapter: 1 } };
+  var appHidden = false;
+  function pageHidden() {
+    return appHidden || typeof document !== "undefined" && document.visibilityState === "hidden";
+  }
   function initAudio() {
     try {
       if (!engine && !failed) {
@@ -1188,7 +1240,7 @@ var GAudio = (() => {
         if (typeof document !== "undefined" && document.addEventListener) {
           const onVisibility = function() {
             try {
-              engine.setHidden(document.visibilityState === "hidden");
+              engine.setHidden(pageHidden());
             } catch (e) {
             }
           };
@@ -1220,6 +1272,13 @@ var GAudio = (() => {
   }
   function isMuted() {
     return wanted.muted;
+  }
+  function setAppHidden(hidden) {
+    appHidden = !!hidden;
+    try {
+      if (engine) engine.setHidden(pageHidden());
+    } catch (e) {
+    }
   }
   function play(name) {
     try {
