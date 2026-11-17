@@ -59,6 +59,7 @@ const SPECIES = {
   M: { chars: 'M', name: 'Fluffmoth' },
   S: { chars: 'S', name: 'Shellwhelk' },
   T: { chars: '^>v<', name: 'Stumpcap' },
+  D: { chars: 'nesw', name: 'Dozer newt' },
 };
 
 // The level with every creature of one species taken out. Whatever terrain was under a creature stays.
@@ -130,7 +131,7 @@ export function checkLevel(levelDef, opts) {
 
   const feature = levelDef.feature;
   if (typeof feature !== 'string' || feature.length === 0) {
-    problems.push('feature must list at least one of M, S, T, L');
+    problems.push('feature must list at least one of M, S, T, D, L');
     return result;
   }
   for (const f of new Set(feature)) {
@@ -148,7 +149,7 @@ export function checkLevel(levelDef, opts) {
       }
       without = solve(parseLevel(withoutSpecies(levelDef, f)), options);
     } else {
-      problems.push(`feature '${f}' is not one of M, S, T, L`);
+      problems.push(`feature '${f}' is not one of M, S, T, D, L`);
       continue;
     }
     result.searched += without.explored;

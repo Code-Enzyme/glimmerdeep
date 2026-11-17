@@ -870,6 +870,172 @@ test("Stumpcap: walks out of a planted lantern's light and stops on the first un
   assert.deepEqual(where(s), ['TE@3,0'], 'asleep on the first unlit tile');
 });
 
+// ---------------------------------------------------------------- Dozer newt (SPEC section 3)
+
+test('parseLevel: Dozer newt facings come from n e s w (lower case)', () => {
+  const s = parse(['W.n.e', '..s.w']);
+  for (const [x, y, dir] of [[2, 0, 'N'], [4, 0, 'E'], [2, 1, 'S'], [4, 1, 'W']]) {
+    assert.equal(creatureAt(s, x, y).type, 'D', `${x},${y}`);
+    assert.equal(creatureAt(s, x, y).dir, dir, `${x},${y}`);
+  }
+  assert.deepEqual(s.creatures.map((c) => c.id).sort(), ['D1', 'D2', 'D3', 'D4']);
+});
+
+test('Dozer newt: in the dark it walks one tile forward', () => {
+  assert.deepEqual(where(step(parse(['W.e...']), 'Z')), ['DE@3,0']);
+  assert.deepEqual(where(run(parse(['W.e...']), ['Z', 'Z', 'Z'])), ['DE@5,0']);
+});
+
+test('Dozer newt: lit, it dozes and neither moves nor turns', () => {
+  const s = parse(['We..', '....']);
+  assert.deepEqual(where(run(s, ['Z', 'Z', 'Z'])), ['DE@1,0']);
+  const walled = parse(['We#']);
+  assert.deepEqual(where(run(walled, ['Z', 'Z'])), ['DE@1,0'], 'a dozing newt does not turn at a wall either');
+});
+
+test('Dozer newt: blocked in the dark, it stays and turns a quarter turn clockwise', () => {
+  const cases = [
+    [['W..e#'], 'wall'],
+    [['W..e~'], 'puddle'],
+    [['W..eA'], 'closed gate'],
+    [['W..eH'], 'Hush'],
+    [['W..eG'], 'Glowbud'],
+    [['W..e'], 'board edge'],
+    [['W..eM', '#####'], 'a creature that cannot move'],
+  ];
+  for (const [map, what] of cases) {
+    const s = step(parse(map), 'Z');
+    const newt = only(s, 'D');
+    assert.deepEqual([newt.x, newt.y, newt.dir], [3, 0, 'S'], what);
+  }
+  // Wren blocks it too. (She must have put the lantern down far away, or the newt would be lit and dozing;
+  // for the same reason a planted lantern is never in a wandering newt's way.)
+  const wren = step(parse(['L...', '....', '..eW']), 'Z');
+  assert.deepEqual(where(wren), ['DS@2,2'], 'Wren is in the way');
+});
+
+test('Dozer newt: turns N to E to S to W to N, one quarter turn per blocked turn', () => {
+  const s = parse(['W....', '.###.', '.#n#.', '.###.']);
+  const dirs = [];
+  let t = s;
+  for (let i = 0; i < 4; i++) {
+    t = step(t, 'Z');
+    dirs.push(only(t, 'D').dir);
+  }
+  assert.deepEqual(dirs, ['E', 'S', 'W', 'N']);
+  assert.deepEqual([only(t, 'D').x, only(t, 'D').y], [2, 2]);
+});
+
+test('Dozer newt: tries its new facing on the next turn, so it pauses one turn at a corner', () => {
+  // Faces east into the wall at 4,0, turns south, then walks down the column.
+  const s = parse(['W..e#', '###..', '###..']);
+  const a = step(s, 'Z');
+  assert.deepEqual(where(a), ['DS@3,0']);
+  const b = step(a, 'Z');
+  assert.deepEqual(where(b), ['DS@3,1']);
+});
+
+test('Dozer newt: patrols: walks until blocked, turns, walks on', () => {
+  //  x: 01234
+  //  0: W....
+  //  1: .....
+  //  2: .e...     facing east in the dark; the board edge turns it south
+  //  3: .##..
+  //  4: .##..
+  //  5: .....
+  const s = parse(['W....', '.....', '.e...', '.##..', '.##..', '.....']);
+  let t = s;
+  const seen = [];
+  for (let i = 0; i < 6; i++) {
+    t = step(t, 'Z');
+    seen.push(where(t)[0]);
+  }
+  assert.deepEqual(seen, ['DE@2,2', 'DE@3,2', 'DE@4,2', 'DS@4,2', 'DS@4,3', 'DS@4,4']);
+});
+
+test('Dozer newt: walking into the light, it dozes on the first lit tile', () => {
+  let s = parse(['W..w']);
+  s = run(s, ['Z', 'Z']);
+  assert.deepEqual(where(s), ['DW@1,0']);
+  assert.equal(isLit(s, 1, 0), true);
+  s = run(s, ['Z', 'Z']);
+  assert.deepEqual(where(s), ['DW@1,0'], 'dozing where the light caught it');
+});
+
+test('Dozer newt: wanders while the lantern is smothered (nothing is lit), unlike a moth or a whelk', () => {
+  // Wren steps onto the Hush right next to the newt; with the lantern smothered the newt is in the dark.
+  assert.deepEqual(where(step(parse(['WHe.']), 'E')), ['DE@3,0']);
+  assert.deepEqual(where(step(parse(['WHS.']), 'E')), ['S@2,0'], 'the whelk stays put');
+});
+
+test('Dozer newt: cannot walk into a puddle, but walks over a bridge', () => {
+  const a = step(parse(['W.e~.', '###M#']), 'Z');
+  assert.deepEqual(where(a), ['DS@2,0'], 'the newt turned at the puddle before the moth bridged it');
+  assert.deepEqual(a.bridges, ['3,0']);
+  const bridged = { ...parse(['W.e~.']), bridges: ['3,0'] };
+  assert.deepEqual(where(step(bridged, 'Z')), ['DE@3,0']);
+});
+
+test('isAwake: a Dozer newt is awake in the dark and dozing in the light', () => {
+  const s = parse(['We..e']);
+  assert.equal(isAwake(s, creatureAt(s, 1, 0)), false);
+  assert.equal(isAwake(s, creatureAt(s, 4, 0)), true);
+  assert.equal(isHidden(s, creatureAt(s, 4, 0)), false);
+});
+
+test('canEnter: a Dozer newt goes where a Stumpcap goes', () => {
+  const s = parse(['W.#~GH.', 'aA>B.MS'], { under: { '2,1': 'b' } });
+  for (let y = 0; y < s.h; y++) {
+    for (let x = 0; x < s.w; x++) assert.equal(canEnter(s, 'D', x, y), canEnter(s, 'T', x, y), `${x},${y}`);
+  }
+});
+
+test('roots: a Dozer newt presses a root whether dozing or wandering', () => {
+  const dozing = parse(['WeA'], { under: { '1,0': 'a' } });
+  assert.equal(isAwake(dozing, only(dozing, 'D')), false);
+  assert.equal(isGateOpen(dozing, 'A'), true);
+  const wandering = parse(['W..e#A'], { under: { '3,0': 'a' } });
+  assert.equal(isAwake(wandering, only(wandering, 'D')), true);
+  assert.equal(isGateOpen(wandering, 'A'), true);
+  const left = step(parse(['W.e.#A'], { under: { '2,0': 'a' } }), 'Z');
+  assert.deepEqual(where(left), ['DE@3,0']);
+  assert.equal(isGateOpen(left, 'A'), false, 'the gate closes when it walks off the root');
+});
+
+test('events: a newt turning, dozing off in the light and waking in the dark', () => {
+  const s = parse(['W..e#']);
+  const newt = only(s, 'D').id;
+  assert.deepEqual(step(s, 'Z').events, [{ type: 'wait' }, { type: 'turn', id: newt, dir: 'S' }]);
+  const walk = parse(['W..w']);
+  const id = only(walk, 'D').id;
+  const a = step(walk, 'Z');
+  assert.deepEqual(a.events, [{ type: 'wait' }, { type: 'move', who: id, from: { x: 3, y: 0 }, to: { x: 2, y: 0 } }]);
+  const b = step(a, 'Z');
+  assert.deepEqual(b.events, [
+    { type: 'wait' },
+    { type: 'move', who: id, from: { x: 2, y: 0 }, to: { x: 1, y: 0 } },
+    { type: 'sleep', id },
+  ]);
+  const c = step(b, 'L');   // planted at 0,0: the newt stays lit and dozing, so nothing to report
+  assert.deepEqual(c.events, [{ type: 'plant', x: 0, y: 0 }]);
+  // Wren walks away: the newt is left in the dark, walks on and wakes.
+  const e = parse(['.We.']);
+  const n = only(e, 'D').id;
+  assert.deepEqual(step(e, 'W').events, [
+    { type: 'move', who: 'wren', from: { x: 1, y: 0 }, to: { x: 0, y: 0 } },
+    { type: 'move', who: n, from: { x: 2, y: 0 }, to: { x: 3, y: 0 } },
+    { type: 'wake', id: n },
+  ]);
+});
+
+test('key: tells a newt from a Stumpcap and every newt facing apart', () => {
+  const kinds = ['^', '>', 'v', '<', 'n', 'e', 's', 'w', 'M', 'S'].map((ch) => key(parse([`W..${ch}`])));
+  assert.equal(new Set(kinds).size, 10);
+  // A newt turning in place changes the key.
+  const s = parse(['W..e#']);
+  assert.notEqual(key(s), key(step(s, 'Z')));
+});
+
 // ---------------------------------------------------------------- roots and gates (SPEC section 2, phase 5)
 
 test('roots: a Stumpcap presses a root whether asleep or awake', () => {

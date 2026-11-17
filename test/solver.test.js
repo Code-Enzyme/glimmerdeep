@@ -56,6 +56,8 @@ const HAND_MADE = {
   // Walking along the bottom row lights the Stumpcap from below on turns 2 and 3, so it marches onto root a
   // (3,0) and bumps into the wall there. Gate A (4,1) is open when Wren arrives: S, E, E, E, E, E, N.
   stumpGate: { map: ['W>.a#.G', '....A..'], shortest: 7 },
+  // The newt patrols over the root and holds gate A open only while it stands there: a timing puzzle.
+  newtGate: { map: ['W..A.G', '###.##', '##ea.#'], shortest: 7 },
 };
 const handMade = (name) => parse(HAND_MADE[name].map, { under: HAND_MADE[name].under });
 
@@ -214,6 +216,15 @@ test('checkLevel: Shellwhelk and Stumpcap necessity (the species is removed, the
   const stump = checkLevel(def(HAND_MADE.stumpGate.map, { feature: 'T', par: 7 }));
   assert.deepEqual(stump.featureOk, { T: true });
   assert.equal(stump.ok, true, stump.problems.join('; '));
+});
+
+test('checkLevel: Dozer newt necessity (every newt facing is removed)', () => {
+  const newt = checkLevel(def(HAND_MADE.newtGate.map, { feature: 'D', par: 7 }));
+  assert.deepEqual(newt.featureOk, { D: true });
+  assert.equal(newt.ok, true, newt.problems.join('; '));
+  const missing = checkLevel(def(HAND_MADE.stumpGate.map, { feature: 'D', par: 7 }));
+  assert.deepEqual(missing.featureOk, { D: false });
+  assert.ok(missing.problems.some((p) => p.includes('no Dozer newt')), missing.problems.join('; '));
 });
 
 test('checkLevel: removing a species leaves the `under` terrain in place', () => {

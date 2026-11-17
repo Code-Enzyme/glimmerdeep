@@ -61,8 +61,8 @@ An illegal action returns `null` and spends no turn. A legal action runs these p
    (top row first, left to right). Each uses Light A, but sees the up-to-date positions of creatures that
    already moved this turn. Rules in section 3.
 4. **Light B.** Recompute the light map with the new creature positions. This is the light stored in the state.
-5. **Roots and gates.** A root is pressed if a Stumpcap stands on it, or a Shellwhelk that is lit in
-   Light B stands on it. Wren, moths and the lantern never press roots. A channel's gates are open iff the
+5. **Roots and gates.** A root is pressed if a Stumpcap or a Dozer newt stands on it, or a Shellwhelk that
+   is lit in Light B stands on it. Wren, moths and the lantern never press roots. A channel's gates are open iff the
    channel has at least one root and all of its roots are pressed. Gate state is stored and used for
    movement during the NEXT turn. Closing a gate never hurts anything: whoever stands in a gate tile stays
    and may step out later.
@@ -79,7 +79,9 @@ After a level is solved, `step` returns `null` for every action.
 ## 3. Creatures
 
 "The lantern position" `P` below means the lantern's tile (Wren's tile when carried).
-The lantern is **smothered** when Wren carries it on a Hush tile: then nothing is lit and no creature reacts.
+The lantern is **smothered** when Wren carries it on a Hush tile: then nothing is lit, and no creature reacts
+to the lantern (moths and whelks stay put). Creatures that go by light alone act as in any darkness:
+Stumpcaps sleep and Dozer newts wander.
 
 Two creatures use the same greedy step, taken from classic chase puzzles. Given a wanted horizontal
 direction `hx` (-1, 0 or 1) and vertical direction `vy`:
@@ -104,6 +106,15 @@ creature, no other creature is there, Wren is not there, and a planted lantern i
 - If its tile is lit in Light A: it wakes and walks one tile forward if possible; if blocked it stays (a "bump").
 - If not lit: it sleeps and does not move.
 - Always heavy (presses roots whether asleep or awake). Cannot enter puddles.
+
+### Dozer newt (chapter 4)
+- Has a facing (N, E, S or W) that it changes itself.
+- If its tile is lit in Light A: it dozes and does not move or turn.
+- If not lit (including when the lantern is smothered): it wanders. It walks one tile forward if possible;
+  if blocked, it stays and turns a quarter turn clockwise (N to E to S to W to N). It tries the new facing
+  on its next turn, so at a corner it pauses for one turn. Anything that blocks a Stumpcap blocks a newt,
+  Wren included, so Wren can turn a newt by standing in its way.
+- Always heavy (presses roots whether dozing or wandering). Cannot enter puddles, walks over bridges.
 
 No creature can be pushed, pulled or hurt.
 
@@ -161,10 +172,11 @@ feature-removed variants) must stay under 150,000 positions, so that hints are i
 
 Map characters: the terrain chars from section 1, plus things that stand on floor (or on `under` terrain):
 `W` Wren carrying the lantern (exactly one), `M` Fluffmoth, `S` Shellwhelk, Stumpcaps by facing
-`^` north, `>` east, `v` south, `<` west, and optionally `L` a lantern that starts planted (then Wren
+`^` north, `>` east, `v` south, `<` west, Dozer newts by starting facing `n` north, `e` east, `s` south,
+`w` west (lower case), and optionally `L` a lantern that starts planted (then Wren
 starts without it; at most one `L`).
 
-`feature` is a string of one or more of: `M`, `S`, `T` (the species), `L` (planting the lantern).
+`feature` is a string of one or more of: `M`, `S`, `T`, `D` (the species), `L` (planting the lantern).
 Necessity check, run for each listed character: for a species, the level with every creature of that
 species removed must be unsolvable; for `L`, the level must be unsolvable without the `L` action.
 
@@ -182,10 +194,10 @@ export function key(state)                  // -> string that identifies the pos
 export function isLit(state, x, y)          // -> boolean, from the stored light map
 export function terrainAt(state, x, y)      // -> one of '#', '.', '~', 'bridge', 'G', 'H', 'a'..'c', 'A'..'C'; '#' when out of bounds
 export function creatureAt(state, x, y)     // -> creature object or null
-export function canEnter(state, who, x, y)  // who: 'wren' | 'M' | 'S' | 'T'. Terrain and occupancy check used by the rules.
+export function canEnter(state, who, x, y)  // who: 'wren' | 'M' | 'S' | 'T' | 'D'. Terrain and occupancy check used by the rules.
 export function isGateOpen(state, channel)  // channel: 'A' | 'B' | 'C'
 export function isHidden(state, creature)   // true for a Shellwhelk whose tile is lit
-export function isAwake(state, creature)    // true for a Stumpcap whose tile is lit
+export function isAwake(state, creature)    // true for a Stumpcap whose tile is lit, and for a Dozer newt whose tile is dark
 ```
 
 State (plain JSON-safe data; treat as immutable):
@@ -196,7 +208,7 @@ State (plain JSON-safe data; treat as immutable):
   tiles: ['#########', ...],   // terrain only: creatures, Wren and L replaced by floor or the `under` terrain; never changes
   wren: { x, y },
   lantern: { x, y, carried },  // when carried, x and y equal Wren's
-  creatures: [ { id, type: 'M' | 'S' | 'T', x, y, dir } ],   // id is stable for the whole level; dir is 'N'|'E'|'S'|'W' for T, null otherwise
+  creatures: [ { id, type: 'M' | 'S' | 'T' | 'D', x, y, dir } ],   // id is stable for the whole level; dir is 'N'|'E'|'S'|'W' for T and D, null otherwise
   bridges: [ 'x,y', ... ],     // puddles that became bridges, sorted
   lit: [0, 1, ...],            // length w*h, index y*w+x, Light B
   gates: { A: false, ... },    // only channels present in the level
@@ -216,7 +228,9 @@ Events (the UI animates and plays sounds from these; emit them in the order thin
 { type: 'settle', id, x, y }       // moth became a bridge (after its 'move')
 { type: 'bump', id }               // lit Stumpcap could not walk
 { type: 'hide', id }  { type: 'emerge', id }    // Shellwhelk lit state changed between the previous stored light and Light B
-{ type: 'wake', id }  { type: 'sleep', id }     // Stumpcap lit state changed, same comparison
+{ type: 'wake', id }  { type: 'sleep', id }     // Stumpcap or newt changed state, same comparison: a Stumpcap wakes when it
+                                                //   becomes lit; a newt dozes off ('sleep') when it becomes lit and wakes when dark
+{ type: 'turn', id, dir }          // a newt was blocked and turned clockwise; dir is its new facing
 { type: 'gate', channel, open }    // a channel's gates changed
 { type: 'bud', x, y, lit: true }   // a Glowbud came into bloom (emitted once per bud)
 { type: 'solved' }
@@ -255,7 +269,7 @@ export function drawTile(ctx, kind, px, py, size, opts)
 //   opts: { t, seed, lit, open, pressed, channel, accent, neighbors: {n, e, s, w} (true where the same kind adjoins) }
 export function drawWren(ctx, px, py, size, { t, dir, carrying })
 export function drawLantern(ctx, px, py, size, { t })                 // planted lantern
-export function drawCreature(ctx, type, px, py, size, { t, dir, lit, hidden, awake })   // type 'M' | 'S' | 'T'
+export function drawCreature(ctx, type, px, py, size, { t, dir, lit, hidden, awake })   // type 'M' | 'S' | 'T' | 'D'
 export function drawDarkness(ctx, { ox, oy, size, w, h, lit, source, t, highContrast })
 //   Paints the darkness over an already-drawn board whose top-left is (ox, oy). `lit` is the engine's array.
 //   `source` is { x, y, radius } in tile units (fractional allowed while animating) or null when smothered.
@@ -286,6 +300,7 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - **Fluffmoth:** "Flies toward your lantern, sideways first. Loves puddles: it lands in one and becomes a bridge."
 - **Shellwhelk:** "Creeps away from your lantern. Catch it in the light and it hides in its shell; a hiding whelk is heavy. A planted lantern reaches further."
 - **Stumpcap:** "Sleeps in the dark. In the light it marches straight ahead until something stands in its way. Always heavy."
+- **Dozer newt:** "Wanders in the dark and turns right whenever something blocks it. Light makes it doze off where it stands. Always heavy."
 - **Glowbud:** "Light every Glowbud. Once lit, it stays in bloom."
 - **Pressure root and gate:** "A gate opens while something heavy rests on its root."
 - **Puddle:** "Too deep for Wren. A Fluffmoth can bridge it."

@@ -23,8 +23,10 @@ const ROOT = 5;
 const GATE = 8;
 
 const TERRAIN_CODE = { '#': WALL, '.': FLOOR, '~': PUDDLE, G: BUD, H: HUSH, a: 5, b: 6, c: 7, A: 8, B: 9, C: 10 };
-const FACING = { '^': 'N', '>': 'E', v: 'S', '<': 'W' };
-const SPECIES_NAME = { M: 'Fluffmoth', S: 'Shellwhelk', T: 'Stumpcap' };
+const FACING = { '^': 'N', '>': 'E', v: 'S', '<': 'W' };           // Stumpcaps
+const NEWT_FACING = { n: 'N', e: 'E', s: 'S', w: 'W' };            // Dozer newts
+const CLOCKWISE = { N: 'E', E: 'S', S: 'W', W: 'N' };
+const SPECIES_NAME = { M: 'Fluffmoth', S: 'Shellwhelk', T: 'Stumpcap', D: 'Dozer newt' };
 
 const own = (object, k) => Object.prototype.hasOwnProperty.call(object, k);
 
@@ -110,7 +112,7 @@ export function parseLevel(levelDef) {
   const tiles = [];
   const creatures = [];
   const buds = [];
-  const counters = { M: 0, S: 0, T: 0 };
+  const counters = { M: 0, S: 0, T: 0, D: 0 };
   let wren = null;
   let planted = null;
   let wrens = 0;
@@ -136,9 +138,10 @@ export function parseLevel(levelDef) {
         lanterns++;
         planted = { x, y, carried: false };
         standing.push(['lantern', x, y, base]);
-      } else if (ch === 'M' || ch === 'S' || own(FACING, ch)) {
-        const type = own(FACING, ch) ? 'T' : ch;
-        creatures.push({ id: `${type}${++counters[type]}`, type, x, y, dir: type === 'T' ? FACING[ch] : null });
+      } else if (ch === 'M' || ch === 'S' || own(FACING, ch) || own(NEWT_FACING, ch)) {
+        const type = own(FACING, ch) ? 'T' : own(NEWT_FACING, ch) ? 'D' : ch;
+        const dir = type === 'T' ? FACING[ch] : type === 'D' ? NEWT_FACING[ch] : null;
+        creatures.push({ id: `${type}${++counters[type]}`, type, x, y, dir });
         standing.push([SPECIES_NAME[type], x, y, base]);
       } else {
         fail(`unknown map character '${ch}' at ${x},${y}`);
@@ -255,7 +258,8 @@ function flood(meta, p, radius, creatures) {
 
 // ---------------------------------------------------------------- roots, gates, goal (SPEC section 2, phases 5 and 6)
 
-// A channel is open iff it has at least one root and every root carries a Stumpcap or a lit Shellwhelk.
+// A channel is open iff it has at least one root and every root carries a Stumpcap, a Dozer newt or a lit
+// Shellwhelk.
 function channelOpen(meta, channel, creatures, lit) {
   const roots = meta.roots[channel];
   if (roots.length === 0) return false;
@@ -266,7 +270,7 @@ function channelOpen(meta, channel, creatures, lit) {
     for (let i = 0; i < creatures.length; i++) {
       const c = creatures[i];
       if (c.y * w + c.x === root) {
-        pressed = c.type === 'T' || (c.type === 'S' && lit[root] === 1);
+        pressed = c.type === 'T' || c.type === 'D' || (c.type === 'S' && lit[root] === 1);
         break;
       }
     }
@@ -312,8 +316,11 @@ export function isHidden(state, creature) {
   return creature.type === 'S' && isLit(state, creature.x, creature.y);
 }
 
+// A Stumpcap is awake in the light; a Dozer newt is awake (wandering) in the dark and dozes in the light.
 export function isAwake(state, creature) {
-  return creature.type === 'T' && isLit(state, creature.x, creature.y);
+  if (creature.type === 'T') return isLit(state, creature.x, creature.y);
+  if (creature.type === 'D') return !isLit(state, creature.x, creature.y);
+  return false;
 }
 
 function hasBridge(state, x, y) {
@@ -464,7 +471,24 @@ export function step(state, action) {
       const type = c.type;
       let x = c.x;
       let y = c.y;
-      if (type === 'T') {
+      let dir = c.dir;
+      if (type === 'D') {
+        if (lightA[y * w + x] === 1) continue;                    // dozing (smothered counts as dark)
+        const d = DIRS[dir];
+        if (enterable(meta, next, 'D', x + d[0], y + d[1])) {
+          x += d[0];
+          y += d[1];
+        } else {
+          dir = CLOCKWISE[dir];                                    // blocked: stay and turn right
+          if (after === before) {
+            after = before.slice();
+            next.creatures = after;
+          }
+          after[i] = { id: c.id, type, x, y, dir };
+          events.push({ type: 'turn', id: c.id, dir });
+          continue;
+        }
+      } else if (type === 'T') {
         if (lightA[y * w + x] !== 1) continue;                    // asleep
         const d = DIRS[c.dir];
         x += d[0];
@@ -501,7 +525,7 @@ export function step(state, action) {
         next.bridges = next.bridges.concat(`${x},${y}`).sort();
         events.push({ type: 'settle', id: c.id, x, y });
       } else {
-        after[i] = { id: c.id, type, x, y, dir: c.dir };
+        after[i] = { id: c.id, type, x, y, dir };
       }
     }
   }
@@ -519,7 +543,11 @@ export function step(state, action) {
       const was = lit0[c0.y * w + c0.x] === 1;
       const now = lit[c1.y * w + c1.x] === 1;
       if (was !== now) {
-        events.push({ type: c0.type === 'S' ? (now ? 'hide' : 'emerge') : (now ? 'wake' : 'sleep'), id: c0.id });
+        let type;
+        if (c0.type === 'S') type = now ? 'hide' : 'emerge';
+        else if (c0.type === 'D') type = now ? 'sleep' : 'wake';   // a newt dozes off in the light
+        else type = now ? 'wake' : 'sleep';
+        events.push({ type, id: c0.id });
       }
     }
     if (settled) {
@@ -566,8 +594,11 @@ export function step(state, action) {
 
 // ---------------------------------------------------------------- key (SPEC section 7)
 
-// One-character strings for the small numbers a key is made of (all below 99 * 8).
-const CHAR = Array.from({ length: 1024 }, (_, i) => String.fromCharCode(48 + i));
+// One-character strings for the small numbers a key is made of (all below 99 * 16).
+const CHAR = Array.from({ length: 1600 }, (_, i) => String.fromCharCode(48 + i));
+// Creature and bridge kinds in a key code: moth, whelk, Stumpcap by facing, newt by facing, bridge.
+const KIND = { M: 0, S: 1, TN: 2, TE: 3, TS: 4, TW: 5, DN: 6, DE: 7, DS: 8, DW: 9 };
+const BRIDGE_KIND = 15;
 const CODES = [];   // scratch for key()
 
 // Identifies a position: Wren, the lantern (tile and carried), the bloom flags, every creature (species,
@@ -591,19 +622,18 @@ export function key(state) {
   const n = creatures.length + bridges.length;
   if (n === 0) return k;
 
-  // One code per creature and per bridge: tile index * 8 + kind. The codes are sorted, which makes the
+  // One code per creature and per bridge: tile index * 16 + kind. The codes are sorted, which makes the
   // key independent of the order of the creatures array.
   for (let i = 0; i < n; i++) {
     let code;
     if (i < creatures.length) {
       const c = creatures[i];
-      const d = c.dir;
-      const kind = c.type === 'M' ? 0 : c.type === 'S' ? 1 : d === 'N' ? 2 : d === 'E' ? 3 : d === 'S' ? 4 : 5;
-      code = (c.y * w + c.x) * 8 + kind;
+      const kind = c.type === 'M' || c.type === 'S' ? KIND[c.type] : KIND[c.type + c.dir];
+      code = (c.y * w + c.x) * 16 + kind;
     } else {
       const b = bridges[i - creatures.length];
       const comma = b.indexOf(',');
-      code = (+b.slice(comma + 1) * w + +b.slice(0, comma)) * 8 + 7;
+      code = (+b.slice(comma + 1) * w + +b.slice(0, comma)) * 16 + BRIDGE_KIND;
     }
     let j = i - 1;
     while (j >= 0 && CODES[j] > code) {
