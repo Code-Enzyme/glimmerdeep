@@ -1,8 +1,9 @@
 # Glimmerdeep
 
 A cosy puzzle game about light. Wren carries a lantern through a cave, and the creatures move
-themselves: fluffmoths fly toward the light, shellwhelks creep away from it, and stumpcaps only walk
-while they are lit. You never push anything; you decide where the light is.
+themselves: fluffmoths fly toward the light, shellwhelks creep away from it, stumpcaps only walk
+while they are lit, and dozer newts only wander in the dark. You never push anything; you decide where
+the light is.
 
 Android first, iOS later. The game is plain JavaScript drawn on a canvas, wrapped as a native app with
 [Capacitor](https://capacitorjs.com/).
@@ -37,7 +38,7 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `SPEC.md` | The rules contract: board, turn order, creatures, light, level format, module contracts |
 | `docs/glimmerdeep-design.md` | The full game design document |
 | `src/engine.js`, `src/solver.js` | Rules and the shortest-solution solver (pure) |
-| `src/levels/` | The 16 levels, by chapter |
+| `src/levels/` | The levels, by chapter (21 in four chapters) |
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |

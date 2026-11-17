@@ -3,6 +3,7 @@ import { ACTIONS, parseLevel, step, key } from '../src/engine.js';
 import { solve, checkLevel } from '../src/solver.js';
 
 const FACE = { N: '^', E: '>', S: 'v', W: '<' };
+const NEWT = { N: 'n', E: 'e', S: 's', W: 'w' };
 
 // Draws a state as text. Lit floor is shown as ':' and unlit floor as '.', so the light is visible.
 export function render(state) {
@@ -20,7 +21,7 @@ export function render(state) {
       if ('ABC'.includes(ch) && state.gates[ch]) ch = ch === 'A' ? '1' : ch === 'B' ? '2' : '3';   // open gate
       if (ch === '.' && lit) ch = ':';
       const c = state.creatures.find((k) => k.x === x && k.y === y);
-      if (c) ch = c.type === 'T' ? FACE[c.dir] : c.type;
+      if (c) ch = c.type === 'T' ? FACE[c.dir] : c.type === 'D' ? NEWT[c.dir] : c.type;
       if (!state.lantern.carried && state.lantern.x === x && state.lantern.y === y) ch = 'L';
       if (state.wren.x === x && state.wren.y === y) {
         ch = state.lantern.carried ? 'W' : (state.lantern.x === x && state.lantern.y === y ? '@' : 'w');

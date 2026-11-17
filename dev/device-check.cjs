@@ -11,7 +11,6 @@ const { pathToFileURL } = require('url');
 
 const PKG = 'com.codeenzyme.glimmerdeep';
 const ACTIVITY = `${PKG}/.MainActivity`;
-const LEVEL_IDS = ['1-1', '1-6', '2-5', '3-5'];
 
 function fail(msg) {
   console.error('FAIL ' + msg);
@@ -44,7 +43,9 @@ async function killApp(device, webview) {
   const apk = path.resolve(process.argv[2] || 'android/app/build/outputs/apk/debug/app-debug.apk');
   const shots = path.join(root, 'dev/device-shots');
   fs.mkdirSync(shots, { recursive: true });
-  const { LEVELS } = await import(pathToFileURL(path.join(root, 'src/levels/index.js')).href);
+  const { LEVELS, CHAPTERS } = await import(pathToFileURL(path.join(root, 'src/levels/index.js')).href);
+  // level 1-1 and the last level of every chapter
+  const LEVEL_IDS = [LEVELS[0].id, ...CHAPTERS.filter((c) => c.levels.length).map((c) => c.levels[c.levels.length - 1].id)];
   const { parseLevel } = await import(pathToFileURL(path.join(root, 'src/engine.js')).href);
   const { solve } = await import(pathToFileURL(path.join(root, 'src/solver.js')).href);
 
