@@ -38,6 +38,12 @@ const { pathToFileURL } = require('url');
   }
   await page.goto(pathToFileURL(path.join(root, 'dist/glimmerdeep.html')).href);
   await page.waitForTimeout(600);
+  const opened = await page.evaluate(() => window.__gd.screen());
+  if (opened !== 'title') { console.log(`FAIL the app opened on "${opened}", not the title`); bad++; }
+  await page.screenshot({ path: path.join(shots, 'title.png') });
+  await page.locator('#btn-play').tap();
+  await page.waitForFunction(() => window.__gd.screen() === 'map');
+  await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(shots, 'map.png'), fullPage: true });
   console.log('console errors:', errors.length, errors.slice(0, 5));
   await browser.close();

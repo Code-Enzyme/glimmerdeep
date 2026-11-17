@@ -319,3 +319,13 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - `src/chars/felt.js` and `src/chars/glyph.js` are the two faceless styles not chosen. They are kept for
   `dev/style-preview.js` only and are not in the game bundle.
 - No music. `audio.js` still contains the music bed, but the game never starts it; only sound effects play.
+
+## 11. Screens (decided 17 Nov 2026)
+
+- The app opens on the **title screen**: Wren holding the lit lantern (animated, still under reduced
+  motion), the name, and one big **Play** button in thumb reach. Once any cavern is lit, a line under
+  Play counts them ("3 of 16 caverns lit").
+- **Play** opens the **map** (choose a cavern, settings). A cavern opens the **level** screen.
+- Back (Android back button, or Escape): result panel or any open panel first, then level → map →
+  title → leave the app. Enter or Space on the title plays.
+- `?level=<id>` skips straight to that level; anything else in the URL still opens on the title.

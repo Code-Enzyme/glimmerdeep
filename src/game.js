@@ -1,6 +1,6 @@
 // Glimmerdeep: the app. Owns the DOM, input, animation flow and saving; the rules live in engine.js.
 //
-//   map screen  ->  level screen (top bar, board canvas, thumb bar)  ->  result panel
+//   title screen (Play)  ->  map screen  ->  level screen (top bar, board canvas, thumb bar)  ->  result panel
 //
 // Every legal action goes through Session.act (one engine.step), then BoardView animates the events.
 
@@ -15,6 +15,7 @@ import { applyIcons, setIcon, portraitUrl, mossSvg, pipSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import { onBackButton, exitApp, haptic, onAppState } from './ui/native.js';
+import { TitleArt } from './ui/title.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
@@ -36,6 +37,7 @@ const KEYS = {
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
+const titleEl = $('screen-title');
 const mapEl = $('screen-map');
 const levelEl = $('screen-level');
 const chaptersEl = $('chapters');
@@ -60,7 +62,7 @@ try {
 }
 const forceUnlock = params.get('unlock') === '1';
 
-let screen = 'map';
+let screen = 'title';
 let session = null;        // the attempt in progress
 let current = null;        // { def, chapter, adhoc, result }
 let panel = null;          // 'card' | 'result' | 'confirm' | null
@@ -76,6 +78,8 @@ let woke = false;
 let gesture = null;
 let armedAt = 0;           // a rule card ignores taps until the finger that opened it has lifted
 const queue = [];
+
+const titleArt = new TitleArt($('title-art'), $('title-stage'));
 
 const view = new BoardView(canvas, {
   onCue: (name) => play(name),
@@ -136,6 +140,7 @@ function pulse(button, on) {
 function showScreen(name) {
   screen = name;
   app.dataset.screen = name;
+  titleEl.hidden = name !== 'title';
   mapEl.hidden = name !== 'map';
   levelEl.hidden = name !== 'level';
   if (name === 'level') {
@@ -144,9 +149,11 @@ function showScreen(name) {
   } else {
     stopLoop();
   }
+  if (name === 'title' && !document.hidden) titleArt.start();
+  else titleArt.stop();
 }
 
-function showMap() {
+function leaveLevel() {
   closePanel();
   stopHintSearch();
   cancelWalk();
@@ -154,6 +161,19 @@ function showMap() {
   session = null;
   current = null;
   celebrating = false;
+}
+
+function showTitle() {
+  leaveLevel();
+  const lit = LEVELS.filter((def) => save.levels[def.id]).length;
+  const progress = $('title-progress');
+  progress.textContent = lit ? `${lit} of ${LEVELS.length} caverns lit` : '';
+  progress.hidden = !lit;
+  showScreen('title');
+}
+
+function showMap() {
+  leaveLevel();
   showScreen('map');
   drawMap();
 }
@@ -768,6 +788,12 @@ onClick($('result-map'), () => {
   showMap();
 });
 
+function startPlaying() {
+  play('ui');
+  showMap();
+}
+onClick($('btn-play'), startPlaying);
+
 onClick($('set-sound'), () => toggleSetting('sound'));
 onClick($('set-contrast'), () => toggleSetting('contrast'));
 onClick($('set-unlock'), () => toggleSetting('unlockAll'));
@@ -796,6 +822,9 @@ onBackButton(() => {
   else if (screen === 'level') {
     play('ui');
     showMap();
+  } else if (screen === 'map') {
+    play('ui');
+    showTitle();
   } else exitApp();
 });
 
@@ -805,7 +834,16 @@ document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'Escape') {
     if (panel === 'result') showMap();
-    else closePanel();
+    else if (panel) closePanel();
+    else if (screen === 'map') showTitle();
+    return;
+  }
+  if (screen === 'title') {
+    const onButton = e.target && e.target.closest && e.target.closest('button');
+    if (!onButton && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
+      e.preventDefault();
+      startPlaying();
+    }
     return;
   }
   if (screen !== 'level' || !session) return;
@@ -833,18 +871,29 @@ window.addEventListener('pointerdown', wake, true);
 window.addEventListener('keydown', wake, true);
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) stopLoop();
-  else startLoop();
+  if (document.hidden) {
+    stopLoop();
+    titleArt.stop();
+  } else {
+    startLoop();
+    if (screen === 'title') titleArt.start();
+  }
 });
 // In the app, going to the background also pauses drawing and puts sound to sleep.
 onAppState((active) => {
   setAppHidden(!active);
-  if (active) startLoop();
-  else stopLoop();
+  if (active) {
+    startLoop();
+    if (screen === 'title') titleArt.start();
+  } else {
+    stopLoop();
+    titleArt.stop();
+  }
 });
 
 function onResize() {
   if (screen === 'level') view.resize();
+  else if (screen === 'title') titleArt.start();
   else layoutMap(chaptersEl);
 }
 window.addEventListener('resize', onResize);
@@ -852,6 +901,7 @@ window.addEventListener('orientationchange', () => window.setTimeout(onResize, 8
 if (typeof ResizeObserver === 'function') {
   new ResizeObserver(onResize).observe($('stage'));
   new ResizeObserver(onResize).observe(chaptersEl);
+  new ResizeObserver(onResize).observe($('title-stage'));
 }
 
 // No callouts, no selection, no pinch or double-tap zoom, no rubber-band scroll during play.
@@ -868,6 +918,8 @@ document.addEventListener('touchmove', (e) => {
 const motion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 function syncMotion() {
   view.reduced = !!(motion && motion.matches);
+  titleArt.setStill(view.reduced);
+  if (screen === 'title') titleArt.start();
 }
 if (motion) {
   if (motion.addEventListener) motion.addEventListener('change', syncMotion);
@@ -907,6 +959,7 @@ window.__gd = {
   },
   loadLevelDef: (def) => openLevel(def, true),
   screen: () => screen,
+  titleFrames: () => titleArt.frames,
   // extras, handy for checks
   key: () => (session ? key(session.state) : null),
   moves: () => (session ? session.moves : 0),
@@ -925,6 +978,6 @@ window.__gd = {
 applyIcons(document);
 syncMotion();
 syncSettings();
-showMap();
+showTitle();
 const direct = params.get('level');
 if (direct) window.__gd.loadLevel(direct);

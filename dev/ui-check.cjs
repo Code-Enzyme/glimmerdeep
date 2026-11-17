@@ -112,6 +112,11 @@ async function main() {
         await page.goto(URL0 + query);
         await page.waitForFunction(() => window.__gd && window.__gd.screen());
       },
+      // the app opens on the title screen; Play goes to the map
+      toMap: async () => {
+        if ((await page.evaluate(() => window.__gd.screen())) === 'title') await page.locator('#btn-play').tap();
+        await page.waitForFunction(() => window.__gd.screen() === 'map');
+      },
       gd: (fn, arg) => page.evaluate(([f, a]) => window.__gd[f](a), [fn, arg]),
       idle: () => page.waitForFunction(() => !window.__gd.busy(), null, { timeout: 8000 }),
       // centre of a tile in client pixels
@@ -174,6 +179,9 @@ async function main() {
     const h = await phone({ viewport, dpr, tag: prefix || 'shots' });
     const name = (n) => (prefix ? `${prefix}-${n}` : n);
     await h.open();
+    await h.page.waitForTimeout(350);
+    await h.shot(name('00-title'));
+    await h.toMap();
     await h.shot(name('01-map'));
     await h.page.locator(`.node[data-level="${first.id}"]`).tap();
     await h.page.waitForFunction(() => window.__gd.screen() === 'level');
@@ -245,12 +253,53 @@ async function main() {
   }
 
   if (!SHOTS_ONLY) {
-    // ---------------------------------------------------------------- 1. map
-    console.log('map');
+    // ---------------------------------------------------------------- 0. title screen
+    console.log('title');
     const h = await phone();
     await h.open();
-    eq('map: starts on the map screen', await h.gd('screen'), 'map');
-    eq('map: title', await h.page.locator('h1').textContent(), 'Glimmerdeep');
+    eq('title: the app opens on the title screen', await h.gd('screen'), 'title');
+    ok('title: the map is hidden', !(await h.page.locator('#screen-map').isVisible()));
+    eq('title: name', await h.page.locator('#screen-title h1').textContent(), 'Glimmerdeep');
+    {
+      const b = await h.page.locator('#btn-play').boundingBox();
+      ok('title: Play is a big button', b && b.width >= 160 && b.height >= 56, JSON.stringify(b));
+      ok('title: Play is on screen, in the lower half (thumb reach)', b && b.y > 844 / 2 && b.y + b.height <= 844 && b.x >= 0 && b.x + b.width <= 390, JSON.stringify(b));
+      eq('title: Play says Play', (await h.page.locator('#btn-play').textContent()).trim(), 'Play');
+    }
+    ok('title: no progress line on a fresh save', !(await h.page.locator('#title-progress').isVisible()));
+    await h.page.waitForTimeout(300);
+    {
+      const art = await h.page.evaluate(() => {
+        const c = document.getElementById('title-art');
+        const r = c.getBoundingClientRect();
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let lit = 0;
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 0) lit++;
+        return { w: r.width, h: r.height, lit, frac: lit / (d.length / 4) };
+      });
+      ok('title: Wren and the lantern are drawn', art.w >= 120 && art.h >= 120 && art.frac > 0.05, JSON.stringify(art));
+      const f0 = await h.gd('titleFrames');
+      await h.page.waitForTimeout(250);
+      ok('title: the art is animated', (await h.gd('titleFrames')) > f0 + 3);
+    }
+    await h.page.locator('#btn-play').tap();
+    eq('title: Play opens the map', await h.gd('screen'), 'map');
+    {
+      const f0 = await h.gd('titleFrames');
+      await h.page.waitForTimeout(250);
+      eq('map: the title art stops animating', await h.gd('titleFrames'), f0);
+    }
+    await h.page.keyboard.press('Escape');
+    eq('map: Escape goes back to the title', await h.gd('screen'), 'title');
+    await h.page.keyboard.press('Enter');
+    eq('title: Enter plays', await h.gd('screen'), 'map');
+    await h.page.keyboard.press('Escape');
+    await h.page.waitForFunction(() => window.__gd.screen() === 'title');
+
+    // ---------------------------------------------------------------- 1. map
+    console.log('map');
+    await h.toMap();
+    eq('map: title', await h.page.locator('#screen-map h1').textContent(), 'Glimmerdeep');
     eq('map: one section per chapter', await h.page.locator('.chapter').count(), CHAPTERS.length);
     eq('map: one node per level', await h.page.locator('.node').count(), LEVELS.length);
     for (const ch of CHAPTERS) {
@@ -293,6 +342,10 @@ async function main() {
       eq(`${label}: no text under 14 px`, a.small, []);
     };
     await audit('map');
+    await h.page.keyboard.press('Escape');
+    await h.page.waitForFunction(() => window.__gd.screen() === 'title');
+    await audit('title');
+    await h.toMap();
 
     // ---------------------------------------------------------------- 2. open 1-1 by tapping its node
     console.log('level: open, illegal moves, undo, restart');
@@ -532,6 +585,9 @@ async function main() {
     // ---------------------------------------------------------------- 9. progress survives a reload
     await h.page.reload();
     await h.page.waitForFunction(() => window.__gd && window.__gd.screen());
+    eq('reload: opens on the title', await h.gd('screen'), 'title');
+    eq('title: progress line counts lit caverns', (await h.page.locator('#title-progress').textContent()).trim(), `1 of ${LEVELS.length} caverns lit`);
+    await h.toMap();
     eq('reload: record kept', (await h.gd('save')).levels[first.id], { moves: sol.length, stars: 3 });
     eq('reload: marks on the map', await h.page.locator(`.node[data-level="${first.id}"] .moss.on`).count(), 3);
 
@@ -581,6 +637,7 @@ async function main() {
     eq('sound: toggles off', [await h.page.locator('#set-sound').getAttribute('aria-pressed'), await h.page.locator('#set-sound .val').textContent()], ['false', 'off']);
     await h.page.reload();
     await h.page.waitForFunction(() => window.__gd && window.__gd.screen());
+    await h.toMap();
     eq('contrast: persists over a reload', await h.page.locator('#set-contrast').getAttribute('aria-pressed'), 'true');
     ok('contrast: app class after reload', await h.page.evaluate(() => document.getElementById('app').classList.contains('hc')));
     eq('sound: persists over a reload', await h.page.locator('#set-sound').getAttribute('aria-pressed'), 'false');
@@ -612,9 +669,10 @@ async function main() {
     await h.open(`?level=${first.id}`);
     eq('?level opens the level', [await h.gd('screen'), (await h.gd('state')).turn], ['level', 0]);
     await h.open('?unlock=1');
+    await h.toMap();
     eq('?unlock=1 unlocks everything', await h.page.locator('.node.locked').count(), 0);
     await h.open('?level=no-such-level');
-    eq('?level with an unknown id stays on the map', await h.gd('screen'), 'map');
+    eq('?level with an unknown id stays on the title', await h.gd('screen'), 'title');
 
     // ---------------------------------------------------------------- 12. ad-hoc levels
     console.log('ad-hoc levels');
@@ -719,7 +777,8 @@ async function main() {
     eq('page: no text selection', style.select, 'none');
     ok('page: viewport-fit=cover', style.vp.includes('viewport-fit=cover'), style.vp);
     ok('page: nothing to scroll', style.scroll <= 0, style.scroll);
-    eq('page: one canvas', await h.page.locator('canvas').count(), 1);
+    eq('page: the level draws on one canvas', await h.page.locator('#screen-level canvas').count(), 1);
+    eq('page: the only other canvas is the title picture', await h.page.locator('canvas:not(#screen-level canvas)').evaluateAll((els) => els.map((e) => e.id)), ['title-art']);
     // hidden page: the loop stops
     await h.page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
@@ -768,6 +827,7 @@ async function main() {
         },
       });
       await g.open();
+      await g.toMap();
       eq('no storage: map renders', await g.page.locator('.node').count(), LEVELS.length);
       await g.page.locator(`.node[data-level="${first.id}"]`).tap();
       await playByTouch(g, sol);
@@ -796,6 +856,13 @@ async function main() {
     for (const [tag, viewport] of [['small', { width: 360, height: 640 }], ['tablet', { width: 820, height: 1180 }]]) {
       const g = await phone({ tag, viewport });
       await g.open();
+      {
+        const b = await g.page.locator('#btn-play').boundingBox();
+        ok(`${tag}: Play on screen`, b && b.x >= 0 && b.y >= 0 && b.x + b.width <= viewport.width && b.y + b.height <= viewport.height, JSON.stringify(b));
+        const t = await g.page.locator('#screen-title h1').boundingBox();
+        ok(`${tag}: title name fits`, t && t.x >= 0 && t.x + t.width <= viewport.width && t.y + t.height <= b.y, JSON.stringify(t));
+      }
+      await g.toMap();
       const over = await g.page.evaluate(() => {
         const out = [];
         for (const el of document.querySelectorAll('.node, .tool, .chapter, .title')) {

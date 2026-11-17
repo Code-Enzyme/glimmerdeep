@@ -1,6 +1,6 @@
 // On-device check, run by CI on an Android emulator: node dev/device-check.cjs path/to/app-debug.apk
 // Installs the debug APK, opens the app, and through the app's own WebView:
-//   1. the map shows and the page has no script errors,
+//   1. the app opens on the title screen, Play shows the map, and the page has no script errors,
 //   2. level 1-1 and the last level of each chapter solve at par through the game's moves,
 //   3. the save survives the app being killed and opened again.
 // Screenshots of the real device screen go to dev/device-shots/. Needs adb on PATH and one device.
@@ -22,8 +22,14 @@ async function openApp(device) {
   await device.shell(`am start -W -n ${ACTIVITY}`);
   const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
   const page = await webview.page();
-  await page.waitForFunction(() => window.__gd && window.__gd.screen() === 'map', null, { timeout: 30000 });
+  // the app opens on the title screen; Play goes to the map
+  await page.waitForFunction(() => window.__gd && window.__gd.screen() === 'title', null, { timeout: 30000 });
   return { webview, page };
+}
+
+async function play(page) {
+  await page.evaluate(() => document.getElementById('btn-play').click());
+  await page.waitForFunction(() => window.__gd.screen() === 'map', null, { timeout: 10000 });
 }
 
 async function killApp(device, webview) {
@@ -53,8 +59,12 @@ async function killApp(device, webview) {
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.waitForTimeout(800);
+  await device.screenshot({ path: path.join(shots, 'title.png') });
+  console.log('title shown');
+  await play(page);
+  await page.waitForTimeout(400);
   await device.screenshot({ path: path.join(shots, 'map.png') });
-  console.log('map shown');
+  console.log('Play shows the map');
 
   for (const id of LEVEL_IDS) {
     const level = LEVELS.find((l) => l.id === id);
@@ -78,6 +88,7 @@ async function killApp(device, webview) {
   // kill the app and open it again: the bests must still be there
   await killApp(device, webview);
   ({ webview, page } = await openApp(device));
+  await play(page);
   const after = await page.evaluate(() => Object.keys(window.__gd.save().levels).sort());
   if (JSON.stringify(after) !== JSON.stringify(before)) fail(`save lost across restart: before ${before} after ${after}`);
   else console.log(`save kept across restart: ${after.join(', ')}`);

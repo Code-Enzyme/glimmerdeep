@@ -13,10 +13,24 @@
 <style>/*__CSS__*/</style>
 </head>
 <body>
-<div id="app" class="app" data-screen="map">
+<div id="app" class="app" data-screen="title">
 
-  <!-- Map: the home screen -->
-  <main id="screen-map" class="screen map">
+  <!-- Title: the first screen. Play goes to the map. -->
+  <main id="screen-title" class="screen title-screen">
+    <canvas id="title-art" class="title-canvas" aria-hidden="true"></canvas>
+    <div id="title-stage" class="title-art"></div>
+    <header class="title-head">
+      <h1 class="title">Glimmerdeep</h1>
+      <p class="subtitle">A lamplighter's field journal</p>
+    </header>
+    <div class="title-foot">
+      <button id="btn-play" class="btn primary play" type="button" aria-label="Play">Play</button>
+      <p id="title-progress" class="title-progress" hidden></p>
+    </div>
+  </main>
+
+  <!-- Map: choose a cavern -->
+  <main id="screen-map" class="screen map" hidden>
     <header class="map-head">
       <h1 class="title">Glimmerdeep</h1>
       <p class="subtitle">A lamplighter's field journal</p>
