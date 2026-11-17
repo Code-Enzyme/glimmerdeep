@@ -26,7 +26,7 @@ const TERRAIN_CODE = { '#': WALL, '.': FLOOR, '~': PUDDLE, G: BUD, H: HUSH, a: 5
 const FACING = { '^': 'N', '>': 'E', v: 'S', '<': 'W' };           // Stumpcaps
 const NEWT_FACING = { n: 'N', e: 'E', s: 'S', w: 'W' };            // Dozer newts
 const CLOCKWISE = { N: 'E', E: 'S', S: 'W', W: 'N' };
-const SPECIES_NAME = { M: 'Fluffmoth', S: 'Shellwhelk', T: 'Stumpcap', D: 'Dozer newt', K: 'Emberwick' };
+const SPECIES_NAME = { M: 'Fluffmoth', S: 'Shellwhelk', T: 'Stumpcap', D: 'Dozer newt', K: 'Emberwick', O: 'Gloamling' };
 const GLOWING = 2;   // an Emberwick's heat once it has caught (section 3)
 
 const own = (object, k) => Object.prototype.hasOwnProperty.call(object, k);
@@ -113,7 +113,7 @@ export function parseLevel(levelDef) {
   const tiles = [];
   const creatures = [];
   const buds = [];
-  const counters = { M: 0, S: 0, T: 0, D: 0, K: 0 };
+  const counters = { M: 0, S: 0, T: 0, D: 0, K: 0, O: 0 };
   let wren = null;
   let planted = null;
   let wrens = 0;
@@ -139,7 +139,7 @@ export function parseLevel(levelDef) {
         lanterns++;
         planted = { x, y, carried: false };
         standing.push(['lantern', x, y, base]);
-      } else if (ch === 'M' || ch === 'S' || ch === 'K' || own(FACING, ch) || own(NEWT_FACING, ch)) {
+      } else if (ch === 'M' || ch === 'S' || ch === 'K' || ch === 'O' || own(FACING, ch) || own(NEWT_FACING, ch)) {
         const type = own(FACING, ch) ? 'T' : own(NEWT_FACING, ch) ? 'D' : ch;
         const dir = type === 'T' ? FACING[ch] : type === 'D' ? NEWT_FACING[ch] : null;
         const id = `${type}${++counters[type]}`;
@@ -193,18 +193,69 @@ export function parseLevel(levelDef) {
 
 // ---------------------------------------------------------------- light (SPEC section 4)
 
-// The whole light map: the lantern's, plus a radius-1 cross around every glowing Emberwick. Embers are rare,
-// so the lantern's cached map is returned as it is when there are none.
+// The whole light map: the lantern's, plus a radius-1 cross around every glowing Emberwick, minus every
+// tile a Gloamling shadows. Embers and Gloamlings are rare, so the lantern's cached map is returned as it is
+// when there are none.
 function lightOf(meta, lantern, creatures) {
-  const base = lightMap(meta, lantern, creatures);
+  const shade = shadowOf(meta, creatures);
+  let base;
+  if (shade === null) {
+    base = lightMap(meta, lantern, creatures);
+  } else {
+    const p = lantern.y * meta.w + lantern.x;
+    const radius = lantern.carried ? RADIUS_CARRIED : RADIUS_PLANTED;
+    if (shade[p] === 1 || (lantern.carried && meta.terr[p] === HUSH)) base = meta.dark;
+    else if (!shadeNear(meta, shade, p, radius)) base = lightMap(meta, lantern, creatures);
+    else base = Object.freeze(flood(meta, p, radius, creatures, shade));
+  }
   let out = base;
   for (let i = 0; i < creatures.length; i++) {
     const c = creatures[i];
     if (c === null || c.type !== 'K' || c.heat !== GLOWING) continue;
+    if (shade !== null && shade[c.y * meta.w + c.x] === 1) continue;   // a shadowed source lights nothing
     if (out === base) out = base.slice();
     glow(meta, out, c.x, c.y);
   }
+  if (shade !== null) {
+    for (let t = 0; t < meta.n; t++) {
+      if (shade[t] === 1 && out[t] === 1) {
+        if (out === base) out = base.slice();
+        out[t] = 0;
+      }
+    }
+  }
   return out === base ? base : Object.freeze(out);
+}
+
+// The tiles the Gloamlings shadow (their own and the four neighbours), or null when there are none.
+function shadowOf(meta, creatures) {
+  let shade = null;
+  const { w, h } = meta;
+  for (let i = 0; i < creatures.length; i++) {
+    const c = creatures[i];
+    if (c === null || c.type !== 'O') continue;
+    if (shade === null) shade = new Uint8Array(meta.n);
+    const p = c.y * w + c.x;
+    shade[p] = 1;
+    if (c.y > 0) shade[p - w] = 1;
+    if (c.x + 1 < w) shade[p + 1] = 1;
+    if (c.y + 1 < h) shade[p + w] = 1;
+    if (c.x > 0) shade[p - 1] = 1;
+  }
+  return shade;
+}
+
+// Whether any shadowed tile lies within `radius` 4-neighbour steps of p (the only ones a flood can touch).
+function shadeNear(meta, shade, p, radius) {
+  const w = meta.w;
+  const px = p % w;
+  const py = (p - px) / w;
+  for (let t = 0; t < meta.n; t++) {
+    if (shade[t] !== 1) continue;
+    const x = t % w;
+    if (Math.abs(x - px) + Math.abs((t - x) / w - py) <= radius) return true;
+  }
+  return false;
 }
 
 // A source of radius 1 lights its own tile and its four neighbours (Hush excepted), whatever stands there.
@@ -254,13 +305,14 @@ function lightMap(meta, lantern, creatures) {
 }
 
 // Literal flood of section 4: light spreads from p one 4-neighbour step at a time, up to `radius` steps.
-// A lit tile passes light on only if it is p or it is transparent; Hush is never lit.
-function flood(meta, p, radius, creatures) {
+// A lit tile passes light on only if it is p or it is transparent; Hush is never lit. Shadowed tiles
+// (`shade`, optional) do not pass light on; lightOf() takes them out of the result.
+function flood(meta, p, radius, creatures, shade) {
   const { w, h, n, terr } = meta;
   const lit = new Array(n).fill(0);
   lit[p] = 1;
   const opaque = new Uint8Array(n);
-  for (let i = 0; i < n; i++) opaque[i] = terr[i] === WALL || terr[i] === HUSH ? 1 : 0;
+  for (let i = 0; i < n; i++) opaque[i] = terr[i] === WALL || terr[i] === HUSH || (shade && shade[i] === 1) ? 1 : 0;
   for (const c of creatures) if (c !== null) opaque[c.y * w + c.x] = 1;
 
   let frontier = [p];
@@ -544,7 +596,7 @@ export function step(state, action) {
         if (smothered) continue;
         let hx;
         let vy;
-        if (type === 'M') {                                        // toward the lantern
+        if (type === 'M' || type === 'O') {                        // toward the lantern
           hx = sign(lantern.x - x);
           vy = sign(lantern.y - y);
         } else {
@@ -581,7 +633,7 @@ export function step(state, action) {
     for (let k = 0; k < count; k++) {
       const i = order[k];
       const c0 = before[i];
-      if (c0.type === 'M' || c0.type === 'K') continue;
+      if (c0.type === 'M' || c0.type === 'K' || c0.type === 'O') continue;
       const c1 = after[i];
       const was = lit0[c0.y * w + c0.x] === 1;
       const now = lit[c1.y * w + c1.x] === 1;
@@ -640,7 +692,7 @@ export function step(state, action) {
 // One-character strings for the small numbers a key is made of (all below 99 * 16).
 const CHAR = Array.from({ length: 1600 }, (_, i) => String.fromCharCode(48 + i));
 // Creature and bridge kinds in a key code: moth, whelk, Stumpcap by facing, newt by facing, bridge.
-const KIND = { M: 0, S: 1, TN: 2, TE: 3, TS: 4, TW: 5, DN: 6, DE: 7, DS: 8, DW: 9, K0: 10, K1: 11, K2: 12 };
+const KIND = { M: 0, S: 1, TN: 2, TE: 3, TS: 4, TW: 5, DN: 6, DE: 7, DS: 8, DW: 9, K0: 10, K1: 11, K2: 12, O: 13 };
 const BRIDGE_KIND = 15;
 const CODES = [];   // scratch for key()
 
@@ -671,7 +723,7 @@ export function key(state) {
     let code;
     if (i < creatures.length) {
       const c = creatures[i];
-      const kind = c.type === 'M' || c.type === 'S' ? KIND[c.type] : c.type === 'K' ? KIND[`K${c.heat}`] : KIND[c.type + c.dir];
+      const kind = c.type === 'M' || c.type === 'S' || c.type === 'O' ? KIND[c.type] : c.type === 'K' ? KIND[`K${c.heat}`] : KIND[c.type + c.dir];
       code = (c.y * w + c.x) * 16 + kind;
     } else {
       const b = bridges[i - creatures.length];

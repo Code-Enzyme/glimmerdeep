@@ -3,7 +3,7 @@
 // canvas), plus the star-moss mark as inline SVG.
 
 import { drawIcon, PALETTE } from '../sprites.js';
-import { drawTile, drawWren, drawCreature, drawLantern, charStyle } from '../chars.js';
+import { drawTile, drawWren, drawCreature, drawGlow, drawLantern, charStyle } from '../chars.js';
 
 function paint(cssSize, scale, painter) {
   try {
@@ -54,7 +54,7 @@ export function setIcon(node, name, tint) {
 
 const portraitCache = new Map();
 
-// A fully lit portrait for a rule card. kind: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'bud' | 'root' | 'gate' | 'puddle' | 'hush'
+// A fully lit portrait for a rule card. kind: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'bud' | 'root' | 'gate' | 'puddle' | 'hush'
 export function portraitUrl(kind, accent) {
   const k = kind + '|' + (accent || '') + '|' + charStyle();
   let url = portraitCache.get(k);
@@ -79,6 +79,11 @@ export function portraitUrl(kind, accent) {
       case 'T': drawCreature(g, 'T', px, py, size, { t, dir: 'E', lit: true, awake: true }); break;
       case 'D': drawCreature(g, 'D', px, py, size, { t, dir: 'E', lit: true, awake: true }); break;
       case 'K': drawCreature(g, 'K', px, py, size, { t, lit: true, heat: 2 }); break;
+      // a Gloamling is never lit, so its portrait shows the body with its glowing edge on top
+      case 'O':
+        drawCreature(g, 'O', px, py, size, { t });
+        drawGlow(g, 'O', px, py, size, { t, lit: false });
+        break;
       case 'bud': drawTile(g, 'bud', px, py, size, { t, seed: 3, lit: true, accent }); break;
       case 'root': drawTile(g, 'root', px, py, size, { t, seed: 3, channel: 'a', pressed: false }); break;
       case 'gate': drawTile(g, 'gate', px, py, size, { t, seed: 3, channel: 'A', open: false }); break;

@@ -1,28 +1,32 @@
-// Chapter 5 level-design search (scratch tooling, not shipped).
-//   node dev/levels-ch5-search.js <skeleton> [--min=6] [--max=40] [--top=12] [--states=120000]
+// Chapter 5 and 6 level-design search (scratch tooling, not shipped).
+//   node dev/levels-ch5-search.js <skeleton> [--set=ch6] [--min=6] [--max=40] [--top=12] [--states=120000]
 // The skeleton is a map with some pieces left out. `place` lists the pieces to put on it (for example
 // ['W', 'K'] or ['W', 'K', 'S']); each goes on every free floor cell, or on the cells listed under its
 // character in `cells`. Every placement is solved; those that pass checkLevel are listed, longest first,
 // with the solution and when the Emberwick caught.
 import { parseLevel, step } from '../src/engine.js';
 import { solve, checkLevel } from '../src/solver.js';
-import { SKELETONS } from './levels-ch5-skeletons.js';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const a = args.find((x) => x.startsWith(`--${name}=`));
   return a ? a.slice(name.length + 3) : def;
 };
+const set = opt('set', 'ch5');
+const { SKELETONS } = await import(`./levels-${set}-skeletons.js`);
 const name = args.find((a) => !a.startsWith('--'));
 const sk = SKELETONS[name];
 if (!sk) throw new Error(`no skeleton ${name}; have ${Object.keys(SKELETONS).join(', ')}`);
 const base = sk.map;
-const feature = opt('feature', sk.feature || 'K');
+const feature = opt('feature', sk.feature || (set === 'ch6' ? 'O' : 'K'));
 const min = Number(opt('min', 6));
 const max = Number(opt('max', 40));
 const top = Number(opt('top', 12));
 const budget = Number(opt('states', 120000));
 const place = sk.place || ['W', 'K'];
+// --shard=i/n: only every n-th placement, starting at i, so n processes can share one search
+const [shardI, shardN] = opt('shard', '0/1').split('/').map(Number);
+let placed = 0;
 
 const put = (map, x, y, ch) => { const m = map.slice(); m[y] = m[y].slice(0, x) + ch + m[y].slice(x + 1); return m; };
 const floor = [];
@@ -51,6 +55,7 @@ let tried = 0;
 const why = { unsolvable: 0, 'too big': 0, 'par out of range': 0 };
 function rec(map, i, used, last) {
   if (i === place.length) {
+    if (placed++ % shardN !== shardI) return;
     const def = { id: 'x', name, map, par: 0, feature, under: sk.under };
     let st;
     try { st = parseLevel(def); } catch (e) { return; }

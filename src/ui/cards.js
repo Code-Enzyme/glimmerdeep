@@ -33,6 +33,10 @@ export const RULE_CARDS = {
     title: 'Emberwick',
     text: 'Keep it in the light for two turns in a row and it catches. Then it glows like a little lantern and follows Wren everywhere. Never heavy.',
   },
+  O: {
+    title: 'Gloamling',
+    text: 'Drifts toward your lantern and eats light: the tiles around it stay dark, your lantern\'s too. It waits while the lantern is smothered. Never heavy.',
+  },
   bud: {
     title: 'Glowbud',
     text: 'Light every Glowbud. Once lit, it stays in bloom.',

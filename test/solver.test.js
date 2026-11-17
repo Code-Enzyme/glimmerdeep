@@ -239,6 +239,12 @@ test('checkLevel: Emberwick necessity', () => {
   assert.ok(missing.problems.some((p) => p.includes('no Emberwick')), missing.problems.join('; '));
 });
 
+test('checkLevel: knows the Gloamling as a feature', () => {
+  const missing = checkLevel(def(HAND_MADE.newtGate.map, { feature: 'O', par: 7 }));
+  assert.deepEqual(missing.featureOk, { O: false });
+  assert.ok(missing.problems.some((p) => p.includes('no Gloamling')), missing.problems.join('; '));
+});
+
 test('checkLevel: removing a species leaves the `under` terrain in place', () => {
   // The whelk gate again, but channel A has a second root (4,2) with a walled-in Stumpcap asleep on it.
   // Take the Stumpcap away and its root is still there, unpressed, so the gate never opens: the Stumpcap

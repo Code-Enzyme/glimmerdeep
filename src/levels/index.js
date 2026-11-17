@@ -3,6 +3,7 @@ import ch2 from './ch2.js';
 import ch3 from './ch3.js';
 import ch4 from './ch4.js';
 import ch5 from './ch5.js';
+import ch6 from './ch6.js';
 
 export const CHAPTERS = [
   { id: 1, name: 'Mossmouth', species: 'M', accent: '#5FBFA8', levels: ch1 },
@@ -10,6 +11,7 @@ export const CHAPTERS = [
   { id: 3, name: 'Stumpwood', species: 'T', accent: '#B5D46A', levels: ch3 },
   { id: 4, name: 'Newt Flats', species: 'D', accent: '#A9B6FF', levels: ch4 },
   { id: 5, name: 'Ember Hollow', species: 'K', accent: '#FF9A5A', levels: ch5 },
+  { id: 6, name: 'The Heartroot', species: 'O', accent: '#C39BFF', levels: ch6 },
 ];
 
 export const LEVELS = CHAPTERS.flatMap((c) => c.levels);

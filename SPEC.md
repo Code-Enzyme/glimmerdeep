@@ -62,7 +62,7 @@ An illegal action returns `null` and spends no turn. A legal action runs these p
    already moved this turn. Rules in section 3.
 4. **Light B.** Recompute the light map with the new creature positions. This is the light stored in the state.
 5. **Roots and gates.** A root is pressed if a Stumpcap or a Dozer newt stands on it, or a Shellwhelk that
-   is lit in Light B stands on it. Wren, moths, Emberwicks and the lantern never press roots. A channel's gates are open iff the
+   is lit in Light B stands on it. Wren, moths, Emberwicks, Gloamlings and the lantern never press roots. A channel's gates are open iff the
    channel has at least one root and all of its roots are pressed. Gate state is stored and used for
    movement during the NEXT turn. Closing a gate never hurts anything: whoever stands in a gate tile stays
    and may step out later.
@@ -80,7 +80,7 @@ After a level is solved, `step` returns `null` for every action.
 
 "The lantern position" `P` below means the lantern's tile (Wren's tile when carried).
 The lantern is **smothered** when Wren carries it on a Hush tile: then the lantern lights nothing (a glowing
-Emberwick still does), and no creature reacts to the lantern (moths and whelks stay put). Creatures that go by light alone act as in any darkness:
+Emberwick still does), and no creature reacts to the lantern (moths, whelks and Gloamlings stay put). Creatures that go by light alone act as in any darkness:
 Stumpcaps sleep and Dozer newts wander.
 
 Two creatures use the same greedy step, taken from classic chase puzzles. Given a wanted horizontal
@@ -125,6 +125,14 @@ creature, no other creature is there, Wren is not there, and a planted lantern i
   not the lantern, even when the lantern is planted or smothered.
 - Never heavy (it does not press roots). Cannot enter puddles, walks over bridges.
 
+### Gloamling `O` (chapter 6, decided 17 Nov 2026)
+- Drifts toward the lantern: `hx = sign(P.x - x)`, `vy = sign(P.y - y)`, greedy step, like a moth. It stays
+  put while the lantern is smothered. It never settles: it cannot enter puddles and walks over bridges.
+- It eats light: its own tile and its four neighbours are **shadowed** (section 4), so nothing there is lit,
+  whatever the source. Next to Wren it shadows the carried lantern itself, so Wren's light goes out until
+  Wren gets away from it. The board plays `'gloamSnuff'` when the lantern's own tile goes dark that way.
+- Never heavy.
+
 No creature can be pushed, pulled or hurt.
 
 ## 4. Light
@@ -132,6 +140,9 @@ No creature can be pushed, pulled or hurt.
 Light sources: the lantern at `P`, radius `r` **1 while carried, 2 while planted**, and every glowing
 Emberwick, radius 1 from its own tile. A smothered lantern lights nothing. The light map is the union of
 what every source lights; each source floods as below, with itself as `P`.
+
+Every Gloamling shadows its own tile and its four neighbours. A shadowed tile is never lit and never passes
+light on, and a source whose own tile is shadowed lights nothing.
 
 Light floods outward from `P`, one tile per step, up to `r` steps (4-neighbour steps):
 
@@ -184,10 +195,10 @@ feature-removed variants) must stay under 150,000 positions, so that hints are i
 Map characters: the terrain chars from section 1, plus things that stand on floor (or on `under` terrain):
 `W` Wren carrying the lantern (exactly one), `M` Fluffmoth, `S` Shellwhelk, Stumpcaps by facing
 `^` north, `>` east, `v` south, `<` west, Dozer newts by starting facing `n` north, `e` east, `s` south,
-`w` west (lower case), `K` an Emberwick (cold), and optionally `L` a lantern that starts planted (then Wren
+`w` west (lower case), `K` an Emberwick (cold), `O` a Gloamling, and optionally `L` a lantern that starts planted (then Wren
 starts without it; at most one `L`).
 
-`feature` is a string of one or more of: `M`, `S`, `T`, `D`, `K` (the species), `L` (planting the lantern).
+`feature` is a string of one or more of: `M`, `S`, `T`, `D`, `K`, `O` (the species), `L` (planting the lantern).
 Necessity check, run for each listed character: for a species, the level with every creature of that
 species removed must be unsolvable; for `L`, the level must be unsolvable without the `L` action.
 
@@ -205,7 +216,7 @@ export function key(state)                  // -> string that identifies the pos
 export function isLit(state, x, y)          // -> boolean, from the stored light map
 export function terrainAt(state, x, y)      // -> one of '#', '.', '~', 'bridge', 'G', 'H', 'a'..'c', 'A'..'C'; '#' when out of bounds
 export function creatureAt(state, x, y)     // -> creature object or null
-export function canEnter(state, who, x, y)  // who: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K'. Terrain and occupancy check used by the rules.
+export function canEnter(state, who, x, y)  // who: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O'. Terrain and occupancy check used by the rules.
 export function isGateOpen(state, channel)  // channel: 'A' | 'B' | 'C'
 export function isHidden(state, creature)   // true for a Shellwhelk whose tile is lit
 export function isAwake(state, creature)    // true for a Stumpcap whose tile is lit, and for a Dozer newt whose tile is dark
@@ -219,7 +230,7 @@ State (plain JSON-safe data; treat as immutable):
   tiles: ['#########', ...],   // terrain only: creatures, Wren and L replaced by floor or the `under` terrain; never changes
   wren: { x, y },
   lantern: { x, y, carried },  // when carried, x and y equal Wren's
-  creatures: [ { id, type: 'M' | 'S' | 'T' | 'D' | 'K', x, y, dir } ],   // id is stable for the whole level; dir is 'N'|'E'|'S'|'W' for T and D, null otherwise
+  creatures: [ { id, type: 'M' | 'S' | 'T' | 'D' | 'K' | 'O', x, y, dir } ],   // id is stable for the whole level; dir is 'N'|'E'|'S'|'W' for T and D, null otherwise
                                // an Emberwick also has `heat`: 0 cold, 1 warm, 2 glowing
   bridges: [ 'x,y', ... ],     // puddles that became bridges, sorted
   lit: [0, 1, ...],            // length w*h, index y*w+x, Light B
@@ -281,11 +292,11 @@ export function drawTile(ctx, kind, px, py, size, opts)
 //   kind: 'floor' | 'wall' | 'puddle' | 'bridge' | 'bud' | 'hush' | 'root' | 'gate'
 //   opts: { t, seed, lit, open, pressed, channel, accent, neighbors: {n, e, s, w} (true where the same kind adjoins) }
 export function drawWren(ctx, px, py, size, { t, dir, carrying })
-export function drawLantern(ctx, px, py, size, { t })                 // planted lantern
-export function drawCreature(ctx, type, px, py, size, { t, dir, lit, hidden, awake, heat })   // type 'M' | 'S' | 'T' | 'D' | 'K'
+export function drawLantern(ctx, px, py, size, { t, out })            // planted lantern; out: in a Gloamling's shadow
+export function drawCreature(ctx, type, px, py, size, { t, dir, lit, hidden, awake, heat })   // type 'M' | 'S' | 'T' | 'D' | 'K' | 'O'
 export function drawDarkness(ctx, { ox, oy, size, w, h, lit, source, t, highContrast })
 //   Paints the darkness over an already-drawn board whose top-left is (ox, oy). `lit` is the engine's array.
-//   `source` is { x, y, radius } in tile units (fractional allowed while animating) or null when smothered.
+//   `source` is { x, y, radius } in tile units (fractional allowed while animating) or null when the lantern lights nothing (smothered, or in a Gloamling's shadow).
 //   Unlit tiles must stay readable (shapes visible, colour drained); lit tiles get a warm glow with soft edges.
 export function drawBackdrop(ctx, width, height, { t, accent })       // behind the board
 export function drawIcon(ctx, name, px, py, size)                     // 'undo' | 'restart' | 'wait' | 'hint' | 'lantern' | 'map' | 'sound' | 'mute' | 'star' | 'lock' | 'contrast'
@@ -299,7 +310,7 @@ export function setMuted(muted)          export function isMuted()
 export function play(name)               // one-shot sound; unknown names are ignored
 //   names: 'step' 'blocked' 'plant' 'pickup' 'wait' 'moth' 'settle' 'whelkMove' 'whelkHide' 'whelkEmerge'
 //          'stumpStep' 'stumpBump' 'stumpWake' 'newtStep' 'newtTurn' 'newtDoze' 'newtWake'
-//          'emberWarm' 'emberCool' 'emberIgnite' 'emberStep'
+//          'emberWarm' 'emberCool' 'emberIgnite' 'emberStep' 'gloamDrift' 'gloamSnuff'
 //          'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint'
 export function setMusic({ playing, intensity, chapter })   // adaptive bed: intensity 0..1 = share of Glowbuds lit; chapter 1..3
 ```
@@ -317,6 +328,7 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - **Stumpcap:** "Sleeps in the dark. In the light it marches straight ahead until something stands in its way. Always heavy."
 - **Dozer newt:** "Wanders in the dark and turns right whenever something blocks it. Light makes it doze off where it stands. Always heavy."
 - **Emberwick:** "Keep it in the light for two turns in a row and it catches. Then it glows like a little lantern and follows Wren everywhere. Never heavy."
+- **Gloamling:** "Drifts toward your lantern and eats light: the tiles around it stay dark, your lantern's too. It waits while the lantern is smothered. Never heavy."
 - **Glowbud:** "Light every Glowbud. Once lit, it stays in bloom."
 - **Pressure root and gate:** "A gate opens while something heavy rests on its root."
 - **Puddle:** "Too deep for Wren. A Fluffmoth can bridge it."
@@ -378,7 +390,7 @@ and never ask for a move the solution does not need.
     card: 'S',                 // optional: opens that creature's rule card when the step comes up ("meet" card)
     until: 'step' }            // what finishes the step, see below
   ```
-- **point:** `'wren'`; `'lantern'` (the planted lantern); a species letter `M` `S` `T` `D` `K` (the first such
+- **point:** `'wren'`; `'lantern'` (the planted lantern); a species letter `M` `S` `T` `D` `K` `O` (the first such
   creature in reading order, followed as it moves); `'bud'` (the first Glowbud not in bloom); `'root'`;
   `'gate'`; `[x, y]` (a tile); or a thumb-bar button `'plant'` (the lantern button), `'wait'`, `'undo'`,
   `'hint'`. A board point is a soft ring with the gesture drawn on it; a button point makes it pulse.

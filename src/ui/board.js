@@ -10,7 +10,7 @@ const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',
   a: 'root', b: 'root', c: 'root', A: 'gate', B: 'gate', C: 'gate',
 };
-const SOUND_OF_MOVE = { M: 'moth', S: 'whelkMove', T: 'stumpStep', D: 'newtStep', K: 'emberStep' };
+const SOUND_OF_MOVE = { M: 'moth', S: 'whelkMove', T: 'stumpStep', D: 'newtStep', K: 'emberStep', O: 'gloamDrift' };
 // an Emberwick warming, going cold and catching
 const SOUND_OF_HEAT = { warm: 'emberWarm', cool: 'emberCool', ignite: 'emberIgnite' };
 // a creature changing state: Stumpcaps wake in the light, newts wake in the dark and doze in the light
@@ -21,6 +21,11 @@ const easeOut = (p) => 1 - (1 - p) * (1 - p) * (1 - p);
 const lerp = (a, b, p) => a + (b - a) * p;
 const TAU = Math.PI * 2;
 const COACH = '#9CF5E3';   // a tutorial's pointer: mint, so it never reads as a hint (amber)
+
+// The lantern's own tile is lit unless it is smothered or in a Gloamling's shadow.
+function lanternLit(s) {
+  return s.lit[s.lantern.y * s.w + s.lantern.x] === 1;
+}
 
 function findById(list, id) {
   for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
@@ -248,6 +253,12 @@ export class BoardView {
     const creatureEnd = creatureMoved ? lag + slide : 0;
     a.settleAt = Math.max(wrenEnd, creatureEnd, a.bumps.size || a.turns.size ? lag + slide : 0);
     a.litAt = a.wren ? slide * 0.5 : 0;
+    // a Gloamling's shadow fell on the lantern itself (the Hush going dark is not this)
+    if (!tween && lanternLit(prev) && !lanternLit(next) && !(next.lantern.carried && terrainAt(next, next.wren.x, next.wren.y) === 'H')) {
+      let drifted = false;
+      for (const c of next.creatures) if (c.type === 'O' && a.moves.has(c.id)) drifted = true;
+      once(drifted ? a.settleAt : a.litAt, 'gloamSnuff');
+    }
     let buds = 0;
     for (const e of events) {
       switch (e.type) {
@@ -429,7 +440,8 @@ export class BoardView {
     const carried = lightState.lantern.carried;
     let radius = carried ? 1 : 2;
     if (a && a.radius) radius = lerp(a.radius.from, a.radius.to, easeOut(clamp01(tau / 220)));
-    const smothered = carried && terrainAt(lightState, lightState.wren.x, lightState.wren.y) === 'H';
+    // the lantern lights nothing while smothered in the Hush or eaten by a Gloamling's shadow
+    const smothered = !lanternLit(lightState);
     if (carried) {
       source.x = wx;
       source.y = wy;
@@ -564,7 +576,7 @@ export class BoardView {
       const px = ox + th.x * size;
       const py = oy + th.y * size;
       if (th.z === 0 || th.z === 3) {
-        drawLantern(ctx, px + share * 0.27 * size, py + share * 0.07 * size, size, { t });
+        drawLantern(ctx, px + share * 0.27 * size, py + share * 0.07 * size, size, { t, out: smothered });
       } else if (th.z === 1) {
         if (th.alpha < 1) ctx.globalAlpha = th.alpha;
         drawCreature(ctx, th.c.type, px, py + th.drop * size, size, { t, dir: th.dir, lit: th.lit, hidden: th.hidden, awake: th.awake, heat: th.heat });

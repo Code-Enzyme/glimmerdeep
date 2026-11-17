@@ -1171,6 +1171,116 @@ test('key: tells cold, warm and glowing Emberwicks apart', () => {
   assert.notEqual(key(parse(['WK'])), key(parse(['WS'])));
 });
 
+// ---------------------------------------------------------------- Gloamling (SPEC sections 3 and 4)
+
+test('parseLevel: O is a Gloamling with no facing', () => {
+  const s = parse(['W.O.O']);
+  assert.deepEqual(s.creatures.map((c) => ({ ...c })), [
+    { id: 'O1', type: 'O', x: 2, y: 0, dir: null },
+    { id: 'O2', type: 'O', x: 4, y: 0, dir: null },
+  ]);
+});
+
+test('Gloamling: drifts toward the carried lantern from anywhere, sideways first, and stops next to it', () => {
+  let s = parse(['O....W']);
+  s = step(s, 'Z');
+  assert.deepEqual(where(s), ['O@1,0']);
+  s = run(s, ['Z', 'Z', 'Z']);
+  assert.deepEqual(where(s), ['O@4,0']);
+  assert.deepEqual(where(step(s, 'Z')), ['O@4,0'], 'it cannot enter Wren\'s tile');
+  // sideways first; round a wall it takes the vertical step
+  const g = parse(['O.#', '...', '..W']);
+  assert.deepEqual(where(step(g, 'Z')), ['O@1,0']);
+  assert.deepEqual(where(run(g, ['Z', 'Z'])), ['O@1,1']);
+  assert.deepEqual(where(run(g, ['Z', 'Z', 'Z'])), ['O@2,1']);
+});
+
+test('Gloamling: drifts toward the planted lantern, not toward Wren, and never onto it', () => {
+  const s = run(parse(['O...', 'W...']), ['L', 'E', 'E']);
+  assert.deepEqual(where(s), ['O@0,0']);
+  const far = run(parse(['...O', 'W...']), ['L', 'E', 'E']);
+  assert.deepEqual(where(far), ['O@0,0'], 'west along the top row toward the lantern at 0,1, away from Wren');
+});
+
+test('Gloamling: stays put while the lantern is smothered', () => {
+  const s = parse(['O....', '..WH.']);
+  assert.deepEqual(where(step(s, 'E')), ['O@0,0']);
+  assert.deepEqual(where(step(s, 'W')), ['O@1,0'], 'out of the Hush it drifts as usual');
+});
+
+test('Gloamling: never settles; it cannot enter a puddle, but walks over a bridge', () => {
+  const s = parse(['W~O']);
+  const a = step(s, 'Z');
+  assert.deepEqual(where(a), ['O@2,0']);
+  assert.deepEqual(a.bridges, []);
+  assert.equal(canEnter(s, 'O', 1, 0), false);
+  assert.equal(canEnter({ ...s, bridges: ['1,0'] }, 'O', 1, 0), true);
+  const row = parse(['W~.Ga#H.A']);
+  for (let x = 0; x < row.w; x++) assert.equal(canEnter(row, 'O', x, 0), canEnter(row, 'K', x, 0), `${x}`);
+});
+
+test('light: a Gloamling shadows its own tile and its four neighbours, and light does not pass through them', () => {
+  // A planted lantern at 3,2 (radius 2) and a Gloamling at 5,2: the diamond loses 4,2 and everything past it.
+  const s = parse(['.......', '.......', '...L.O.', '.......', 'W......']);
+  assert.deepEqual(light(s), ['0001000', '0011100', '0111000', '0011100', '0001000']);
+  // 1,0 is shadowed, so the light cannot reach 2,0 through it; even the wall at 0,1 stays dark.
+  assert.deepEqual(light(parse(['L...', '#O##', 'W...'])), ['1000', '0000', '0000']);
+  assert.deepEqual(light(parse(['L...', '#.##', 'W...'])), ['1110', '1100', '0000'], 'the same without it');
+});
+
+test('light: a Gloamling next to the lantern puts it out, carried or planted', () => {
+  let s = parse(['O....W']);
+  s = run(s, ['Z', 'Z']);
+  assert.deepEqual(light(s), ['000011'], 'two tiles away: its shadow ends just short of Wren');
+  s = step(s, 'Z');
+  assert.deepEqual(light(s), ['000001'], 'its shadow takes the tile beside Wren');
+  s = step(s, 'Z');
+  assert.deepEqual(light(s), ['000000'], 'beside Wren: the carried lantern lights nothing');
+  const planted = run(parse(['O...', 'W...']), ['L', 'E', 'E']);
+  assert.deepEqual(light(planted), ['0000', '0000'], 'beside the planted lantern: nothing either');
+});
+
+test('light: a Gloamling eats an Emberwick\'s light; a shadowed ember cannot warm, a glowing one stays glowing', () => {
+  // Beside Wren and the ember, the Gloamling keeps both dark: the ember never warms.
+  const cold = run(parse(['WK', 'O.']), ['Z', 'Z', 'Z']);
+  assert.deepEqual(heat(cold), ['K1:0@1,0']);
+  assert.deepEqual(heat(run(parse(['WK', '..']), ['Z', 'Z'])), ['K1:2@1,0'], 'the same without it');
+  // A glowing ember whose own tile is shadowed lights nothing, but it is still glowing.
+  const s = parse(['#K#', '#O#', '#W#']);
+  const glowing = { ...s, creatures: s.creatures.map((c) => (c.type === 'K' ? { ...c, heat: 2 } : c)) };
+  const t = step(glowing, 'Z');
+  assert.deepEqual(heat(t), ['K1:2@1,0']);
+  assert.deepEqual(light(t), ['000', '000', '000']);
+});
+
+test('Gloamling: its shadow keeps a bud from blooming, unhides a whelk, puts a Stumpcap to sleep and wakes a newt', () => {
+  assert.deepEqual(step(parse(['OG.W']), 'W').bloom, [0]);
+  assert.deepEqual(step(parse(['.G.W']), 'W').bloom, [1], 'the same without it');
+  const whelk = parse(['WS.', '.O.']);
+  assert.equal(isHidden(whelk, only(whelk, 'S')), false);
+  const stump = parse(['W>.', '.O.']);
+  assert.equal(isAwake(stump, only(stump, 'T')), false);
+  const newt = parse(['Wn.', '.O.']);
+  assert.equal(isAwake(newt, only(newt, 'D')), true);
+  const plain = parse(['WS>n', '....']);
+  assert.equal(isHidden(plain, only(plain, 'S')), true);
+});
+
+test('Gloamling: never heavy', () => {
+  let s = parse(['WO', '.A'], { under: { '1,0': 'a' } });
+  for (let i = 0; i < 3; i++) {
+    assert.equal(isGateOpen(s, 'A'), false, `turn ${s.turn}`);
+    s = step(s, 'Z');
+  }
+  assert.deepEqual(where(s), ['O@1,0']);
+  assert.equal(isGateOpen(s, 'A'), false);
+});
+
+test('key: tells a Gloamling from every other creature', () => {
+  const keys = ['WO', 'WM', 'WS', 'W>', 'Wn', 'WK'].map((row) => key(parse([row, '..'])));
+  assert.equal(new Set(keys).size, keys.length);
+});
+
 test('roots: a Stumpcap presses a root whether asleep or awake', () => {
   const asleep = parse(['W.>A'], { under: { '2,0': 'a' } });
   assert.equal(isAwake(asleep, only(asleep, 'T')), false);
@@ -1589,11 +1699,19 @@ function referenceStep(s, action) {
     return lantern.carried || lantern.x !== x || lantern.y !== y;
   };
 
-  // Every source floods on its own (section 4); the light map is the union.
+  // Every source floods on its own (section 4); the light map is the union. Gloamlings shadow their own
+  // tile and its four neighbours: never lit, never passing light, and a shadowed source lights nothing.
   const light = () => {
     const lit = new Set();
-    const transparent = (x, y) => tile(x, y) !== '#' && tile(x, y) !== 'H' && !creatureOn(x, y);
+    const shadow = new Set();
+    for (const c of creatures) {
+      if (c.type !== 'O') continue;
+      shadow.add(at(c.x, c.y));
+      for (const [dx, dy] of Object.values(DIRS)) shadow.add(at(c.x + dx, c.y + dy));
+    }
+    const transparent = (x, y) => tile(x, y) !== '#' && tile(x, y) !== 'H' && !creatureOn(x, y) && !shadow.has(at(x, y));
     const flood = (px, py, radius) => {
+      if (shadow.has(at(px, py))) return;
       const mine = new Set([at(px, py)]);
       let frontier = [[px, py]];
       for (let d = 0; d < radius; d++) {
@@ -1603,6 +1721,7 @@ function referenceStep(s, action) {
           for (const [dx, dy] of Object.values(DIRS)) {
             const [nx, ny] = [x + dx, y + dy];
             if (nx < 0 || ny < 0 || nx >= s.w || ny >= s.h || tile(nx, ny) === 'H' || mine.has(at(nx, ny))) continue;
+            if (shadow.has(at(nx, ny))) continue;
             mine.add(at(nx, ny));
             next.push([nx, ny]);
           }
@@ -1666,7 +1785,7 @@ function referenceStep(s, action) {
       else continue;
     } else {
       if (smothered || (c.type === 'S' && lit)) continue;
-      const toward = c.type === 'M' ? 1 : -1;
+      const toward = c.type === 'M' || c.type === 'O' ? 1 : -1;
       const hx = Math.sign(lantern.x - x) * toward;
       const vy = Math.sign(lantern.y - y) * toward;
       if (hx !== 0 && canEnter(c.type, x + hx, y)) x += hx;
@@ -1712,6 +1831,8 @@ test('step agrees with a naive reference implementation on every move of thousan
     'newts on roots, a gate and a whelk': ['W..e.....', '.a..A..S.', '..s...~..', 'G....w..G'],
     'Emberwicks with every other species': ['WK..v....', '.K.a.A.S.', '..e..~M..', 'G...H..KG'],
     'Emberwicks, a planted lantern and Hush': ['L.K......', '.HHH.K.G.', 'W...~....', '..b.B..S.'],
+    'Gloamlings with every other species': ['W..O.v...', '.K.a.A.S.', '..e..~M..', 'G...H..OG'],
+    'a Gloamling, a planted lantern, an ember and Hush': ['L.K...O..', '.HHH.S.G.', 'W...~..>.', '..b.B..a.'],
   };
   const byId = (a, b) => (a.id < b.id ? -1 : 1);
   for (const [name, map] of Object.entries(boards)) {

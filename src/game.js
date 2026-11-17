@@ -88,8 +88,13 @@ const queue = [];
 
 const titleArt = new TitleArt($('title-art'), $('title-stage'));
 
+const heard = [];          // the last sounds the board asked for (for checks)
 const view = new BoardView(canvas, {
-  onCue: (name) => play(name),
+  onCue: (name) => {
+    heard.push(name);
+    if (heard.length > 40) heard.shift();
+    play(name);
+  },
   onSettled,
   onCelebrated,
 });
@@ -1057,6 +1062,7 @@ window.__gd = {
   frames: () => view.frames,
   coach: () => (session ? coachPoint() : null),
   tutorial: () => (tutorial ? { index: tutorial.index, done: tutorial.done } : null),
+  heard: () => heard.slice(),
 };
 
 // ---------------------------------------------------------------- start

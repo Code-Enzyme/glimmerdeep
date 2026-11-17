@@ -664,22 +664,23 @@ export function drawWren(ctx, px, py, size, opts) {
   }
 }
 
-// the planted lantern
+// the planted lantern; `out` when a Gloamling's shadow has put it out
 export function drawLantern(ctx, px, py, size, opts) {
   const o = opts || {};
   const t = o.t || 0;
   const b = bucket(ctx, size);
-  const f = Math.floor(t * 8) & 3;
-  const s = get(b, 'L' + f, (p) => {
+  const on = !o.out;
+  const f = on ? Math.floor(t * 8) & 3 : 0;
+  const s = get(b, 'L' + (on ? f : 'out'), (p) => {
     groundShadow(p, 0.5, 0.9, 0.26, 0.065, 0.7);
     // a little iron foot pushed into the floor
     const foot = roundPoly([[0.4, 0.86], [0.6, 0.86], [0.66, 0.92], [0.34, 0.92]], 0.02);
     p.body(foot, 0.5, 0.88, 0.15, T_METAL, 0.01);
-    paintLantern(p, 0.5, 0.3, 0.36, 0.6, true, f);
+    paintLantern(p, 0.5, 0.3, 0.36, 0.6, on, f);
   });
   if (!s) return;
-  put(ctx, s, px, py, size, 0.85 + 0.15 * flicker(t));
-  halo(ctx, b, px + 0.5 * size, py + 0.64 * size, size * 1.35, 0.32 + 0.14 * flicker(t));
+  put(ctx, s, px, py, size, on ? 0.85 + 0.15 * flicker(t) : 0);
+  if (on) halo(ctx, b, px + 0.5 * size, py + 0.64 * size, size * 1.35, 0.32 + 0.14 * flicker(t));
 }
 
 // ---------------------------------------------------------------------------
@@ -1304,6 +1305,44 @@ function paintEmber(p, heat, f, lit) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Gloamling: a drifting wisp of living shadow with no face. Its body is the inkiest thing in the cave, so it
+// shows mostly by its violet edge; smoke curls off its crown and motes of swallowed light spiral into it.
+// Its own tile is always in its shadow, so on the board it is nearly always seen by these markings alone.
+// ---------------------------------------------------------------------------
+
+const T_GLOAM = ['#3A2C60', '#1A1230', '#06030C'];
+const VIOLET = '#B7A0FF';
+const RIM_GLOAM = '#7E66C8';
+
+function paintGloam(p, f) {
+  const ph = (f / 8) * TAU;
+  const s = (k, a = 0.016) => a * Math.sin(ph + k);
+  // a flame of darkness: three tongues on top, a soft round middle and a ragged hem
+  const outline = [
+    [0.5 + s(0, 0.022), 0.16, 1], [0.555, 0.3], [0.63 + s(1.6, 0.02), 0.29, 1], [0.66, 0.39],
+    [0.7, 0.5], [0.7, 0.63], [0.685 + s(1), 0.73], [0.645, 0.815 + s(2, 0.02), 1], [0.585, 0.755],
+    [0.5, 0.84 + s(3, 0.02), 1], [0.415, 0.755], [0.355, 0.815 + s(4, 0.02), 1], [0.315 + s(5), 0.73],
+    [0.3, 0.62], [0.305, 0.49], [0.335, 0.35], [0.375 + s(2.8, 0.02), 0.235, 1], [0.445, 0.31],
+  ];
+  const body = smooth(outline);
+  p.body(body, 0.5, 0.54, 0.26, T_GLOAM, 0.018);
+  softVoid(p, body, 0.5, 0.58, 0.14, 0.17);
+  // the violet edge all round, heavier down the left flank
+  p.line(body, VIOLET, 0.011, 0.45, 0.05);
+  p.line(smooth([[0.36, 0.36], [0.315, 0.48], [0.31, 0.61], [0.325, 0.71]], false), VIOLET, 0.02, 0.6, 0.07);
+  // smoke curling off the tallest tongue, off to one side
+  p.line(smooth([[0.5 + s(0, 0.022), 0.16], [0.53 + s(1, 0.02), 0.1], [0.505, 0.055], [0.47 + s(2, 0.025), 0.045]], false), VIOLET, 0.013, 0.4, 0.05);
+  // motes of light drawn in along one side, low down, fading as they are swallowed (always on one side,
+  // so they never pair up into anything face-like)
+  for (let i = 0; i < 3; i++) {
+    const u = (f / 8 + i / 3) % 1;
+    const x = 0.88 - 0.2 * u;
+    const y = 0.8 - 0.17 * u - 0.05 * Math.sin(Math.PI * u);
+    p.dot(x, y, 0.004 + 0.016 * Math.sin(Math.PI * u), CREAM, 0.7, 0.05);
+  }
+}
+
 function paintZ(p) {
   const z = new Path2D();
   z.moveTo(0.3, 0.32);
@@ -1393,6 +1432,14 @@ function creatureSpec(b, type, o) {
       sp.sy = 1 - 0.015 * br;
       sp.ay = 0.86;
     }
+  } else if (type === 'O') {
+    // always in its own shadow: it hovers, sways and is known by its edge and the motes it swallows
+    const f = Math.floor(t * 6) % 8;
+    sp.s = get(b, 'O.' + f, (p) => paintGloam(p, f), RIM_GLOAM, 0.4);
+    const bob = Math.sin(t * 2.1);
+    sp.hover = bob;
+    sp.dy = -(0.05 + 0.025 * bob);
+    sp.emitA = 0.8 + 0.12 * Math.sin(t * 2.6);
   }
   return sp;
 }

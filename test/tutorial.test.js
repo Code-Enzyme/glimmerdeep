@@ -219,6 +219,16 @@ test('checkTutorial: knows the Emberwick and its ignite event', () => {
   assert.ok(checkTutorial(def(MOTH, [{ card: 'K', until: 'card' }])).length, 'no Emberwick on the map');
 });
 
+test('checkTutorial: knows the Gloamling', () => {
+  const gloam = def(['#######', '#W...O#', '#######'], [
+    { card: 'O', until: 'card' },
+    { say: 'Watch it drift.', point: 'O', until: 'move' },
+  ], { feature: 'O' });
+  assert.deepEqual(checkTutorial(gloam), []);
+  assert.deepEqual(resolvePoint('O', parseLevel(gloam)), { kind: 'creature', id: 'O1', x: 5, y: 1 });
+  assert.ok(checkTutorial(def(MOTH, [{ card: 'O', until: 'card' }])).length, 'no Gloamling on the map');
+});
+
 test('stuck nudge comes six moves after par', () => {
   assert.equal(STUCK_AFTER, 6);
 });

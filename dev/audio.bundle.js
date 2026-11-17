@@ -53,6 +53,8 @@ var GAudio = (() => {
     "emberCool",
     "emberIgnite",
     "emberStep",
+    "gloamDrift",
+    "gloamSnuff",
     "gateOpen",
     "gateClose",
     "budOn",
@@ -102,6 +104,8 @@ var GAudio = (() => {
     emberCool: 0.3,
     emberIgnite: 0.25,
     emberStep: 0.235,
+    gloamDrift: 0.24,
+    gloamSnuff: 0.36,
     gateOpen: 0.13,
     gateClose: 0.133,
     budOn: 0.27,
@@ -128,10 +132,11 @@ var GAudio = (() => {
     newtWake: 1,
     emberWarm: 1,
     emberCool: 1,
-    emberStep: 1
+    emberStep: 1,
+    gloamDrift: 1
   };
   var ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1 };
-  var LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1, emberStep: 1 };
+  var LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1, emberStep: 1, gloamDrift: 1 };
   var PENT = [0, 2, 4, 7, 9];
   var CHAPTERS = [
     null,
@@ -643,6 +648,22 @@ var GAudio = (() => {
     const o = tone(k, "sine", 260 * v, t, 0.42, 3e-3, 0.08);
     o.frequency.exponentialRampToValueAtTime(190 * v, t + 0.06);
     hiss(k, "bandpass", 3200 + k.r() * 1200, 6, t + 0.03 + k.r() * 0.03, 0.12, 2e-3, 0.015);
+  };
+  SOUNDS.gloamDrift = function(k, t) {
+    const v = 1 + (k.r() - 0.5) * 0.14;
+    const f = hiss(k, "bandpass", 520 * v, 3, t, 0.3, 0.07, 0.3);
+    f.frequency.setValueAtTime(520 * v, t);
+    f.frequency.exponentialRampToValueAtTime(330 * v, t + 0.3);
+    const o = tone(k, "sine", 176 * v, t, 0.16, 0.07, 0.26);
+    o.frequency.exponentialRampToValueAtTime(138 * v, t + 0.26);
+  };
+  SOUNDS.gloamSnuff = function(k, t) {
+    const f = hiss(k, "bandpass", 2400, 1.8, t, 0.3, 0.012, 0.3);
+    f.frequency.setValueAtTime(2400, t);
+    f.frequency.exponentialRampToValueAtTime(300, t + 0.28);
+    const a = tone(k, "triangle", 392, t, 0.3, 0.012, 0.34);
+    a.frequency.exponentialRampToValueAtTime(196, t + 0.3);
+    tone(k, "sine", 98, t + 0.08, 0.25, 0.05, 0.4);
   };
   SOUNDS.gateOpen = function(k, t) {
     creak(

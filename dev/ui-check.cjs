@@ -815,6 +815,43 @@ async function main() {
       ok('ad-hoc ember: a flame burns on its wick once it catches', flame > 0.01 && flame > cold * 3, JSON.stringify({ cold, flame }));
       await h.shot('ember-glowing');
     }
+    // gloam: its card; its violet edge shows in its own shadow; beside Wren it puts the lantern out, with a sound
+    {
+      const bright = (x, y, over) => h.page.evaluate(([tx, ty, o]) => {
+        const L = window.__gd.layout();
+        const c = document.querySelector('#screen-level canvas');
+        const k = L.dpr;
+        const d = c.getContext('2d').getImageData(Math.round((L.ox + tx * L.size) * k), Math.round((L.oy + ty * L.size) * k),
+          Math.round(L.size * k), Math.round(L.size * k)).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > o) n++;
+        return n / (d.length / 4);
+      }, [x, y, over]);
+      const def = { id: 'T-8', name: 'Gloam Drift', map: ['#########', '#W....O.#', '#########'] };
+      await h.gd('loadLevelDef', def);
+      await h.page.waitForTimeout(300);
+      eq('ad-hoc gloam: stands in its own shadow', engine.parseLevel(def).lit[1 * 9 + 6], 0);
+      // the floor it is measured against is out of the lantern's light and out of the Gloamling's reach
+      const onGloam = await bright(6, 1, 300);
+      const onFloor = await bright(4, 1, 300);
+      ok('ad-hoc gloam: its edge shows in the dark', onGloam > 0.006 && onGloam > onFloor * 4, JSON.stringify({ onGloam, onFloor }));
+      await cardCheck('Gloamling', 6, 1, 'Gloamling', CARDS.Gloamling);
+      await h.gd('act', 'E');
+      await h.idle();
+      await h.page.waitForTimeout(200);
+      eq('ad-hoc gloam: one step closer, the lantern still shines', (await h.gd('state')).lit[1 * 9 + 2], 1);
+      const shining = await bright(2, 1, 450);
+      ok('ad-hoc gloam: it drifted with a sound of its own', (await h.gd('heard')).includes('gloamDrift'), JSON.stringify(await h.gd('heard')));
+      await h.gd('act', 'E');
+      await h.idle();
+      await h.page.waitForTimeout(250);
+      const s = await h.gd('state');
+      eq('ad-hoc gloam: beside Wren it eats the lantern\'s light', [s.creatures[0].x, s.lit.indexOf(1)], [4, -1]);
+      ok('ad-hoc gloam: the light going out has a sound', (await h.gd('heard')).includes('gloamSnuff'), JSON.stringify(await h.gd('heard')));
+      const snuffed = await bright(3, 1, 450);
+      ok('ad-hoc gloam: the lantern looks out on screen', snuffed < shining * 0.5, JSON.stringify({ shining, snuffed }));
+      await h.shot('gloam-snuffed');
+    }
     // trio: starts with a planted lantern, has Hush and two buds
     await h.gd('loadLevelDef', ADHOC.trio);
     {
