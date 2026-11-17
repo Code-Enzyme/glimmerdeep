@@ -1,5 +1,6 @@
 // Checks every level in src/levels/index.js with the solver and prints one line per level:
 // id, name, declared par, shortest solution found, positions explored, feature necessity, time, OK or FAIL.
+// A level's tutorial (SPEC section 12) is checked too.
 // Exits with status 1 if any level is not ok.
 //
 //   node tools/verify-levels.js                    check all levels
@@ -8,6 +9,7 @@
 import { LEVELS } from '../src/levels/index.js';
 import { parseLevel } from '../src/engine.js';
 import { checkLevel, solve } from '../src/solver.js';
+import { checkTutorial } from '../src/ui/tutorial.js';
 
 const args = process.argv.slice(2);
 const opts = {};
@@ -42,7 +44,7 @@ if (LEVELS.length > 0) {
     totalMs += ms;
     searched += result.searched;
 
-    const problems = [...result.problems];
+    const problems = [...result.problems, ...checkTutorial(level || {}).map((p) => `tutorial ${p}`)];
     if (seenIds.has(result.id)) problems.push(`duplicate level id '${result.id}'`);
     seenIds.add(result.id);
     const ok = result.ok && problems.length === 0;

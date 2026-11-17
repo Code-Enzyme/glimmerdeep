@@ -22,6 +22,8 @@ const { pathToFileURL } = require('url');
     const sol = solve(parseLevel(level));
     await page.evaluate((id) => window.__gd.loadLevel(id), level.id);
     await page.waitForTimeout(250);
+    // a chapter's first level meets its creature with a rule card (SPEC section 12): read it, close it
+    if (await page.evaluate(() => window.__gd.panel() === 'card')) await page.keyboard.press('Escape');
     if (['1-4', '2-5', '3-5'].includes(level.id)) await page.screenshot({ path: path.join(shots, `level-${level.id}-start.png`) });
     let legal = true;
     for (let i = 0; i < sol.moves.length; i++) {

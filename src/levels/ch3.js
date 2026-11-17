@@ -18,6 +18,11 @@ export default [
     ],
     note: 'Walk beside the Stumpcap until it stands on the root, then go round wide: passing beside it again walks it off the root and into the doorway, but stepping in front of it is safe.',
     tip: 'A Stumpcap sleeps in the dark, marches straight ahead in the light, and is always heavy.',
+    tutorial: [
+      { card: 'T', until: 'card' },
+      { say: 'Your light wakes the Stumpcap and it marches the way it faces. Lead it onto the root.', point: 'root', until: 'gate' },
+      { say: 'A Stumpcap is always heavy, so the gate stays open while it sleeps on the root.', point: 'gate', until: 'solved' },
+    ],
   },
   {
     id: '3-2',

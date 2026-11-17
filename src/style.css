@@ -168,10 +168,16 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .tool.lantern[aria-disabled="true"] { border-color: var(--plum-line); }
 .tool.pulse { animation: pulse 0.95s ease-in-out infinite; border-color: var(--amber); border-style: solid; }
 .tool.thinking .ico { animation: think 0.7s ease-in-out infinite alternate; }
+/* a tutorial step points at this button (SPEC section 12): mint, so it never reads as a hint */
+.tool.coach { animation: coach 1.3s ease-in-out infinite; border-color: #9CF5E3; border-style: solid; }
 
 @keyframes pulse {
   0%, 100% { box-shadow: 0 3px 0 #120C1C, 0 0 0 0 rgba(242, 176, 76, 0.75); transform: translateY(0); }
   50% { box-shadow: 0 3px 0 #120C1C, 0 0 0 7px rgba(242, 176, 76, 0); transform: translateY(-3px); }
+}
+@keyframes coach {
+  0%, 100% { box-shadow: 0 3px 0 #120C1C, 0 0 0 0 rgba(156, 245, 227, 0.7); }
+  50% { box-shadow: 0 3px 0 #120C1C, 0 0 0 8px rgba(156, 245, 227, 0); }
 }
 @keyframes think {
   from { transform: rotate(-12deg) scale(0.94); opacity: 0.7; }

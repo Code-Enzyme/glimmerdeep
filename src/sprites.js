@@ -1836,7 +1836,7 @@ function paintGlow(g) {
 // Icons
 // ---------------------------------------------------------------------------
 
-const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast'];
+const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book'];
 
 function arrowHead(g, x, y, ang, len) {
   g.moveTo(x + Math.cos(ang + 2.5) * len, y + Math.sin(ang + 2.5) * len);
@@ -1975,6 +1975,23 @@ function iconPath(g, name) {
       break;
     case 'contrast':
       g.arc(0.5, 0.5, 0.31, 0, TAU);
+      break;
+    case 'book':
+      // an open field guide, for the Tutorials setting
+      g.moveTo(0.5, 0.3);
+      g.bezierCurveTo(0.41, 0.22, 0.27, 0.21, 0.15, 0.26);
+      g.lineTo(0.15, 0.76);
+      g.bezierCurveTo(0.27, 0.71, 0.41, 0.72, 0.5, 0.8);
+      g.bezierCurveTo(0.59, 0.72, 0.73, 0.71, 0.85, 0.76);
+      g.lineTo(0.85, 0.26);
+      g.bezierCurveTo(0.73, 0.21, 0.59, 0.22, 0.5, 0.3);
+      g.lineTo(0.5, 0.8);
+      g.moveTo(0.24, 0.4);
+      g.quadraticCurveTo(0.32, 0.37, 0.41, 0.41);
+      g.moveTo(0.24, 0.53);
+      g.quadraticCurveTo(0.32, 0.5, 0.41, 0.54);
+      g.moveTo(0.59, 0.41);
+      g.quadraticCurveTo(0.68, 0.37, 0.76, 0.4);
       break;
     default:
       g.arc(0.5, 0.5, 0.08, 0, TAU);
@@ -2253,7 +2270,7 @@ export function drawCreature(ctx, type, px, py, size, opts) {
   }
 }
 
-// Line icons in journal cream: undo, restart, wait, hint, lantern, map, sound, mute, star, lock, contrast.
+// Line icons in journal cream: undo, restart, wait, hint, lantern, map, sound, mute, star, lock, contrast, book.
 export function drawIcon(ctx, name, px, py, size) {
   const b = bucketFor(ctx, size);
   const i = ICONS.indexOf(name);

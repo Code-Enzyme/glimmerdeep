@@ -16,6 +16,12 @@ export default [
     ],
     note: 'The whelk backs down the passage ahead of Wren and ends cornered on the root; lighting it there opens the gate beside her.',
     tip: 'A Shellwhelk creeps away from your lantern. Caught in the light on a root, it hides and its gate opens.',
+    tutorial: [
+      { card: 'S', until: 'card' },
+      { say: 'Herd the Shellwhelk onto the root. Caught in your light there, it hides and the gate opens.', point: 'root', until: 'gate' },
+      { say: 'The gate is open. Step into it.', point: 'gate', until: 'step' },
+      { say: 'Light the Glowbud.', point: 'bud', until: 'solved' },
+    ],
   },
   {
     id: '2-2',

@@ -650,7 +650,7 @@ async function main() {
     await h.page.locator('#back').tap();
     await h.page.locator('#set-contrast').tap();
     await h.page.locator('#set-sound').tap();
-    eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false });
+    eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true });
 
     await h.page.locator('#set-unlock').tap();
     eq('unlock all: nothing locked', await h.page.locator('.node.locked').count(), 0);
@@ -791,6 +791,149 @@ async function main() {
     }
     eq('a malformed level is refused', await h.gd('loadLevelDef', { id: 'bad', map: ['#W', '#'] }), false);
 
+    // ---------------------------------------------------------------- 12b. tutorials (SPEC section 12)
+    console.log('tutorials');
+    {
+      const byId = (id) => LEVELS.find((l) => l.id === id);
+      const t = await phone({ tag: 'tutorials' });
+      const status = () => t.page.locator('#status').textContent();
+      const hasClass = (id, cls) => t.page.evaluate(([i, c]) => document.getElementById(i).classList.contains(c), [id, cls]);
+      const STUCK = 'Stuck? Hint shows the next move, and Undo steps back.';
+      // pixels of the coach colour in the 3 x 3 tiles around (x, y): the pointer is really drawn
+      const coachPixels = (x, y) => t.page.evaluate(([tx, ty]) => {
+        const L = window.__gd.layout();
+        const c = document.querySelector('#screen-level canvas');
+        const k = L.dpr;
+        const d = c.getContext('2d').getImageData(Math.round((L.ox + (tx - 1) * L.size) * k), Math.round((L.oy + (ty - 1) * L.size) * k),
+          Math.round(L.size * 3 * k), Math.round(L.size * 3 * k)).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (Math.abs(d[i] - 0x9C) < 26 && Math.abs(d[i + 1] - 0xF5) < 26 && Math.abs(d[i + 2] - 0xE3) < 26) n++;
+        }
+        return n;
+      }, [x, y]);
+      const act = async (moves) => {
+        for (const m of moves) eq(`tutorials: ${m} is legal`, await t.gd('act', m), true);
+        await t.idle();
+      };
+
+      await t.open();
+      await t.toMap();
+      eq('tutorials: the setting is on by default', [await t.page.locator('#set-tutorials').getAttribute('aria-pressed'), await t.page.locator('#set-tutorials .val').textContent()], ['true', 'on']);
+      const fits = await t.page.evaluate(() => {
+        const out = [];
+        for (const b of document.querySelectorAll('.settings .tool')) {
+          const r = b.getBoundingClientRect();
+          for (const el of b.querySelectorAll('.lbl, .val')) {
+            const e = el.getBoundingClientRect();
+            if (e.left < r.left + 1 || e.right > r.right - 1) out.push(el.textContent);
+          }
+        }
+        return out;
+      });
+      eq('tutorials: every settings label fits its button', fits, []);
+
+      // 1-1, first visit: guided, one step at a time
+      const l11 = byId('1-1');
+      await t.page.locator('.node[data-level="1-1"]').tap();
+      await t.page.waitForFunction(() => window.__gd.screen() === 'level');
+      eq('tutorials: 1-1 opens on its first step', await status(), l11.tutorial[0].say);
+      eq('tutorials: the first step points at Wren with a swipe', await t.gd('coach'), { kind: 'wren', x: 1, y: 1, gesture: 'swipe-E' });
+      await t.page.waitForTimeout(300);
+      const lit = await coachPixels(1, 1);
+      ok('tutorials: the pointer is drawn on the board', lit > 40, lit);
+      await t.shot('tutorial-1-1');
+      await playByTouch(t, ['E']);
+      eq('tutorials: a swipe finishes the first step', await status(), l11.tutorial[1].say);
+      eq('tutorials: the second step points at the bridge', await t.gd('coach'), { kind: 'tile', x: 4, y: 1, gesture: null });
+      await playByTouch(t, ['E']);
+      await t.gd('undo');
+      eq('tutorials: undo never takes a step back', await status(), l11.tutorial[1].say);
+      await t.gd('restart');
+      eq('tutorials: restart goes back to the first step', await status(), l11.tutorial[0].say);
+      await playByTouch(t, ['E', 'E', 'E']);
+      eq('tutorials: arriving finishes a step', await status(), l11.tutorial[2].say);
+      eq('tutorials: the last step points at the Glowbud', await t.gd('coach'), { kind: 'tile', x: 7, y: 1, gesture: null });
+      await playByTouch(t, ['E', 'E']);
+      await waitResult(t);
+      eq('tutorials: solving ends it', await t.gd('coach'), null);
+      await t.page.locator('#result-map').tap();
+      await t.page.locator('.node[data-level="1-1"]').tap();
+      await t.page.waitForFunction(() => window.__gd.screen() === 'level');
+      eq('tutorials: a solved level shows its tip, not the tutorial', await status(), l11.tip);
+      eq('tutorials: and nothing is pointed at', await t.gd('coach'), null);
+      await t.page.waitForTimeout(250);
+      const unlit = await coachPixels(1, 1);
+      ok('tutorials: no pointer drawn', unlit < 10, unlit);
+
+      // 1-6: a thumb-bar button, and a step that waits for the lantern to be planted
+      const l16 = byId('1-6');
+      await t.gd('loadLevel', '1-6');
+      eq('tutorials: 1-6 points at the Wait button', [await status(), await hasClass('btn-wait', 'coach')], [l16.tutorial[0].say, true]);
+      await act(['N']);
+      eq('tutorials: the button stops pulsing', await hasClass('btn-wait', 'coach'), false);
+      eq('tutorials: a planted-lantern step hides while the lantern is carried', await t.gd('coach'), null);
+      await act(['S', 'L']);
+      eq('tutorials: it shows once the lantern is down', [await status(), await t.gd('coach')], [l16.tutorial[1].say, { kind: 'tile', x: 1, y: 2, gesture: 'tap' }]);
+      await act(['N', 'Z', 'S', 'L']);
+      eq('tutorials: picking the lantern up finishes 1-6\'s tutorial', await t.gd('coach'), null);
+
+      // 2-1: a new creature is met through its card
+      const l21 = byId('2-1');
+      await t.gd('loadLevel', '2-1');
+      eq('tutorials: 2-1 opens the Shellwhelk card', [await t.gd('panel'), await t.page.locator('#card-title').textContent()], ['card', 'Shellwhelk']);
+      await t.page.waitForTimeout(450);
+      await t.page.locator('#card-close').tap();
+      eq('tutorials: closing the card moves on', [await t.gd('panel'), await status()], [null, l21.tutorial[1].say]);
+      eq('tutorials: the step points at the root', await t.gd('coach'), { kind: 'tile', x: 5, y: 4, gesture: null });
+      await act(['E', 'E']);
+      await t.gd('restart');
+      eq('tutorials: restart skips the card', [await t.gd('panel'), await status()], [null, l21.tutorial[1].say]);
+
+      // stuck: par + 6 moves on a level never solved
+      const wander = (n) => Array.from({ length: n }, (_, i) => (i % 2 ? 'W' : 'E'));
+      await act(wander(l21.par + 5));
+      ok('tutorials: no nudge before par + 6', (await status()) !== STUCK);
+      await act(['E']);
+      eq('tutorials: the nudge at par + 6', [await status(), await hasClass('btn-hint', 'pulse')], [STUCK, true]);
+      await t.shot('tutorial-stuck');
+      await act(['W', 'E', 'W']);
+      eq('tutorials: the nudge stays for three more moves', await status(), STUCK);
+      await act(['E']);
+      eq('tutorials: and goes after four', [(await status()) === STUCK, await hasClass('btn-hint', 'pulse')], [false, false]);
+      await act(wander(12));
+      ok('tutorials: once per visit', (await status()) !== STUCK);
+      await t.gd('loadLevel', '2-1');
+      await t.page.keyboard.press('Escape');
+      await act(wander(l21.par + 6));
+      eq('tutorials: the nudge comes back on the next visit', await status(), STUCK);
+      await t.gd('undo');
+      eq('tutorials: undo sends it away', [(await status()) === STUCK, await hasClass('btn-hint', 'pulse')], [false, false]);
+
+      // the setting
+      await t.page.locator('#back').tap();
+      await t.page.locator('#set-tutorials').tap();
+      eq('tutorials: the setting turns off', [await t.page.locator('#set-tutorials').getAttribute('aria-pressed'), await t.page.locator('#set-tutorials .val').textContent(), (await t.gd('save')).settings.tutorials], ['false', 'off', false]);
+      await t.gd('loadLevel', '1-2');
+      eq('tutorials off: the tip shows', await status(), byId('1-2').tip);
+      eq('tutorials off: nothing is pointed at', await t.gd('coach'), null);
+      await t.gd('loadLevel', '2-1');
+      eq('tutorials off: no card', await t.gd('panel'), null);
+      await act(wander(l21.par + 6));
+      ok('tutorials off: no nudge', (await status()) !== STUCK);
+      await t.page.reload();
+      await t.page.waitForFunction(() => window.__gd && window.__gd.screen());
+      await t.toMap();
+      eq('tutorials off: persists over a reload', await t.page.locator('#set-tutorials').getAttribute('aria-pressed'), 'false');
+      await t.page.locator('#set-tutorials').tap();
+      await t.page.locator('#set-reset').tap();
+      await t.page.locator('#confirm-yes').tap();
+      await t.page.locator('.node[data-level="1-1"]').tap();
+      await t.page.waitForFunction(() => window.__gd.screen() === 'level');
+      eq('tutorials: resetting progress brings them back', await status(), l11.tutorial[0].say);
+      await t.close();
+    }
+
     // ---------------------------------------------------------------- 13. page behaviour
     console.log('page behaviour');
     await h.gd('loadLevel', first.id);
@@ -899,6 +1042,18 @@ async function main() {
         return out;
       });
       eq(`${tag}: nothing off the sides of the map`, over, []);
+      const cramped = await g.page.evaluate(() => {
+        const out = [];
+        for (const b of document.querySelectorAll('.settings .tool')) {
+          const r = b.getBoundingClientRect();
+          for (const el of b.querySelectorAll('.lbl, .val')) {
+            const e = el.getBoundingClientRect();
+            if (e.left < r.left + 3 || e.right > r.right - 3) out.push(el.textContent);
+          }
+        }
+        return out;
+      });
+      eq(`${tag}: settings labels fit their buttons`, cramped, []);
       await g.gd('loadLevelDef', ADHOC.tall);
       const L = await g.gd('layout');
       const c = await g.page.locator('#board').boundingBox();

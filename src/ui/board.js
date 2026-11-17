@@ -18,6 +18,7 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const easeOut = (p) => 1 - (1 - p) * (1 - p) * (1 - p);
 const lerp = (a, b, p) => a + (b - a) * p;
 const TAU = Math.PI * 2;
+const COACH = '#9CF5E3';   // a tutorial's pointer: mint, so it never reads as a hint (amber)
 
 function findById(list, id) {
   for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
@@ -43,6 +44,7 @@ export class BoardView {
     this.hint = null;      // { dir } | { ring: true } | null
     this.path = null;      // [{ x, y }] tiles still ahead on a tap-to-walk, the last one is the target
     this.press = null;     // { x, y, t0 } while a finger rests on something that has a rule card
+    this.coach = null;     // { kind: 'wren' | 'creature' | 'tile', id?, x, y, gesture } a tutorial's pointer
     this.cssW = 0;
     this.cssH = 0;
     this.dpr = 1;
@@ -66,6 +68,7 @@ export class BoardView {
     this.hint = null;
     this.path = null;
     this.press = null;
+    this.coach = null;
     this.buildTiles(state);
     this.computeLayout();
   }
@@ -591,6 +594,76 @@ export class BoardView {
     }
   }
 
+  // The tutorial pointer at (x, y) in canvas pixels. gesture: 'swipe-N' | 'swipe-E' | 'swipe-S' | 'swipe-W' |
+  // 'tap' | 'hold' | null. With reduced motion everything holds still.
+  drawCoach(ctx, x, y, size, line, t, gesture) {
+    const still = this.reduced;
+    const beat = still ? 0.5 : 0.5 + 0.5 * Math.sin(t * 3.4);
+    const r = size * (0.56 + 0.05 * beat);
+    const inked = (width) => {
+      ctx.lineWidth = width * 2;
+      ctx.strokeStyle = PALETTE.ink;
+      ctx.stroke();
+      ctx.lineWidth = width;
+      ctx.strokeStyle = COACH;
+      ctx.stroke();
+    };
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    inked(line * 1.3);
+    if (!gesture) return;
+    if (gesture.startsWith('swipe-') && DIRS[gesture.slice(6)]) {
+      // three chevrons travelling out of the ring the way to swipe
+      const d = DIRS[gesture.slice(6)];
+      const phase = still ? 0 : (t * 0.8) % 1;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.atan2(d[1], d[0]));
+      for (let i = 0; i < 3; i++) {
+        const k = (i / 3 + phase) % 1;
+        ctx.globalAlpha = still ? 1 - i * 0.25 : Math.sin(k * Math.PI);
+        const at = r + size * (0.12 + 0.42 * (still ? i / 3 : k));
+        const u = size * 0.12;
+        ctx.beginPath();
+        ctx.moveTo(at - u * 0.6, -u);
+        ctx.lineTo(at + u * 0.4, 0);
+        ctx.lineTo(at - u * 0.6, u);
+        inked(line * 1.2);
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    } else if (gesture === 'tap') {
+      // a fingertip that presses, and a ripple
+      const k = still ? 0.5 : (t * 0.9) % 1;
+      const press = still ? 0 : Math.max(0, Math.sin(k * TAU * 2)) * 0.02;
+      ctx.globalAlpha = 1 - k;
+      ctx.beginPath();
+      ctx.arc(x, y, size * (0.14 + 0.3 * k), 0, TAU);
+      inked(line);
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(x + r * 0.62, y + r * 0.62, size * (0.1 - press), 0, TAU);
+      ctx.lineWidth = line * 2;
+      ctx.strokeStyle = PALETTE.ink;
+      ctx.stroke();
+      ctx.fillStyle = COACH;
+      ctx.fill();
+    } else if (gesture === 'hold') {
+      // the long-press ring filling up, again and again
+      const k = still ? 0.75 : clamp01(((t * 0.7) % 1) * 1.3);
+      ctx.beginPath();
+      ctx.arc(x, y, size * 0.44, -Math.PI / 2, -Math.PI / 2 + TAU * k);
+      inked(line * 1.4);
+      ctx.beginPath();
+      ctx.arc(x + r * 0.62, y + r * 0.62, size * 0.1, 0, TAU);
+      ctx.lineWidth = line * 2;
+      ctx.strokeStyle = PALETTE.ink;
+      ctx.stroke();
+      ctx.fillStyle = COACH;
+      ctx.fill();
+    }
+  }
+
   // A soft dark mat with a sketched ink line, so the grid does not end in a hard rectangle.
   drawFrame(ctx, L) {
     const { size, ox, oy, w, h } = L;
@@ -640,6 +713,26 @@ export class BoardView {
           ctx.stroke();
         }
       }
+    }
+
+    // a tutorial's pointer: a soft ring that follows what it points at, with the gesture drawn on it
+    const coach = this.coach;
+    if (coach && !this.hint && !this.celebration) {
+      let x = coach.x;
+      let y = coach.y;
+      if (coach.kind === 'wren') {
+        x = wx;
+        y = wy;
+      } else if (coach.kind === 'creature') {
+        for (const th of this.things) {
+          if (th.z === 1 && th.c && th.c.id === coach.id) {
+            x = th.x;
+            y = th.y;
+            break;
+          }
+        }
+      }
+      this.drawCoach(ctx, cx(x), cy(y), size, line, t, coach.gesture);
     }
 
     // hint

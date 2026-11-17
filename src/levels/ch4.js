@@ -18,6 +18,12 @@ export default [
     ],
     note: 'The newt walks down onto the root and pauses there for a turn while it turns at the wall: arrive beside the root during that pause and your light holds it while you step into the gate.',
     tip: 'A Dozer newt wanders in the dark and dozes off in your light.',
+    tutorial: [
+      { card: 'D', until: 'card' },
+      { say: 'Watch the Dozer newt. It wanders in the dark and turns right when something blocks it.', point: 'D', until: 'gate' },
+      { say: 'Light makes it doze off where it stands. Catch it asleep on the root.', point: 'D', until: 'sleep' },
+      { say: 'A dozing newt is heavy and holds the gate open. Go through.', point: 'gate', until: 'solved' },
+    ],
   },
   {
     id: '4-2',

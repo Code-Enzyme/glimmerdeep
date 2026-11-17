@@ -14,6 +14,11 @@ export default [
     ],
     note: 'The moth flies to the lantern, lands in the puddle and becomes a bridge.',
     tip: 'Swipe to walk. The Fluffmoth flies toward your lantern.',
+    tutorial: [
+      { say: 'Swipe to walk.', point: 'wren', gesture: 'swipe-E', until: 'step' },
+      { say: 'The Fluffmoth flew to your lantern and landed in the water as a bridge. Walk across.', point: [4, 1], until: 'arrive' },
+      { say: 'Glowbuds bloom in your light. Light this one to finish.', point: 'bud', until: 'solved' },
+    ],
   },
   {
     id: '1-2',
@@ -31,6 +36,10 @@ export default [
     ],
     note: 'The moth bridges the first puddle by itself; the second has no moth, so the lantern must be planted at its edge to shine across.',
     tip: 'Tap Wren to set the lantern down. A planted lantern shines further.',
+    tutorial: [
+      { say: 'The Glowbud is across the water. Walk around to the tile below it.', point: [3, 3], until: 'arrive' },
+      { say: 'Tap Wren to set the lantern down. A planted lantern shines further.', point: 'wren', gesture: 'tap', until: 'plant' },
+    ],
   },
   {
     id: '1-3',
@@ -47,6 +56,9 @@ export default [
     ],
     note: 'The moth follows the lantern into the dead-end pocket and corks it, so walk the ledge above the puddle first and let the moth fly into the water.',
     tip: 'Light every Glowbud. Once lit, it stays in bloom.',
+    tutorial: [
+      { say: 'Press and hold anything to read its field note. A lit Glowbud stays in bloom.', point: 'M', gesture: 'hold', until: 'move' },
+    ],
   },
   {
     id: '1-4',
@@ -97,5 +109,9 @@ export default [
     ],
     note: 'Lure the moth out along the top, plant the lantern below the corner (it also lights the bud across the water), then stand in the corner in the dark: the moth cannot fly sideways past Wren, so it drops into the puddle.',
     tip: 'Sometimes it helps to stand still. Waiting lets a turn pass.',
+    tutorial: [
+      { say: 'Sometimes it helps to stand still. The Wait button lets a turn pass.', point: 'wait', until: 'move' },
+      { say: 'To pick the lantern up again, stand on it and tap Wren.', point: 'lantern', gesture: 'tap', when: 'planted', until: 'pickup' },
+    ],
   },
 ];

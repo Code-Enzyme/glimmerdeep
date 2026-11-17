@@ -16,12 +16,15 @@ import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import { onBackButton, exitApp, haptic, onAppState } from './ui/native.js';
 import { TitleArt } from './ui/title.js';
+import { Tutorial, resolvePoint, STUCK_AFTER } from './ui/tutorial.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
 const HOLD_MS = 450;       // long-press for a rule card
 const QUEUE_MAX = 2;       // inputs remembered while an animation runs
 const HINT_BUDGET = 150000;
+const STUCK_TEXT = 'Stuck? Hint shows the next move, and Undo steps back.';
+const STUCK_FOR = 4;       // moves the stuck nudge stays up
 const DIR_WORD = { N: 'north', E: 'east', S: 'south', W: 'west' };
 const KEYS = {
   ArrowUp: 'N', w: 'N', W: 'N',
@@ -52,6 +55,8 @@ const btn = {
   lantern: $('btn-lantern'),
   hint: $('btn-hint'),
 };
+// The thumb-bar buttons a tutorial step can point at (SPEC section 12).
+const COACH_BUTTON = { plant: btn.lantern, wait: btn.wait, undo: btn.undo, hint: btn.hint };
 
 const save = loadSave();
 let params;
@@ -77,6 +82,8 @@ let raf = 0;
 let woke = false;
 let gesture = null;
 let armedAt = 0;           // a rule card ignores taps until the finger that opened it has lifted
+let tutorial = null;       // this visit's guided steps (SPEC section 12), or null
+let stuck = -1;            // the stuck nudge: 0 armed, above 0 showing until that move count, -1 used up or off
 const queue = [];
 
 const titleArt = new TitleArt($('title-art'), $('title-stage'));
@@ -207,12 +214,17 @@ function openLevel(def, adhoc) {
   } catch (e) {
     return false;
   }
+  tutorial = null;
   closePanel();
   stopHintSearch();
   cancelWalk();
   queue.length = 0;
   session = fresh;
   current = { def, chapter: chapterOf(def), adhoc: !!adhoc || !LEVELS.includes(def), result: null };
+  // Tutorials and the stuck nudge are for a level's first visits: never solved, and the setting on.
+  const guided = save.settings.tutorials && !current.adhoc && !save.levels[def.id];
+  tutorial = guided && Array.isArray(def.tutorial) && def.tutorial.length ? new Tutorial(def.tutorial) : null;
+  stuck = guided && typeof def.par === 'number' ? 0 : -1;
   moved = false;
   message = '';
   celebrating = false;
@@ -224,6 +236,7 @@ function openLevel(def, adhoc) {
   clearHint();
   showScreen('level');
   refreshHud();
+  openTutorialCard();
   return true;
 }
 
@@ -277,6 +290,7 @@ function refreshHud() {
     btn.lantern.setAttribute('aria-label', carried ? 'Plant the lantern' : 'Pick up the lantern');
   }
 
+  refreshCoach();
   refreshStatus();
 
   const bloom = session.bloomCount();
@@ -285,14 +299,20 @@ function refreshHud() {
   }
 }
 
-// The line under the top bar: a hint message, the level's tip until the first move, else the bloom count.
+// The line under the top bar: a hint message, the stuck nudge, the tutorial step, the level's tip until
+// the first move, else the bloom count.
 function refreshStatus() {
   if (!session) return;
   const def = current.def;
+  const step = coachStep();
   let text;
   let pips = '';
   if (message) {
     text = message;
+  } else if (stuck > 0) {
+    text = STUCK_TEXT;
+  } else if (step && typeof step.say === 'string' && step.say) {
+    text = step.say;
   } else if (!moved && typeof def.tip === 'string' && def.tip) {
     text = def.tip;
   } else {
@@ -314,6 +334,55 @@ function refreshStatus() {
   statusEl.appendChild(document.createTextNode(text));
 }
 
+// ---------------------------------------------------------------- tutorials (SPEC section 12)
+
+// The tutorial step on show now, or null.
+function coachStep() {
+  if (!tutorial || !session || session.solved) return null;
+  return tutorial.current(session.state);
+}
+
+// What the step on show points at, with its gesture. -> resolvePoint's answer plus { gesture }, or null
+function coachPoint() {
+  const step = coachStep();
+  if (!step || step.card) return null;
+  const point = resolvePoint(step.point, session.state);
+  return point ? { ...point, gesture: step.gesture || null } : null;
+}
+
+// Hands the pointer to the board, or makes the button it names pulse; the stuck nudge pulses Hint.
+function refreshCoach() {
+  const point = coachPoint();
+  view.coach = point && point.kind !== 'button' ? point : null;
+  for (const name of Object.keys(COACH_BUTTON)) {
+    COACH_BUTTON[name].classList.toggle('coach', !!point && point.kind === 'button' && point.name === name);
+  }
+  pulse(btn.hint, stuck > 0);
+}
+
+// A step that meets a new creature opens its rule card as soon as it comes up.
+function openTutorialCard() {
+  const step = coachStep();
+  if (step && step.card && !panel && screen === 'level') openCard(step.card);
+}
+
+// After every legal action: the tutorial may move on, and the stuck nudge may come or go.
+function tutorialAfter(next) {
+  const def = current.def;
+  if (tutorial) {
+    if (next.solved) tutorial.end();
+    else tutorial.advance(next.events, next);
+  }
+  if (next.solved) stuck = -1;
+  else if (stuck === 0 && session.moves >= def.par + STUCK_AFTER) stuck = session.moves + STUCK_FOR;
+  else if (stuck > 0 && session.moves >= stuck) stuck = -1;
+}
+
+// An undo, a restart or a hint sends the nudge away for the rest of the visit.
+function dismissStuck() {
+  if (stuck > 0) stuck = -1;
+}
+
 // ---------------------------------------------------------------- actions
 
 // One engine step, animated. -> true when the action was legal.
@@ -329,9 +398,11 @@ function doAction(action) {
   }
   clearHint();
   moved = true;
+  tutorialAfter(next);
   view.playTurn(prev, next, { facing: session.facing, speed: queue.length ? 1.5 : 1 });
   buzz('tick');
   refreshHud();
+  openTutorialCard();
   return true;
 }
 
@@ -371,6 +442,7 @@ function undo() {
   const bloomBefore = session.bloomCount();
   if (!session.undo()) return false;
   stopHintSearch();
+  dismissStuck();
   clearHint();
   if (panel === 'result' || panel === 'card') closePanel();
   celebrating = false;
@@ -391,6 +463,8 @@ function restart() {
   const before = session.state;
   if (!session.restart()) return false;
   stopHintSearch();
+  dismissStuck();
+  if (tutorial) tutorial.restart();
   clearHint();
   if (panel === 'result' || panel === 'card') closePanel();
   celebrating = false;
@@ -465,6 +539,7 @@ function requestHint() {
   queue.length = 0;
   thinking = true;
   session.hints++;
+  dismissStuck();
   btn.hint.classList.add('thinking');
   btn.hint.querySelector('.lbl').textContent = 'Thinking';
   play('hint');
@@ -623,9 +698,16 @@ function openPanel(name) {
 
 function closePanel() {
   if (!panel) return false;
+  const was = panel;
   $(panel).hidden = true;
   scrim.hidden = true;
   panel = null;
+  // closing a tutorial's meet card finishes that step
+  const step = was === 'card' ? coachStep() : null;
+  if (step && step.card) {
+    tutorial.cardClosed();
+    refreshHud();
+  }
   return true;
 }
 
@@ -655,6 +737,7 @@ function syncSettings() {
   set('set-sound', s.sound);
   setIcon($('set-sound').querySelector('.ico'), s.sound ? 'sound' : 'mute');
   set('set-contrast', s.contrast);
+  set('set-tutorials', s.tutorials);
   set('set-unlock', s.unlockAll || forceUnlock);
   app.classList.toggle('hc', s.contrast);
   view.highContrast = s.contrast;
@@ -796,6 +879,7 @@ onClick($('btn-play'), startPlaying);
 
 onClick($('set-sound'), () => toggleSetting('sound'));
 onClick($('set-contrast'), () => toggleSetting('contrast'));
+onClick($('set-tutorials'), () => toggleSetting('tutorials'));
 onClick($('set-unlock'), () => toggleSetting('unlockAll'));
 onClick($('set-reset'), () => {
   play('ui');
@@ -971,6 +1055,8 @@ window.__gd = {
   save: () => JSON.parse(JSON.stringify(save)),
   contrast: () => view.highContrast,
   frames: () => view.frames,
+  coach: () => (session ? coachPoint() : null),
+  tutorial: () => (tutorial ? { index: tutorial.index, done: tutorial.done } : null),
 };
 
 // ---------------------------------------------------------------- start

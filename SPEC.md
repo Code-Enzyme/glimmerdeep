@@ -167,6 +167,7 @@ feature-removed variants) must stay under 150,000 positions, so that hints are i
   under: { '3,4': 'a' },  // optional: the terrain under whatever the map shows at x,y (default is floor)
   note: 'One sentence: what the player learns or the trick.',   // for designers; never shown to players
   tip: 'Swipe to walk.',  // optional: one short player-facing line shown when the level opens (no spoilers)
+  tutorial: [ ... ],      // optional: guided steps for a player's first visit (section 12)
 }
 ```
 
@@ -345,3 +346,39 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - Back (Android back button, or Escape): result panel or any open panel first, then level → map →
   title → leave the app. Enter or Space on the title plays.
 - `?level=<id>` skips straight to that level; anything else in the URL still opens on the title.
+
+## 12. Tutorials (decided 17 Nov 2026)
+
+Teaching levels carry a `tutorial`: a short list of guided steps that run on a player's first visit.
+They teach the controls and each new creature by pointing at things, never by playing for the player,
+and never ask for a move the solution does not need.
+
+- **When:** a level's tutorial runs when the level has never been solved (it is not in the save) and the
+  **Tutorials** setting is on (the default). Solving a level, or switching the setting off, ends it.
+- **Steps** run in order and only move forward. A step:
+  ```js
+  { say: 'Swipe to walk.',     // the line shown in the status row while the step is up (instead of the tip)
+    point: 'wren',             // optional: what it points at, see below
+    gesture: 'swipe-E',        // optional: 'swipe-N' | 'swipe-E' | 'swipe-S' | 'swipe-W' | 'tap' | 'hold', drawn at the point
+    when: 'planted',           // optional: the step only shows while this holds: 'planted' | 'carried'
+    card: 'S',                 // optional: opens that creature's rule card when the step comes up ("meet" card)
+    until: 'step' }            // what finishes the step, see below
+  ```
+- **point:** `'wren'`; `'lantern'` (the planted lantern); a species letter `M` `S` `T` `D` (the first such
+  creature in reading order, followed as it moves); `'bud'` (the first Glowbud not in bloom); `'root'`;
+  `'gate'`; `[x, y]` (a tile); or a thumb-bar button `'plant'` (the lantern button), `'wait'`, `'undo'`,
+  `'hint'`. A board point is a soft ring with the gesture drawn on it; a button point makes it pulse.
+- **until:** `'move'` (any legal action), `'step'` (Wren walks), `'arrive'` (Wren stands on the `[x, y]`
+  point), `'plant'`, `'pickup'`, `'wait'`, `'settle'` (a moth became a bridge), `'hide'`, `'wake'`,
+  `'sleep'`, `'turn'`, `'gate'` (a gate opens), `'bud'` (a Glowbud comes into bloom), `'card'` (the
+  step's card was closed), `'solved'`. The events are the engine's (section 7).
+- **Undo** never takes a step back. **Restart** goes back to the first step that is not a card step.
+- **Stuck nudge:** on a level that has never been solved, with Tutorials on, once per visit: when the move
+  count reaches par + 6 and the level is not solved, the Hint button pulses and the status row says
+  "Stuck? Hint shows the next move, and Undo steps back." It goes away after a hint, an undo, a restart
+  or four more moves.
+- The **Tutorials** setting sits with the other settings on the map. Resetting progress brings every
+  tutorial back, because the levels are no longer solved.
+- `src/ui/tutorial.js` holds the step logic (no DOM), so it can be tested in Node. `checkTutorial(def)`
+  lists what is wrong with a level's tutorial (unknown point, gesture or event; a species point or card the
+  level does not have; `'arrive'` without an `[x, y]` point; a card step not finished by `'card'`).

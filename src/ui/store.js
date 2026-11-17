@@ -3,13 +3,13 @@
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
-const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false };
+const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true };
 
 function freshSave() {
   return { levels: {}, settings: { ...SETTING_DEFAULTS } };
 }
 
-// -> { levels: { [id]: { moves, stars } }, settings: { sound, contrast, unlockAll } }
+// -> { levels: { [id]: { moves, stars } }, settings: { sound, contrast, unlockAll, tutorials } }
 export function loadSave() {
   const data = freshSave();
   try {

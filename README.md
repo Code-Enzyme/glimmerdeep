@@ -5,6 +5,10 @@ themselves: fluffmoths fly toward the light, shellwhelks creep away from it, stu
 while they are lit, and dozer newts only wander in the dark. You never push anything; you decide where
 the light is.
 
+First visits are guided: the opening levels teach the controls by pointing at things, each new
+creature is met through its rule card, and a stuck player is nudged toward Hint and Undo. The
+Tutorials setting on the map turns all of that off.
+
 Android first, iOS later. The game is plain JavaScript drawn on a canvas, wrapped as a native app with
 [Capacitor](https://capacitorjs.com/).
 
@@ -42,7 +46,7 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |
-| `src/game.js`, `src/ui/` | Screens, input, saving, the app-shell bridge (`ui/native.js`) |
+| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the app-shell bridge (`ui/native.js`) |
 | `tools/` | Build, level verifier, icon maker |
 | `dev/` | Browser and device checks, plus the level-design search scripts |
 | `android/` | The Capacitor Android project |
