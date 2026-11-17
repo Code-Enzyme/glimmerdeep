@@ -176,6 +176,36 @@ async function main() {
     }
   }
   const waitResult = (h) => h.page.waitForFunction(() => window.__gd.panel() === 'result', null, { timeout: 8000 });
+  // Settings labels that do not fit inside their buttons on the map, with the page's fonts and again with
+  // a wide one (DejaVu Sans, a common Linux fallback), so the layout does not depend on one machine's fonts.
+  const crampedSettings = (h) => h.page.evaluate(async () => {
+    const out = [];
+    const root = document.documentElement;
+    const was = root.style.getPropertyValue('--sans');
+    for (const font of [null, "'DejaVu Sans', Verdana, sans-serif"]) {
+      if (font) root.style.setProperty('--sans', font);
+      await new Promise((r) => requestAnimationFrame(() => r()));
+      for (const b of document.querySelectorAll('.settings .tool')) {
+        const r = b.getBoundingClientRect();
+        for (const el of b.querySelectorAll('.lbl, .val')) {
+          const e = el.getBoundingClientRect();
+          if (e.left < r.left + 3 || e.right > r.right - 3) out.push(`${el.textContent}${font ? ' (wide font)' : ''}`);
+        }
+      }
+    }
+    if (was) root.style.setProperty('--sans', was);
+    else root.style.removeProperty('--sans');
+    return out;
+  });
+  // The reset question must sit above the settings bar, not on it.
+  const confirmClear = async (h) => {
+    await h.page.waitForTimeout(400);   // let it finish rising
+    return h.page.evaluate(() => {
+      const c = document.getElementById('confirm').getBoundingClientRect();
+      const bar = document.querySelector('.settings').getBoundingClientRect();
+      return c.bottom <= bar.top + 1 && c.top >= 0 ? true : JSON.stringify({ confirm: [c.top, c.bottom], bar: bar.top });
+    });
+  };
   const earned = (h) => h.page.locator('#result-marks li.earned').count();
 
   // ------------------------------------------------------------------ screenshots at three sizes
@@ -658,6 +688,7 @@ async function main() {
 
     await h.page.locator('#set-reset').tap();
     ok('reset: asks first, inside the page', await h.page.locator('#confirm').isVisible());
+    eq('reset: the question sits above the settings', await confirmClear(h), true);
     await h.page.locator('#confirm-no').tap();
     eq('reset: Keep keeps', (await h.gd('save')).levels[first.id], { moves: sol.length, stars: 3 });
     await h.page.locator('#set-reset').tap();
@@ -820,18 +851,7 @@ async function main() {
       await t.open();
       await t.toMap();
       eq('tutorials: the setting is on by default', [await t.page.locator('#set-tutorials').getAttribute('aria-pressed'), await t.page.locator('#set-tutorials .val').textContent()], ['true', 'on']);
-      const fits = await t.page.evaluate(() => {
-        const out = [];
-        for (const b of document.querySelectorAll('.settings .tool')) {
-          const r = b.getBoundingClientRect();
-          for (const el of b.querySelectorAll('.lbl, .val')) {
-            const e = el.getBoundingClientRect();
-            if (e.left < r.left + 1 || e.right > r.right - 1) out.push(el.textContent);
-          }
-        }
-        return out;
-      });
-      eq('tutorials: every settings label fits its button', fits, []);
+      eq('tutorials: every settings label fits its button', await crampedSettings(t), []);
 
       // 1-1, first visit: guided, one step at a time
       const l11 = byId('1-1');
@@ -1042,18 +1062,10 @@ async function main() {
         return out;
       });
       eq(`${tag}: nothing off the sides of the map`, over, []);
-      const cramped = await g.page.evaluate(() => {
-        const out = [];
-        for (const b of document.querySelectorAll('.settings .tool')) {
-          const r = b.getBoundingClientRect();
-          for (const el of b.querySelectorAll('.lbl, .val')) {
-            const e = el.getBoundingClientRect();
-            if (e.left < r.left + 3 || e.right > r.right - 3) out.push(el.textContent);
-          }
-        }
-        return out;
-      });
-      eq(`${tag}: settings labels fit their buttons`, cramped, []);
+      eq(`${tag}: settings labels fit their buttons`, await crampedSettings(g), []);
+      await g.page.locator('#set-reset').tap();
+      eq(`${tag}: the reset question sits above the settings`, await confirmClear(g), true);
+      await g.page.locator('#confirm-no').tap();
       await g.gd('loadLevelDef', ADHOC.tall);
       const L = await g.gd('layout');
       const c = await g.page.locator('#board').boundingBox();

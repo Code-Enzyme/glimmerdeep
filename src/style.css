@@ -393,15 +393,16 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 
 .settings .tool { min-height: 72px; }
 
+/* The reset question takes its place in the column just above the settings, so it can never cover them. */
 .confirm {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100px + var(--safe-b));
+  position: relative;
+  flex: none;
+  align-self: center;
   width: min(92vw, 400px);
-  transform: translateX(-50%);
+  margin: 0 0 10px;
   padding: 16px;
   z-index: 4;
-  animation: rise 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  animation: lift 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
 .confirm p { font: 17px/1.35 var(--serif); margin-bottom: 14px; }
 
@@ -561,6 +562,10 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   to { transform: translate(-50%, 0); opacity: 1; }
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lift {
+  from { transform: translateY(26px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
 @keyframes pop {
   from { transform: scale(0.3) rotate(-30deg); opacity: 0; }
   to { transform: scale(1) rotate(0); opacity: 1; }
@@ -600,7 +605,13 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   .title { font-size: 34px; }
   .tool { min-height: 58px; }
   .settings .tool { min-height: 66px; }
-  .confirm { bottom: calc(92px + var(--safe-b)); }
+}
+
+/* On a phone the five settings sit in two rows of three columns, so every label fits whatever the font. */
+@media (max-width: 499px) {
+  .settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .settings .tool { min-height: 60px; }
+  #set-reset { grid-column: span 2; }
 }
 
 @media (min-width: 700px) {
