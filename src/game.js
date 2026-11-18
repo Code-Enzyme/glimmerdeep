@@ -15,7 +15,8 @@ import { BoardView } from './ui/board.js';
 import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { renderMap, layoutMap } from './ui/map.js';
-import { onBackButton, exitApp, haptic, onAppState } from './ui/native.js';
+import { onBackButton, exitApp, haptic, onAppState, openStore } from './ui/native.js';
+import { PRODUCTS, CATALOG, FREE_CHAPTER, chapterOpen, hintCost, payHint, hintLabel, minutesWord, settle } from './ui/shop.js';
 import { TitleArt } from './ui/title.js';
 import { Tutorial, resolvePoint, STUCK_AFTER } from './ui/tutorial.js';
 import { NOTES, storyDue, journal, pageById } from './ui/story.js';
@@ -65,6 +66,7 @@ const canvas = $('board');
 const statusEl = $('status');
 const counterEl = $('counter');
 const scrim = $('scrim');
+const shopScrim = $('shop-scrim');
 const btn = {
   undo: $('btn-undo'),
   restart: $('btn-restart'),
@@ -104,6 +106,12 @@ let stuck = -1;            // the stuck nudge: 0 armed, above 0 showing until th
 let book = null;           // story pages showing (SPEC section 13): { ids, index, reading, then }
 let journalTab = 'creatures';
 const queue = [];
+// the store (SPEC section 14): null until src/ui/native.js says which store sells
+let store = null;
+let prices = {};
+let buying = false;
+let shopNote = '';
+let shopWhy = '';
 
 const titleArt = new TitleArt($('title-art'), $('title-stage'));
 
@@ -130,9 +138,16 @@ function chapterOf(def) {
   return CHAPTERS[0] || { id: 1, name: '', accent: '#5FBFA8', levels: [] };
 }
 
+// A chapter that is part of the Full Expedition and not bought yet. ?unlock=1 (a developer link) skips it.
+function chapterLocked(chapter) {
+  return !forceUnlock && !chapterOpen(save.shop, chapter.id);
+}
+
 function isUnlocked(def) {
+  if (forceUnlock) return true;
+  if (chapterLocked(chapterOf(def))) return false;   // Unlock all skips the level order, never the purchase
   const i = LEVELS.indexOf(def);
-  if (i <= 0 || forceUnlock || save.settings.unlockAll) return true;
+  if (i <= 0 || save.settings.unlockAll) return true;
   return !!save.levels[def.id] || !!save.levels[LEVELS[i - 1].id];
 }
 
@@ -233,6 +248,11 @@ function drawMap() {
       node.classList.remove('wiggle');
       void node.offsetWidth;   // restart the animation
       node.classList.add('wiggle');
+    },
+    chapterLocked,
+    onShop: (chapter) => {
+      play('ui');
+      openShop('chapter', chapter);
     },
   });
   for (const lock of chaptersEl.querySelectorAll('.lock')) setIcon(lock, 'lock');
@@ -472,6 +492,7 @@ function refreshHud() {
   setDisabled(btn.restart, !session.canUndo && session.state === session.start);
   setDisabled(btn.wait, over);
   setDisabled(btn.hint, over);
+  refreshHintLabel();
   const action = session.lanternAction() || 'pickup';
   setDisabled(btn.lantern, over || !session.canUseLantern());
   const label = LANTERN_LABEL[action];
@@ -724,8 +745,28 @@ function cancelWalk() {
 
 // ---------------------------------------------------------------- hint
 
+// The Hint button's second line says what the next hint costs (SPEC section 14).
+function refreshHintLabel() {
+  const val = $('hint-val');
+  const text = hintLabel(save.shop, Date.now());
+  if (val.textContent !== text) val.textContent = text;
+  const cost = hintCost(save.shop, Date.now());
+  const aria = cost.kind === 'free' ? 'Hint, free'
+    : cost.kind === 'glimmer' ? `Hint, ${cost.glimmer} Glimmer left`
+      : `Hint, next free hint in ${minutesWord(cost.waitMs)}`;
+  if (btn.hint.getAttribute('aria-label') !== aria) btn.hint.setAttribute('aria-label', aria);
+}
+
 function requestHint() {
   if (!session || session.solved || celebrating || thinking || panel) return;
+  // paid for when asked, whatever it finds; with nothing to pay with, the store says when the next free one comes
+  if (!payHint(save.shop, Date.now())) {
+    play('ui');
+    openShop('hint');
+    return;
+  }
+  writeSave(save);
+  refreshHintLabel();
   cancelWalk();
   queue.length = 0;
   thinking = true;
@@ -871,7 +912,9 @@ function showResult() {
 
 function openPanel(name) {
   panel = name;
-  if (name !== 'confirm') {
+  if (name === 'shop') {
+    shopScrim.hidden = false;
+  } else if (name !== 'confirm') {
     scrim.hidden = false;
     scrim.className = name === 'result' ? 'scrim soft' : 'scrim';
   }
@@ -879,7 +922,7 @@ function openPanel(name) {
   el.hidden = false;
   const focus = name === 'result'
     ? ($('result-next').hidden ? $('result-replay') : $('result-next'))
-    : name === 'card' ? $('card-close') : $('confirm-no');
+    : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : $('confirm-no');
   try {
     focus.focus({ preventScroll: true });
   } catch (e) {
@@ -892,6 +935,7 @@ function closePanel() {
   const was = panel;
   $(panel).hidden = true;
   scrim.hidden = true;
+  shopScrim.hidden = true;
   panel = null;
   // closing a tutorial's meet card finishes that step
   const step = was === 'card' ? coachStep() : null;
@@ -914,6 +958,127 @@ function openCard(kind) {
   armedAt = performance.now() + 400;
   openPanel('card');
   play('ui');
+}
+
+// ---------------------------------------------------------------- store (SPEC section 14)
+
+const NEXT_PAID = LEVELS.filter((def) => chapterOf(def).id !== FREE_CHAPTER).length;
+
+// reason: 'chapter' (a locked chapter, or Next after chapter 1), 'hint' (nothing left to pay with), or none
+function openShop(reason, chapter) {
+  if (panel) closePanel();
+  cancelWalk();
+  queue.length = 0;
+  shopNote = '';
+  if (reason === 'chapter' && chapter) shopWhy = `Chapter ${chapter.id}, ${chapter.name}, is part of the Full Expedition.`;
+  else if (reason === 'hint') shopWhy = `No Glimmer left. The next free hint comes in ${minutesWord(hintCost(save.shop, Date.now()).waitMs)}.`;
+  else shopWhy = '';
+  renderShop();
+  openPanel('shop');
+}
+
+function renderShop() {
+  const why = $('shop-why');
+  why.textContent = shopWhy;
+  why.hidden = !shopWhy;
+  const later = CHAPTERS.filter((c) => c.id !== FREE_CHAPTER);
+  const span = later.length ? `Chapters ${later[0].id} to ${later[later.length - 1].id}` : 'Every chapter';
+  $('shop-full-text').textContent = `${span}: ${NEXT_PAID} more caverns and the rest of Wren's story. One payment, no ads.`;
+  const cost = hintCost(save.shop, Date.now());
+  const jar = CATALOG.find((p) => p.id === PRODUCTS.jar);
+  $('shop-jar-text').textContent = `${jar.glimmer} instant hints. You have ${save.shop.glimmer} Glimmer, and `
+    + (cost.kind === 'free' ? 'a free hint is ready now.' : `the next free hint comes in ${minutesWord(cost.waitMs)}.`);
+  const full = $('shop-full');
+  const owned = !!save.shop.full;
+  full.textContent = owned ? 'Owned' : (prices[PRODUCTS.full] || '…');
+  full.setAttribute('aria-label', owned ? 'Full Expedition owned' : `Buy the Full Expedition, ${prices[PRODUCTS.full] || 'price loading'}`);
+  setDisabled(full, owned || !store || buying);
+  const buyJar = $('shop-jar');
+  buyJar.textContent = prices[PRODUCTS.jar] || '…';
+  buyJar.setAttribute('aria-label', `Buy a Glimmer jar, ${prices[PRODUCTS.jar] || 'price loading'}`);
+  setDisabled(buyJar, !store || buying);
+  setDisabled($('shop-restore'), !store || buying);
+  $('shop-note').textContent = buying ? 'Waiting for the store…' : shopNote;
+  $('shop-test').hidden = !store || store.kind !== 'test';
+}
+
+// Grants what the store reports, saves before confirming with the store, and redraws. -> the product ids granted
+function applyPurchases(purchases) {
+  const out = settle(save.shop, purchases);
+  if (out.granted.length) writeSave(save);
+  if (store) store.confirm(out.confirm);
+  if (out.granted.length) {
+    sfx('solve');
+    if (screen === 'map') drawMap();
+    if (session) refreshHud();
+    if (panel === 'shop') renderShop();
+  }
+  return out.granted;
+}
+
+function thanks(granted) {
+  if (granted.includes(PRODUCTS.full)) return 'Thank you! Every chapter is open now.';
+  const jar = CATALOG.find((p) => p.id === PRODUCTS.jar);
+  const n = granted.filter((id) => id === PRODUCTS.jar).length * jar.glimmer;
+  return `Thank you! ${n} Glimmer added.`;
+}
+
+async function buy(id) {
+  if (!store || buying) return;
+  play('ui');
+  buying = true;
+  shopNote = '';
+  renderShop();
+  let r;
+  try {
+    r = await store.buy(id);
+  } catch (e) {
+    r = { status: 'error', message: '', purchases: [] };
+  }
+  buying = false;
+  const granted = applyPurchases(r.purchases || []);
+  if (granted.length) shopNote = thanks(granted);
+  else if (r.status === 'pending') shopNote = 'Payment pending. You will get it as soon as it clears.';
+  else if (r.status === 'unready') shopNote = 'The store is not ready yet. Check your connection and try again.';
+  else if (r.status === 'error') shopNote = 'The purchase did not go through.' + (r.message ? ` (${r.message})` : '');
+  else shopNote = '';
+  renderShop();
+}
+
+async function restorePurchases() {
+  if (!store || buying) return;
+  play('ui');
+  buying = true;
+  renderShop();
+  let note;
+  try {
+    const granted = applyPurchases(await store.owned());
+    note = granted.length ? 'Purchases restored.' : 'Nothing new to restore.';
+  } catch (e) {
+    note = 'Could not reach the store. Try again later.';
+  }
+  buying = false;
+  shopNote = note;
+  renderShop();
+}
+
+function startStore() {
+  openStore(CATALOG).then(async (s) => {
+    store = s;
+    store.onPurchases((list) => applyPurchases(list));
+    if (panel === 'shop') renderShop();
+    try {
+      prices = await store.prices();
+    } catch (e) {
+      prices = {};
+    }
+    if (panel === 'shop') renderShop();
+    try {
+      applyPurchases(await store.owned());
+    } catch (e) {
+      // offline: Restore, or the next start, finds them
+    }
+  }).catch(() => {});
 }
 
 // ---------------------------------------------------------------- settings
@@ -1050,6 +1215,15 @@ scrim.addEventListener('click', () => {
 onClick($('result-next'), () => {
   const next = current && nextLevelAfter(current.def);
   play('ui');
+  if (next && !isUnlocked(next) && chapterLocked(chapterOf(next))) {
+    // the end of the free chapter: its story page, then the map with the store open
+    const chapter = chapterOf(next);
+    leaveResult(() => {
+      showMap();
+      openShop('chapter', chapter);
+    });
+    return;
+  }
   leaveResult(next ? () => openLevel(next) : showMap);
 });
 onClick($('result-replay'), () => {
@@ -1068,6 +1242,26 @@ function startPlaying() {
 onClick($('btn-play'), startPlaying);
 
 onClick($('story-next'), () => nextPage());
+onClick($('btn-shop'), () => {
+  play('ui');
+  openShop();
+});
+onClick($('shop-full'), () => {
+  if (!isDisabled($('shop-full'))) buy(PRODUCTS.full);
+});
+onClick($('shop-jar'), () => {
+  if (!isDisabled($('shop-jar'))) buy(PRODUCTS.jar);
+});
+onClick($('shop-restore'), () => {
+  if (!isDisabled($('shop-restore'))) restorePurchases();
+});
+onClick($('shop-close'), () => {
+  play('ui');
+  closePanel();
+});
+shopScrim.addEventListener('click', () => {
+  if (panel === 'shop') closePanel();
+});
 onClick($('btn-journal'), () => {
   play('ui');
   showJournal('creatures');
@@ -1156,6 +1350,7 @@ document.addEventListener('keydown', (e) => {
     closePanel();
     return;
   }
+  if (panel === 'shop') return;   // the store keeps the board still; Escape closes it
   if (what === 'undo') undo();
   else if (what === 'restart') {
     if (panel === 'result') openLevel(current.def, current.adhoc);
@@ -1278,6 +1473,7 @@ window.__gd = {
   story: () => (book ? { id: book.ids[book.index], index: book.index, count: book.ids.length, reading: book.reading } : null),
   tutorial: () => (tutorial ? { index: tutorial.index, done: tutorial.done } : null),
   heard: () => heard.slice(),
+  shop: () => ({ ...JSON.parse(JSON.stringify(save.shop)), kind: store ? store.kind : null, prices: { ...prices } }),
 };
 
 // ---------------------------------------------------------------- start
@@ -1286,5 +1482,10 @@ applyIcons(document);
 syncMotion();
 syncSettings();
 showTitle();
+startStore();
+// the Hint button's "in 7 min" counts down
+window.setInterval(() => {
+  if (screen === 'level' && session) refreshHintLabel();
+}, 15000);
 const direct = params.get('level');
 if (direct) window.__gd.loadLevel(direct);

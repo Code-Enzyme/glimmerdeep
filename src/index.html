@@ -50,6 +50,9 @@
       <button id="btn-journal" class="btn journal-open" type="button" aria-label="Field Journal">
         <span class="ico" data-icon="book" data-tint="#24162E"></span><span class="lbl">Field Journal</span><span class="val"></span>
       </button>
+      <button id="btn-shop" class="btn shop-open" type="button" aria-label="Store">
+        <span class="ico" data-icon="lantern" data-tint="#24162E"></span><span class="lbl">Store</span>
+      </button>
     </div>
 
     <nav class="bar settings" aria-label="Settings">
@@ -136,7 +139,7 @@
         <span class="ico" data-icon="lantern"></span><span class="lbl">Plant</span>
       </button>
       <button id="btn-hint" class="tool" type="button" aria-label="Hint">
-        <span class="ico" data-icon="hint"></span><span class="lbl">Hint</span>
+        <span class="ico" data-icon="hint"></span><span class="lbl">Hint</span><span id="hint-val" class="val"></span>
       </button>
     </nav>
 
@@ -169,6 +172,34 @@
       </div>
     </aside>
   </section>
+
+  <!-- Store: over the map or a level (SPEC section 14) -->
+  <div id="shop-scrim" class="scrim" hidden></div>
+  <aside id="shop" class="sheet paper shop" role="dialog" aria-modal="true" aria-labelledby="shop-title" hidden>
+    <span class="kicker ink">Wren's satchel</span>
+    <h3 id="shop-title">Store</h3>
+    <p id="shop-why" class="shop-why" hidden></p>
+    <div class="offer">
+      <div class="offer-text">
+        <h4>Full Expedition</h4>
+        <p id="shop-full-text"></p>
+      </div>
+      <button id="shop-full" class="btn primary buy" type="button" aria-label="Buy the Full Expedition"></button>
+    </div>
+    <div class="offer">
+      <div class="offer-text">
+        <h4>Glimmer jar</h4>
+        <p id="shop-jar-text"></p>
+      </div>
+      <button id="shop-jar" class="btn buy" type="button" aria-label="Buy a Glimmer jar"></button>
+    </div>
+    <p id="shop-note" class="shop-note" role="status" aria-live="polite"></p>
+    <p id="shop-test" class="shop-test" hidden>Test build: purchases are free.</p>
+    <div class="buttons">
+      <button id="shop-restore" class="btn" type="button" aria-label="Restore purchases">Restore</button>
+      <button id="shop-close" class="btn" type="button" aria-label="Close the store">Close</button>
+    </div>
+  </aside>
 </div>
 <noscript><p style="color:#F4EAD5;font:16px Georgia,serif;padding:24px">Glimmerdeep needs JavaScript to light its lantern.</p></noscript>
 <script>/*__JS__*/</script>

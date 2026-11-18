@@ -10,7 +10,9 @@
    uploaded as `glimmerdeep-debug-apk`.
 3. **device:** after `android` passes, boots an API 34 emulator and runs `dev/device-check.cjs`: installs
    the APK, opens the app, plays the first level and the last level of each chapter through the app's
-   own WebView, kills and reopens the app, and checks the save survived. Screenshots of the device are
+   own WebView, checks the Billing plugin answers and the debug build uses the free test store, buys the
+   Full Expedition there, kills and reopens the app, and checks the save and the purchase survived.
+   Screenshots of the device are
    uploaded as `device-screenshots`.
 
 Protect `main` in GitHub (Settings → Branches) and require all three jobs before merging.

@@ -1,15 +1,19 @@
-// Saving. One localStorage key holds per-level bests, the story pages already shown and the settings. Every read and write is guarded:
+// Saving. One localStorage key holds per-level bests, the story pages already shown, the shop (purchases and
+// Glimmer, SPEC section 14) and the settings. Every read and write is guarded:
 // the game must play the same with storage missing, full or blocked (private mode, file:// policies).
+
+import { freshShop, readShop } from './shop.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
 const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true };
 
 function freshSave() {
-  return { levels: {}, seen: [], settings: { ...SETTING_DEFAULTS } };
+  return { levels: {}, seen: [], shop: freshShop(), settings: { ...SETTING_DEFAULTS } };
 }
 
-// -> { levels: { [id]: { moves, stars } }, seen: [story page id], settings: { sound, contrast, unlockAll, tutorials } }
+// -> { levels: { [id]: { moves, stars } }, seen: [story page id], shop: { full, glimmer, freeAt, paid },
+//      settings: { sound, contrast, unlockAll, tutorials } }
 export function loadSave() {
   const data = freshSave();
   try {
@@ -32,6 +36,7 @@ export function loadSave() {
         if (typeof id === 'string' && id && !data.seen.includes(id)) data.seen.push(id);
       }
     }
+    data.shop = readShop(parsed.shop);
     if (parsed.settings && typeof parsed.settings === 'object') {
       for (const k of Object.keys(SETTING_DEFAULTS)) {
         if (typeof parsed.settings[k] === 'boolean') data.settings[k] = parsed.settings[k];
@@ -46,7 +51,7 @@ export function loadSave() {
 // -> true when the save reached storage
 export function writeSave(data) {
   try {
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify({ levels: data.levels, seen: data.seen || [], settings: data.settings }));
+    window.localStorage.setItem(SAVE_KEY, JSON.stringify({ levels: data.levels, seen: data.seen || [], shop: data.shop || freshShop(), settings: data.settings }));
     return true;
   } catch (e) {
     return false;
@@ -63,7 +68,7 @@ export function recordResult(data, id, moves, stars) {
   return record;
 }
 
-// Reset progress: every level and the story start over; the settings stay.
+// Reset progress: every level and the story start over; the settings and the shop stay.
 export function clearProgress(data) {
   data.levels = {};
   data.seen = [];

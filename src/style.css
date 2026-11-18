@@ -407,10 +407,11 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 }
 .confirm p { font: 17px/1.35 var(--serif); margin-bottom: 14px; }
 
-/* The Field Journal button: one wide paper button just above the settings, in thumb reach. */
-.journal-row { flex: none; display: flex; justify-content: center; padding: 6px 14px 10px; }
+/* The Field Journal and Store buttons: wide paper buttons just above the settings, in thumb reach. */
+.journal-row { flex: none; display: flex; justify-content: center; gap: 10px; padding: 6px 14px 10px; }
 .journal-open {
-  width: min(100%, 420px);
+  flex: 1 1 auto;
+  max-width: 320px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -419,6 +420,18 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .journal-open .ico { width: 30px; height: 30px; }
 .journal-open .lbl { flex: 1; text-align: left; font: 700 18px/1.1 var(--serif); }
 .journal-open .val { font: 600 14px/1.1 var(--sans); color: #4B3856; white-space: nowrap; }
+.shop-open { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 14px; }
+.shop-open .ico { width: 26px; height: 26px; }
+.shop-open .lbl { font: 700 18px/1.1 var(--serif); }
+
+/* A chapter that is part of the Full Expedition (SPEC section 14) */
+.chapter-unlock {
+  flex: none;
+  min-height: 44px;
+  padding: 6px 12px;
+  font: 700 14px/1.1 var(--sans);
+  background: var(--amber);
+}
 
 /* ------------------------------------------------------------------ story pages */
 
@@ -799,3 +812,26 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------------------------------ store (SPEC section 14) */
+
+.shop { z-index: 8; }
+#shop-scrim { z-index: 7; }
+.shop-why { margin-top: 6px; font: 600 16px/1.35 var(--sans); color: #6B2A2A; }
+.offer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 2px dashed rgba(36, 22, 46, 0.3);
+}
+.offer-text { flex: 1; min-width: 0; }
+.offer h4 { font: 700 19px/1.2 var(--serif); }
+.offer p { margin-top: 3px; font: 15px/1.35 var(--serif); color: #3B2A47; }
+.offer .buy { flex: none; min-width: 96px; }
+.offer .buy[aria-disabled="true"] { background: transparent; border-style: dashed; box-shadow: none; }
+.shop-note { min-height: 0; margin-top: 10px; font: 600 15px/1.35 var(--sans); color: #2F5A3A; }
+.shop-note:empty { display: none; }
+.shop-test { margin-top: 8px; font: 600 14px/1.3 var(--sans); color: #6B4B2A; }
+.hc .offer p, .hc .shop-test, .hc .shop-why, .hc .shop-note { color: var(--ink); }

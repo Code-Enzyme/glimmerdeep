@@ -694,8 +694,11 @@ async function main() {
     await h.page.locator('#set-sound').tap();
     eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true });
 
+    // Unlock all skips the level order, never the purchase (SPEC section 14)
+    const paidCount = LEVELS.filter((def) => !CHAPTERS.find((c) => c.id === 1).levels.includes(def)).length;
     await h.page.locator('#set-unlock').tap();
-    eq('unlock all: nothing locked', await h.page.locator('.node.locked').count(), 0);
+    eq('unlock all: only the Full Expedition\'s levels stay locked', await h.page.locator('.node.locked').count(), paidCount);
+    eq('unlock all: every free level is open', await h.page.locator('.chapter:not(.paid) .node.locked').count(), 0);
     await h.page.locator('#set-unlock').tap();
 
     await h.page.locator('#set-reset').tap();
@@ -1347,7 +1350,20 @@ async function main() {
     eq('story: its title', await text('#story-title'), STORY[1].title);
     await s.shot('story-chapter-1');
     await s.page.locator('#story-next').tap();
-    eq('story: Continue opens the next level', [await s.gd('screen'), await text('#level-id')], ['level', `Level ${chapter(2).levels[0].id}`]);
+    // chapter 2 is part of the Full Expedition: Continue goes to the map with the store open (SPEC section 14)
+    eq('story: Continue opens the store when the next chapter is locked', [await s.gd('screen'), await s.gd('panel')], ['map', 'shop']);
+    eq('story: the store says why', await text('#shop-why'), `Chapter 2, ${chapter(2).name}, is part of the Full Expedition.`);
+    await s.page.locator('#shop-close').tap();
+    // the page was read: Next at the end of chapter 1 now opens the store straight away
+    await solveHere(lastOf(1));
+    await s.page.locator('#result-next').tap();
+    eq('store: Next after chapter 1 opens the store again, with no page', [await s.gd('screen'), await s.gd('panel'), await s.gd('story')], ['map', 'shop', null]);
+    await s.page.locator('#shop-full').tap();
+    await s.page.waitForFunction(() => window.__gd.shop().full === true);
+    await s.page.locator('#shop-close').tap();
+    await solveHere(lastOf(1));
+    await s.page.locator('#result-next').tap();
+    eq('store: once bought, Next opens the next chapter', [await s.gd('screen'), await text('#level-id')], ['level', `Level ${chapter(2).levels[0].id}`]);
 
     // two chapters finished: a book of two pages
     await solveHere(lastOf(2));
@@ -1396,6 +1412,165 @@ async function main() {
     eq('story: no prologue after a level opened from a link', await fresh.gd('screen'), 'map');
     await fresh.close();
     await s.close();
+
+    // ---------------------------------------------------------------- store (SPEC section 14)
+    console.log('store');
+    {
+      const st = await phone({ tag: 'store' });
+      const txt = async (sel) => ((await st.page.locator(sel).textContent()) || '').trim();
+      const ch = (n) => CHAPTERS.find((c) => c.id === n);
+      const paid = CHAPTERS.filter((c) => c.id !== 1);
+      const paidLevels = LEVELS.filter((def) => !ch(1).levels.includes(def));
+      const inView = async (sel) => {
+        const b = await st.page.locator(sel).boundingBox();
+        return !!b && b.x >= 0 && b.y >= 0 && b.x + b.width <= 390 && b.y + b.height <= 844 ? true : JSON.stringify(b);
+      };
+      const shopOpen = () => st.page.waitForFunction(() => window.__gd.panel() === 'shop');
+
+      await st.open();
+      await st.toMap();
+      eq('store: debug and browser builds use the test store', (await st.gd('shop')).kind, 'test');
+      eq('store: a fresh save owns nothing and has 3 Glimmer', [(await st.gd('shop')).full, (await st.gd('shop')).glimmer], [false, 3]);
+      eq('store: later chapters are marked as the Full Expedition', await st.page.locator('.chapter.paid').count(), paid.length);
+      eq('store: each locked chapter has an Unlock button', await st.page.locator('.chapter-unlock').count(), paid.length);
+      eq('store: chapter 1 is free', await st.page.locator(`.chapter.paid .node[data-level="${first.id}"]`).count(), 0);
+      const ch2first = ch(2).levels[0];
+      eq('store: a locked level says why', await st.page.locator(`.node[data-level="${ch2first.id}"]`).getAttribute('aria-label'),
+        `Level ${ch2first.id}, locked. Part of the Full Expedition.`);
+      eq('store: a locked paid level still acts (it opens the store)', await st.page.locator(`.node[data-level="${ch2first.id}"]`).getAttribute('aria-disabled'), null);
+      eq('store: the Unlock button is labelled', await st.page.locator('.chapter-unlock').first().getAttribute('aria-label'),
+        `Unlock chapter ${paid[0].id} with the Full Expedition`);
+
+      // the map's Store button
+      ok('store: the map has a Store button', await st.page.locator('#btn-shop').isVisible());
+      eq('store: the button is on screen, in thumb reach', [await inView('#btn-shop'), (await st.page.locator('#btn-shop').boundingBox()).y > 844 / 2], [true, true]);
+      await st.page.locator('#btn-shop').tap();
+      await shopOpen();
+      ok('store: the panel shows', await st.page.locator('#shop').isVisible());
+      ok('store: no reason line from the Store button', !(await st.page.locator('#shop-why').isVisible()));
+      eq('store: test prices', [await txt('#shop-full'), await txt('#shop-jar')], ['$4.99', '$0.99']);
+      eq('store: the Full Expedition offer', await txt('#shop-full-text'),
+        `Chapters 2 to ${paid[paid.length - 1].id}: ${paidLevels.length} more caverns and the rest of Wren's story. One payment, no ads.`);
+      eq('store: the jar offer counts the Glimmer left', await txt('#shop-jar-text'), '10 instant hints. You have 3 Glimmer, and a free hint is ready now.');
+      ok('store: says purchases are free in a test build', await st.page.locator('#shop-test').isVisible());
+      eq('store: Close has the focus', await st.page.evaluate(() => document.activeElement && document.activeElement.id), 'shop-close');
+      for (const id of ['shop-full', 'shop-jar', 'shop-restore', 'shop-close']) eq(`store: #${id} on screen`, await inView(`#${id}`), true);
+      await auditPage(st, 'store');
+      await st.shot('store');
+      await st.page.keyboard.press('Escape');
+      eq('store: Escape (Back) closes it', [await st.gd('screen'), await st.gd('panel'), await st.page.locator('#shop').isVisible()], ['map', null, false]);
+
+      // a locked chapter opens it, and says which chapter
+      await st.page.locator(`.node[data-level="${ch2first.id}"]`).tap();
+      await shopOpen();
+      eq('store: a locked level opens it', [await st.gd('screen'), await txt('#shop-why')], ['map', `Chapter 2, ${ch(2).name}, is part of the Full Expedition.`]);
+      await st.page.locator('#shop-close').tap();
+      eq('store: Close closes it', await st.gd('panel'), null);
+      await st.page.locator('.chapter-unlock').nth(1).tap();
+      await shopOpen();
+      eq('store: an Unlock button opens it', await txt('#shop-why'), `Chapter ${paid[1].id}, ${paid[1].name}, is part of the Full Expedition.`);
+      {
+        const top = (await st.page.locator('#shop').boundingBox()).y;
+        ok('store: the panel leaves room above it', top > 60, top);
+        await st.page.touchscreen.tap(195, Math.min(40, top / 2));
+        eq('store: a tap outside closes it', await st.gd('panel'), null);
+      }
+
+      // a Glimmer jar
+      await st.page.locator('#btn-shop').tap();
+      await shopOpen();
+      await st.page.locator('#shop-jar').tap();
+      await st.page.waitForFunction(() => window.__gd.shop().glimmer === 13);
+      eq('store: a jar adds 10 Glimmer', (await st.gd('shop')).glimmer, 13);
+      eq('store: and says thank you', await txt('#shop-note'), 'Thank you! 10 Glimmer added.');
+      ok('store: a purchase plays the solve sound', (await st.gd('heard')).includes('solve'));
+      eq('store: the jar offer updates', await txt('#shop-jar-text'), '10 instant hints. You have 13 Glimmer, and a free hint is ready now.');
+      eq('store: the jar can be bought again', await st.page.locator('#shop-jar').getAttribute('aria-disabled'), 'false');
+
+      // the Full Expedition
+      await st.page.locator('#shop-full').tap();
+      await st.page.waitForFunction(() => window.__gd.shop().full === true);
+      eq('store: the Full Expedition says thank you', await txt('#shop-note'), 'Thank you! Every chapter is open now.');
+      eq('store: and shows as owned', [await txt('#shop-full'), await st.page.locator('#shop-full').getAttribute('aria-disabled')], ['Owned', 'true']);
+      await st.page.locator('#shop-restore').tap();
+      await st.page.waitForFunction(() => !/Waiting/.test(document.getElementById('shop-note').textContent));
+      eq('store: Restore with nothing new', await txt('#shop-note'), 'Nothing new to restore.');
+      await st.page.locator('#shop-close').tap();
+      eq('store: no chapter is marked as paid any more', [await st.page.locator('.chapter.paid').count(), await st.page.locator('.chapter-unlock').count()], [0, 0]);
+      eq('store: later levels follow the usual order', await st.page.locator(`.node[data-level="${ch2first.id}"]`).getAttribute('aria-label'),
+        `Level ${ch2first.id}, locked. Solve the level before it first.`);
+      await st.page.locator('#set-unlock').tap();
+      eq('store: bought, Unlock all opens everything', await st.page.locator('.node.locked').count(), 0);
+      await st.page.locator('#set-unlock').tap();
+
+      // kept over a reload, and over Reset progress
+      await st.page.reload();
+      await st.page.waitForFunction(() => window.__gd && window.__gd.screen());
+      await st.toMap();
+      eq('store: purchases survive a reload', [(await st.gd('shop')).full, (await st.gd('shop')).glimmer], [true, 13]);
+      eq('store: still no paid chapters after a reload', await st.page.locator('.chapter.paid').count(), 0);
+      await st.page.locator('#set-reset').tap();
+      await st.page.locator('#confirm-yes').tap();
+      eq('store: Reset progress keeps purchases', [(await st.gd('shop')).full, (await st.gd('shop')).glimmer], [true, 13]);
+      await st.close();
+    }
+    {
+      // the Hint button's price line, on a fresh save
+      const hp = await phone({ tag: 'hints' });
+      const txt = async (sel) => ((await hp.page.locator(sel).textContent()) || '').trim();
+      const askHint = async () => {
+        await hp.page.locator('#btn-hint').tap();
+        await hp.page.waitForFunction(() => !document.querySelector('#btn-hint').classList.contains('thinking'));
+        await hp.page.waitForTimeout(80);
+      };
+      await hp.open();
+      await hp.toMap();
+      await hp.page.locator(`.node[data-level="${first.id}"]`).tap();
+      await hp.page.waitForFunction(() => window.__gd.screen() === 'level');
+      eq('hint price: the first hint is free', [await txt('#hint-val'), await hp.page.locator('#btn-hint').getAttribute('aria-label')], ['free', 'Hint, free']);
+      await askHint();
+      ok('hint price: the free hint shows a hint', (await hp.gd('hint')) !== null);
+      ok('hint price: the free hint is timed', (await hp.gd('shop')).freeAt > 0);
+      eq('hint price: then Glimmer', [await txt('#hint-val'), await hp.page.locator('#btn-hint').getAttribute('aria-label')], ['3 left', 'Hint, 3 Glimmer left']);
+      await hp.gd('act', solutionOf(first)[0]);
+      await hp.idle();
+      await askHint();
+      eq('hint price: a paid hint spends one Glimmer', [(await hp.gd('shop')).glimmer, await txt('#hint-val')], [2, '2 left']);
+      ok('hint price: and shows a hint', (await hp.gd('hint')) !== null);
+      await hp.close();
+    }
+    {
+      // nothing left to pay with: the Hint opens the store instead
+      const KEY = 'glimmerdeep.v1';
+      const np = await phone({
+        tag: 'no-glimmer',
+        init: `if (!localStorage.getItem('${KEY}')) localStorage.setItem('${KEY}', JSON.stringify({ levels: {}, seen: ['prologue'],
+          shop: { full: false, glimmer: 0, freeAt: Date.now(), paid: [] }, settings: { sound: true, contrast: false, unlockAll: false, tutorials: false } }));`,
+      });
+      const txt = async (sel) => ((await np.page.locator(sel).textContent()) || '').trim();
+      await np.open();
+      await np.toMap();
+      await np.page.locator(`.node[data-level="${first.id}"]`).tap();
+      await np.page.waitForFunction(() => window.__gd.screen() === 'level');
+      eq('no Glimmer: the Hint button says when', [await txt('#hint-val'), await np.page.locator('#btn-hint').getAttribute('aria-label')],
+        ['in 10 min', 'Hint, next free hint in 10 min']);
+      await np.page.locator('#btn-hint').tap();
+      await np.page.waitForFunction(() => window.__gd.panel() === 'shop');
+      eq('no Glimmer: Hint opens the store', [await np.gd('screen'), await np.gd('panel')], ['level', 'shop']);
+      eq('no Glimmer: the store says when the next free hint comes', await txt('#shop-why'), 'No Glimmer left. The next free hint comes in 10 min.');
+      eq('no Glimmer: no hint, nothing spent', [await np.gd('hint'), await np.gd('hints'), (await np.gd('shop')).glimmer], [null, 0, 0]);
+      await auditPage(np, 'store from a level');
+      await np.shot('store-no-glimmer');
+      await np.page.locator('#shop-jar').tap();
+      await np.page.waitForFunction(() => window.__gd.shop().glimmer === 10);
+      await np.page.keyboard.press('Escape');
+      eq('no Glimmer: Escape closes the store and stays on the level', [await np.gd('screen'), await np.gd('panel')], ['level', null]);
+      eq('no Glimmer: a jar refills the Hint button', await txt('#hint-val'), '10 left');
+      await np.page.locator('#btn-hint').tap();
+      await np.page.waitForFunction(() => window.__gd.hint() !== null, null, { timeout: 8000 }).catch(() => {});
+      eq('no Glimmer: then a hint costs one', [(await np.gd('hint')) !== null, (await np.gd('shop')).glimmer, await txt('#hint-val')], [true, 9, '9 left']);
+      await np.close();
+    }
   }
 
   // ------------------------------------------------------------------ screenshots

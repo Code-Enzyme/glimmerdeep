@@ -1,8 +1,9 @@
 // The thin layer between the game and the Android/iOS app shell (Capacitor). In a browser every call
 // here falls back to web behaviour or does nothing, so the single-file web build keeps working.
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import { playStore, testStore } from './billing.js';
 
 export function isNative() {
   try {
@@ -40,4 +41,26 @@ export function haptic(kind) {
   } catch (e) {
     // haptics are a nicety
   }
+}
+
+// ---------------------------------------------------------------- the store (SPEC section 14)
+//
+// openStore(catalog) -> Promise of the store that sells (its shape is in src/ui/billing.js). Release apps
+// sell through Google Play (BillingPlugin in the Android project). Debug apps, browsers and every check get
+// the test store: each purchase succeeds at once, free.
+
+const Billing = registerPlugin('Billing');
+
+export async function openStore(catalog) {
+  if (isNative()) {
+    try {
+      if (Capacitor.isPluginAvailable('Billing')) {
+        const info = await Billing.info();
+        if (info && info.play === true) return playStore(catalog, Billing);
+      }
+    } catch (e) {
+      // no billing in this shell: the test store
+    }
+  }
+  return testStore(catalog);
 }

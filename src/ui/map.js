@@ -21,7 +21,8 @@ export function levelNumber(def, indexInChapter) {
   return m ? m[1] : String(indexInChapter + 1);
 }
 
-// opts: { chapters, levels, records: { [id]: { moves, stars } }, isUnlocked(def), onOpen(def), onLocked(def, node) }
+// opts: { chapters, levels, records: { [id]: { moves, stars } }, isUnlocked(def), onOpen(def), onLocked(def, node),
+//         chapterLocked(chapter) (part of the Full Expedition, not bought), onShop(chapter) }
 export function renderMap(root, opts) {
   root.textContent = '';
   const firstOpen = opts.levels.find((def) => !opts.records[def.id] && opts.isUnlocked(def));
@@ -38,7 +39,17 @@ export function renderMap(root, opts) {
     names.appendChild(el('h2', '', chapter.name));
     head.appendChild(names);
     const solved = levels.filter((def) => opts.records[def.id]).length;
-    if (levels.length) head.appendChild(el('span', 'tally', `${solved} of ${levels.length} lit`));
+    const paid = !!(opts.chapterLocked && opts.chapterLocked(chapter));
+    if (paid) {
+      section.classList.add('paid');
+      const unlock = el('button', 'btn chapter-unlock', 'Unlock');
+      unlock.type = 'button';
+      unlock.setAttribute('aria-label', `Unlock chapter ${chapter.id} with the Full Expedition`);
+      unlock.addEventListener('click', () => opts.onShop(chapter));
+      head.appendChild(unlock);
+    } else if (levels.length) {
+      head.appendChild(el('span', 'tally', `${solved} of ${levels.length} lit`));
+    }
     section.appendChild(head);
 
     if (!levels.length) {
@@ -61,15 +72,19 @@ export function renderMap(root, opts) {
         const stars = record ? record.stars : 0;
         node.setAttribute('aria-label', open
           ? `Level ${def.id}, ${def.name}` + (record ? `, ${stars} of 3 star moss, best ${record.moves} moves` : ', not solved yet')
-          : `Level ${def.id}, locked. Solve the level before it first.`);
-        if (!open) node.setAttribute('aria-disabled', 'true');
+          : paid ? `Level ${def.id}, locked. Part of the Full Expedition.` : `Level ${def.id}, locked. Solve the level before it first.`);
+        if (!open && !paid) node.setAttribute('aria-disabled', 'true');   // a paid level still acts: it opens the store
         const dot = el('span', 'dot', levelNumber(def, i));
         if (!open) dot.appendChild(el('span', 'lock ico'));
         node.appendChild(dot);
         const moss = el('span', 'moss-row');
         moss.innerHTML = mossSvg(stars >= 1) + mossSvg(stars >= 2) + mossSvg(stars >= 3);
         node.appendChild(moss);
-        node.addEventListener('click', () => (open ? opts.onOpen(def) : opts.onLocked(def, node)));
+        node.addEventListener('click', () => {
+          if (open) opts.onOpen(def);
+          else if (paid) opts.onShop(chapter);
+          else opts.onLocked(def, node);
+        });
         trail.appendChild(node);
       });
       section.appendChild(trail);

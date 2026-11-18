@@ -58,3 +58,37 @@ test('store: reset progress clears levels and seen story pages, and keeps the se
   assert.deepEqual(save.seen, []);
   assert.equal(save.settings.contrast, true);
 });
+
+test('store: a fresh save has a fresh shop (SPEC section 14)', () => {
+  withStorage();
+  assert.deepEqual(loadSave().shop, { full: false, glimmer: 3, freeAt: 0, paid: [] });
+});
+
+test('store: the shop round-trips through storage, and an old save without one gets a fresh shop', () => {
+  const data = withStorage();
+  const save = loadSave();
+  save.shop.full = true;
+  save.shop.glimmer = 12;
+  save.shop.freeAt = 1234;
+  save.shop.paid.push('J1');
+  assert.equal(writeSave(save), true);
+  assert.deepEqual(JSON.parse(data.get(SAVE_KEY)).shop, { full: true, glimmer: 12, freeAt: 1234, paid: ['J1'] });
+  assert.deepEqual(loadSave().shop, { full: true, glimmer: 12, freeAt: 1234, paid: ['J1'] });
+
+  withStorage(JSON.stringify({ levels: {}, seen: [] }));
+  assert.deepEqual(loadSave().shop, { full: false, glimmer: 3, freeAt: 0, paid: [] });
+  withStorage(JSON.stringify({ levels: {}, shop: { full: 1, glimmer: 'lots' } }));
+  assert.deepEqual(loadSave().shop, { full: false, glimmer: 0, freeAt: 0, paid: [] });
+});
+
+test('store: reset progress keeps the purchases and the Glimmer', () => {
+  withStorage();
+  const save = loadSave();
+  save.shop.full = true;
+  save.shop.glimmer = 9;
+  recordResult(save, '1-1', 5, 3);
+  clearProgress(save);
+  assert.deepEqual(save.levels, {});
+  assert.equal(save.shop.full, true);
+  assert.equal(save.shop.glimmer, 9);
+});

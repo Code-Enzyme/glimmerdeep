@@ -14,6 +14,11 @@ Tutorials setting on the map turns all of that off.
 Between chapters Wren's journal tells the story: why the Heartroot is dimming, and what the Gloam
 really is. The Field Journal on the map keeps every story page and a page for each creature met.
 
+Chapter 1 is free. One payment, the Full Expedition, opens chapters 2 to 7, and Glimmer jars buy
+instant hints; a free hint comes every ten minutes anyway. No ads, no energy, no lives. Release builds
+sell through Google Play Billing (`android/.../BillingPlugin.java`); debug builds and browsers use a
+free test store, so every purchase can be tried without a Play account (SPEC section 14).
+
 Android first, iOS later. The game is plain JavaScript drawn on a canvas, wrapped as a native app with
 [Capacitor](https://capacitorjs.com/).
 
@@ -26,7 +31,8 @@ npm run build                     # -> dist/glimmerdeep.html, open it in any bro
 npm run check                     # everything CI checks in a browser
 ```
 
-Open `dist/glimmerdeep.html?unlock=1` to play any level, or `?level=2-3` to jump straight to one.
+Open `dist/glimmerdeep.html?unlock=1` to play any level without buying anything, or `?level=2-3` to jump
+straight to one.
 
 ## The Android app
 
@@ -47,11 +53,11 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `SPEC.md` | The rules contract: board, turn order, creatures, light, level format, module contracts |
 | `docs/glimmerdeep-design.md` | The full game design document |
 | `src/engine.js`, `src/solver.js` | Rules and the shortest-solution solver (pure) |
-| `src/levels/` | The levels, by chapter (36 in seven chapters) |
+| `src/levels/` | The levels, by chapter (70 in seven chapters) |
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |
-| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the app-shell bridge (`ui/native.js`) |
+| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the app-shell bridge (`ui/native.js`) |
 | `tools/` | Build, level verifier, icon maker |
 | `dev/` | Browser and device checks, plus the level-design search scripts |
 | `android/` | The Capacitor Android project |

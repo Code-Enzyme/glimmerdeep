@@ -2,7 +2,9 @@
 // Installs the debug APK, opens the app, and through the app's own WebView:
 //   1. the app opens on the title screen, Play shows the map, and the page has no script errors,
 //   2. level 1-1 and the last level of each chapter solve at par through the game's moves,
-//   3. the save survives the app being killed and opened again.
+//   3. the store (SPEC section 14): the Billing plugin is in the app, a debug build uses the free test store,
+//      and the Full Expedition bought there opens the later chapters,
+//   4. the save, purchases included, survives the app being killed and opened again.
 // Screenshots of the real device screen go to dev/device-shots/. Needs adb on PATH and one device.
 const { _android: android } = require('playwright');
 const path = require('path');
@@ -95,6 +97,31 @@ async function killApp(device, webview) {
   await device.screenshot({ path: path.join(shots, 'result.png') });
   const before = await page.evaluate(() => Object.keys(window.__gd.save().levels).sort());
 
+  // the store: the native Billing plugin answers, and a debug build keeps to the free test store
+  const billing = await page.evaluate(async () => {
+    const cap = window.Capacitor;
+    const available = !!(cap && cap.isPluginAvailable && cap.isPluginAvailable('Billing'));
+    let info = null;
+    try {
+      if (available) info = cap.Plugins && cap.Plugins.Billing ? await cap.Plugins.Billing.info() : await cap.nativePromise('Billing', 'info', {});
+    } catch (e) {
+      info = { error: String(e) };
+    }
+    return { available, info, kind: window.__gd.shop().kind };
+  });
+  if (!billing.available) fail('the Billing plugin is not registered in the app');
+  else if (!billing.info || billing.info.play !== false) fail(`Billing.info() on a debug build said ${JSON.stringify(billing.info)}, not play: false`);
+  if (billing.kind !== 'test') fail(`a debug build uses the ${billing.kind} store, not the test store`);
+  console.log(`store: Billing plugin ${billing.available ? 'present' : 'missing'}, info ${JSON.stringify(billing.info)}, ${billing.kind} store`);
+  await page.evaluate(() => document.getElementById('btn-shop').click());
+  await page.waitForFunction(() => window.__gd.panel() === 'shop', null, { timeout: 10000 });
+  await page.waitForTimeout(400);
+  await device.screenshot({ path: path.join(shots, 'store.png') });
+  await page.evaluate(() => document.getElementById('shop-full').click());
+  await page.waitForFunction(() => window.__gd.shop().full === true, null, { timeout: 10000 }).catch(() => {});
+  if (!(await page.evaluate(() => window.__gd.shop().full))) fail('the Full Expedition from the test store was not granted');
+  else console.log('store: the Full Expedition bought in the test store');
+
   // kill the app and open it again: the bests must still be there
   await killApp(device, webview);
   ({ webview, page } = await openApp(device));
@@ -104,6 +131,8 @@ async function killApp(device, webview) {
   const after = await page.evaluate(() => Object.keys(window.__gd.save().levels).sort());
   if (JSON.stringify(after) !== JSON.stringify(before)) fail(`save lost across restart: before ${before} after ${after}`);
   else console.log(`save kept across restart: ${after.join(', ')}`);
+  if (!(await page.evaluate(() => window.__gd.shop().full))) fail('the Full Expedition was lost across the restart');
+  else console.log('purchases kept across restart');
   const seen = await page.evaluate(() => window.__gd.save().seen.length);
   if (seen !== CHAPTERS.length + 1) fail(`${seen} story pages counted as seen, not ${CHAPTERS.length + 1}`);
   else console.log(`story pages seen: ${seen}`);

@@ -409,9 +409,11 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
   motion), the name, and one big **Play** button in thumb reach. Once any cavern is lit, a line under
   Play counts them ("3 of 16 caverns lit").
 - **Play** opens the **map** (choose a cavern, settings), after any story pages that are due (section 13).
-  A cavern opens the **level** screen. The map's **Journal** button opens the **Field Journal**.
+  A cavern opens the **level** screen. The map's **Journal** button opens the **Field Journal**, and its
+  **Store** button the store panel (section 14).
 - Back (Android back button, or Escape): result panel or any open panel first, then level → map →
-  title → leave the app; the Journal goes back to the map, and a story page closes its book (section 13).
+  title → leave the app; the Journal goes back to the map, a story page closes its book (section 13), and
+  the store panel closes.
   Enter or Space on the title plays.
 - `?level=<id>` skips straight to that level; anything else in the URL still opens on the title.
 
@@ -497,3 +499,49 @@ come between chapters, and the Field Journal keeps every page and a sketch of ev
   every species found in the levels has a note; ids are unique; titles and lines keep to their lengths;
   cast members are known; no story text or note uses he, she, him, her, his, hers, himself or herself.
 - Turning to a story page plays `'page'`, a soft paper sound.
+
+## 14. Store (decided 18 Nov 2026)
+
+Free to download, chapter 1 free, one payment for the rest (design doc section 8). No ads, no energy, no
+lives. Prices and amounts marked [PLACEHOLDER - PLAYTEST] are starting points, not market data.
+
+- **Products** (ids as set up in the Play Console):
+
+  | id | Type | Price | What it gives |
+  | --- | --- | --- | --- |
+  | `full_expedition` | one-time | $4.99 [PLACEHOLDER - PLAYTEST] | Chapters 2 to 7 |
+  | `glimmer_10` | consumable | $0.99 [PLACEHOLDER - PLAYTEST] | 10 Glimmer (instant hints) |
+
+  Prices on screen come from the store in the player's own currency; the table's prices only show in the
+  test store and while real prices load ("…" until then).
+- **Chapters:** chapter 1 is free. A level in any later chapter opens only with the Full Expedition, and
+  then by the usual rule (it is solved, or the level before it is). The **Unlock all** setting skips the
+  level order, never the purchase. Developer links skip both: `?unlock=1` opens everything, and
+  `?level=<id>` (and the `loadLevel` check hook) opens any level.
+- **Hints:** a hint is **free** when no free hint was taken in the last 10 minutes [PLACEHOLDER - PLAYTEST]
+  (so the first hint ever is free). Otherwise it spends one **Glimmer**. A new save starts with 3 Glimmer
+  [PLACEHOLDER - PLAYTEST]. A hint is paid for when it is asked for, whatever it finds. With no free hint
+  and no Glimmer, Hint opens the store instead, which says when the next free hint comes. The Hint button's
+  second line shows what the next hint costs: "free", "3 left" (Glimmer), or "in 7 min" when there is
+  neither.
+- **Purchases** (the rules of Squirm's `PurchaseBook`, in `src/ui/shop.js`, no DOM, tested in Node): the app
+  shell reports purchases as `{ products: [id], token, state: 'purchased' | 'pending' | 'other',
+  acknowledged }`. `settle(save, purchases)` grants each purchase exactly once, even when the store reports
+  it again (on restore, at startup, or because confirming it failed): the Full Expedition sets
+  `shop.full`; a Glimmer jar adds its Glimmer once per purchase token. Pending payments grant nothing until
+  they clear. It returns what to confirm with the store: a one-time purchase is acknowledged (the store
+  refunds it after three days otherwise); a jar is consumed, so it can be bought again.
+- **Save:** the save gains `shop: { full, glimmer, freeAt, paid }`: the Full Expedition, the Glimmer
+  left, when the last free hint was taken (ms since 1970, 0 for never), and the tokens of jars already paid
+  out (the last 50). Reset progress keeps `shop`: purchases are not progress.
+- **Store panel:** opens from the map's Store button, from a locked chapter (its Unlock button or any of
+  its levels), from Hint when nothing is left, and from Next level on the last level of chapter 1 while
+  chapter 2 is locked (after the chapter's story page, the first time). It offers the Full Expedition
+  ("Chapters 2 to 7: 60 more caverns and the rest of Wren's story. One payment, no ads."), the Glimmer jar
+  (with the Glimmer left and when the next free hint comes), and Restore purchases. Owned products say
+  "Owned". Back, Escape or Close shuts it. A finished purchase plays `'solve'`.
+- **The app shell:** release builds sell through Google Play Billing (`BillingPlugin` in the Android
+  project, glue only: prices, buy, owned purchases, confirm, and late purchases as `purchases` events).
+  Debug builds, browsers and every check use the **test store**: every purchase succeeds at once, free, and
+  the panel says "Test build: purchases are free." `src/ui/native.js` picks the store; the rest of the
+  game never knows which one it has.
