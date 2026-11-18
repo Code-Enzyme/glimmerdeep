@@ -1,0 +1,1 @@
+{ "w": 9, "h": 7, "feature": "RH", "pieces": { "R": [1, 2] }, "puddles": [0, 1], "buds": [1, 2], "planted": true, "shutter": true, "gloam": true, "hushEdge": true, "creepThreat": true, "par": [16, 34], "floor": 28 }

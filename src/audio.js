@@ -18,7 +18,7 @@ export const SOUND_NAMES = [
   'whelkEmerge', 'stumpStep', 'stumpBump', 'stumpWake', 'newtStep', 'newtTurn', 'newtDoze', 'newtWake',
   'emberWarm', 'emberCool', 'emberIgnite', 'emberStep', 'gloamDrift', 'gloamSnuff', 'aim', 'beetleCrawl', 'beetleGlint',
   'gateOpen', 'gateClose', 'budOn', 'budOff',
-  'solve', 'undo', 'restart', 'ui', 'hint', 'page',
+  'solve', 'undo', 'restart', 'ui', 'hint', 'page', 'creep', 'caught',
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ const LEVELS = {
   stumpWake: 0.1, newtStep: 0.27, newtTurn: 0.5, newtDoze: 0.25, newtWake: 0.27,
   emberWarm: 0.5, emberCool: 0.3, emberIgnite: 0.25, emberStep: 0.235, gloamDrift: 0.24, gloamSnuff: 0.36,
   aim: 0.3, beetleCrawl: 0.24, beetleGlint: 0.2, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
-  undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185, page: 0.34,
+  undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185, page: 0.34, creep: 0.2, caught: 0.5,
 };
 
 // Sounds that are only colour. They are dropped first when a turn gets busy.
@@ -695,6 +695,28 @@ SOUNDS.gloamSnuff = function (k, t) {
   const a = tone(k, 'triangle', 392, t, 0.3, 0.012, 0.34);
   a.frequency.exponentialRampToValueAtTime(196, t + 0.3);
   tone(k, 'sine', 98, t + 0.08, 0.25, 0.05, 0.4);
+};
+
+// The Gloam's Hush creeps over the floor (SPEC section 17): a low breath drawn in, with the faintest sinking hum.
+SOUNDS.creep = function (k, t) {
+  const v = 1 + (k.r() - 0.5) * 0.1;
+  const f = hiss(k, 'lowpass', 380 * v, 1.2, t, 0.34, 0.18, 0.32);
+  f.frequency.setValueAtTime(380 * v, t);
+  f.frequency.exponentialRampToValueAtTime(190 * v, t + 0.5);
+  const o = tone(k, 'sine', 82 * v, t + 0.04, 0.22, 0.16, 0.34);
+  o.frequency.exponentialRampToValueAtTime(64 * v, t + 0.5);
+};
+
+// The Hush reaches Wren: the light is swallowed in a long sinking swell over a soft, muffled thud.
+SOUNDS.caught = function (k, t) {
+  const f = hiss(k, 'bandpass', 1500, 1.4, t, 0.3, 0.04, 0.7);
+  f.frequency.setValueAtTime(1500, t);
+  f.frequency.exponentialRampToValueAtTime(160, t + 0.7);
+  const a = tone(k, 'triangle', 330, t, 0.26, 0.03, 0.62);
+  a.frequency.exponentialRampToValueAtTime(110, t + 0.62);
+  const b = tone(k, 'sine', 247, t + 0.05, 0.2, 0.05, 0.6);
+  b.frequency.exponentialRampToValueAtTime(82, t + 0.6);
+  tone(k, 'sine', 55, t + 0.12, 0.4, 0.04, 0.6);
 };
 
 // The shutter closes round the planted lantern: a short metal slide that ends on a click, and the hum of

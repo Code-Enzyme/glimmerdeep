@@ -10,7 +10,10 @@
 //     "planted": false,               // may start with the lantern planted (L)
 //     "shutter": false,
 //     "par": [14, 30],                // keep levels whose shortest solution is in this range
-//     "floor": 30 }                   // at most this many open tiles, so length comes from the puzzle
+//     "floor": 30,                    // at most this many open tiles, so length comes from the puzzle
+//     "gloam": true,                  // a Gloam encounter (SPEC section 17): the Hush creeps; list H in feature
+//     "hushEdge": true,               // the Hush fills the west column and stays there (with gloam)
+//     "creepThreat": true }           // the creep must force a detour, not open a way (with gloam)
 //
 // Each restart builds a random cave, then mutates it (walls, pieces, puddles, facings) and keeps a change
 // when the level still passes the checks and scores no worse: score = par + creature moves / 6 - 1.5 x idle
@@ -30,6 +33,7 @@ const RESTARTS = Number(opt('restarts', 10));
 const ITERS = Number(opt('iters', 300));
 // a small search budget while climbing keeps it quick; pick a result and run the full level check on it
 const STATES = Number(opt('states', 30000));
+const TRIES = Number(opt('tries', 400));   // mutations spent looking for a first valid level per restart
 let seed = Number(opt('seed', 1)) >>> 0;
 const out = opt('out', null);
 const W = spec.w;
@@ -66,6 +70,7 @@ function toDef(lv) {
   const def = { id: 'g', name: 'gen', par: 0, feature: spec.feature, map: rows.map((r) => r.join('')) };
   if (Object.keys(under).length) def.under = under;
   if (spec.shutter) def.shutter = true;
+  if (spec.gloam) def.gloam = true;
   return def;
 }
 
@@ -102,6 +107,16 @@ function fromDef(def) {
     });
     grid.push(r);
   });
+  // an encounter grown from a shipped level: the Hush takes the west column (whatever stood there goes)
+  if (spec.hushEdge) {
+    for (let y = 1; y < grid.length - 1; y++) grid[y][1] = 'H';
+    const kept = things.filter((t) => t.x !== 1);
+    if (!kept.some((t) => t.ch === 'W')) {
+      const spot = grid.flatMap((row, y) => row.map((ch, x) => [x, y, ch])).find(([x, y, ch]) => ch === '.' && x > 1 && !kept.some((t) => t.x === x && t.y === y));
+      if (spot) kept.push({ ch: 'W', x: spot[0], y: spot[1] });
+    }
+    return { grid, things: kept };
+  }
   return { grid, things };
 }
 
@@ -110,6 +125,7 @@ function randomLevel() {
   for (let y = 0; y < H; y++) {
     const row = [];
     for (let x = 0; x < W; x++) row.push(x === 0 || y === 0 || x === W - 1 || y === H - 1 || rand() < 0.38 ? '#' : '.');
+    if (spec.hushEdge && y > 0 && y < H - 1) row[1] = 'H';
     grid.push(row);
   }
   const lv = { grid, things: [] };
@@ -153,6 +169,7 @@ function mutate(lv0) {
     // flip a wall and a floor tile
     const [x, y] = pick(inner(lv));
     if (lv.things.some((t) => t.x === x && t.y === y)) return lv;
+    if (spec.hushEdge && x === 1) return lv;   // the Hush's own column stays as it is
     if (lv.grid[y][x] === '#') lv.grid[y][x] = '.';
     else if (lv.grid[y][x] === '.') lv.grid[y][x] = '#';
   } else if (r < 0.65) {
@@ -169,7 +186,7 @@ function mutate(lv0) {
     t.y = y;
   } else if (r < 0.75) {
     // move a terrain feature (bud, puddle, hush, root or gate)
-    const special = inner(lv).filter(([x, y]) => SPECIAL.includes(lv.grid[y][x]));
+    const special = inner(lv).filter(([x, y]) => SPECIAL.includes(lv.grid[y][x]) && !(spec.hushEdge && lv.grid[y][x] === 'H'));
     if (!special.length) return lv;
     const [x, y] = pick(special);
     const cells = freeCells(lv);
@@ -179,7 +196,7 @@ function mutate(lv0) {
     lv.grid[y][x] = '.';
   } else if (r < 0.83) {
     // add or remove a puddle (or hush)
-    const kind = spec.hush && spec.hush[1] > 0 && rand() < 0.3 ? 'H' : '~';
+    const kind = spec.hush && spec.hush[1] > 0 && !spec.hushEdge && rand() < 0.3 ? 'H' : '~';
     const range = kind === 'H' ? spec.hush : (spec.puddles || [0, 0]);
     const have = inner(lv).filter(([x, y]) => lv.grid[y][x] === kind);
     if (have.length < range[1] && (rand() < 0.5 || have.length <= range[0])) {
@@ -260,10 +277,23 @@ function evaluateNow(lv) {
   const par = main.moves.length;
   if (par < 4) return null;
   let searched = main.explored;
+  let stillPar = null;   // with feature H: the par with the Hush staying put (0 if then unsolvable)
+  let threat = true;
   for (const f of new Set(spec.feature)) {
     let without;
     if (f === 'L') without = solve(start, { maxStates: STATES, actions: ACTIONS.filter((a) => a !== 'L') });
     else if (f === 'A') without = solve(parseLevel({ ...def, shutter: false }), { maxStates: STATES });
+    else if (f === 'H') {
+      // the creep must change the answer: with the Hush staying put, no solution of exactly par
+      const still = solve(parseLevel({ ...def, gloam: false }), { maxStates: STATES });
+      if (still.solved ? still.moves.length === par : !still.exhausted) return null;
+      // "creepThreat": the creep must cost a detour (with the Hush staying put there is a shorter way). The climb
+      // may pass through levels without one, but only levels with one are kept.
+      threat = still.solved && still.moves.length < par;
+      searched += still.explored;
+      stillPar = still.solved ? still.moves.length : 0;
+      continue;
+    }
     else {
       if (!start.creatures.some((c) => c.type === f)) return null;
       without = solve(parseLevel(withoutKind(def, f)), { maxStates: STATES });
@@ -276,8 +306,12 @@ function evaluateNow(lv) {
   let creatureMoves = 0;
   let idle = 0;
   const opp = { N: 'S', S: 'N', E: 'W', W: 'E' };
+  let crept = 0;
+  let dark = 0;   // turns Wren spends without the lantern (an encounter's run ahead in the dark)
   main.moves.forEach((m, i) => {
     s = step(s, m);
+    for (const e of s.events) if (e.type === 'creep') crept += e.tiles.length;
+    if (!s.lantern.carried) dark++;
     // a wait, a step straight back, or picking the lantern straight back up (or setting it straight back down)
     // (spec.idleBack false: steps straight back are how a whelk is herded, so they do not count)
     const back = spec.idleBack !== false && i > 0 && opp[m] === main.moves[i - 1];
@@ -287,8 +321,12 @@ function evaluateNow(lv) {
   // every creature beyond the fewest the spec allows costs a little: a puzzle should not be clutter
   let extra = 0;
   for (const [kind, [lo]] of Object.entries(spec.pieces || {})) extra += Math.max(0, start.creatures.filter((c) => c.type === kind).length - lo);
-  const score = par + creatureMoves / 6 - 1.5 * idle - 1.5 * extra;
-  return { par, moves: main.moves.join(''), score, explored: main.explored, searched, idle, creatureMoves, def };
+  let score = par + creatureMoves / 6 - 1.5 * idle - 1.5 * extra;
+  // an encounter: the Hush should press, and the creep should cost a real detour (or be the whole puzzle)
+  if (stillPar !== null) score += Math.min(crept, 20) / 5 + (stillPar === 0 ? 3 : Math.min(par - stillPar, 8) / 2) + Math.min(dark, 8) / 4;
+  if (spec.creepThreat) score += threat ? 8 : 0;
+  const keep = !spec.creepThreat || threat;
+  return { par, moves: main.moves.join(''), score, explored: main.explored, searched, idle, creatureMoves, crept, stillPar, dark, keep, def };
 }
 
 // --from=chN: start each restart from one of that chapter's shipped levels, shaken up a little, and only
@@ -311,7 +349,7 @@ for (let r = 0; r < RESTARTS; r++) {
   let lv = seedLevel ? clone(seedLevel.lv) : randomLevel();
   if (seedLevel) for (let k = 3 + ri(10); k > 0; k--) lv = mutate(lv);
   let ev = evaluate(lv);
-  for (let tries = 0; !ev && tries < 400; tries++) {
+  for (let tries = 0; !ev && tries < TRIES; tries++) {
     lv = mutate(lv);
     ev = evaluate(lv);
     if (!ev && tries % 60 === 59) lv = seedLevel ? clone(seedLevel.lv) : randomLevel();
@@ -325,7 +363,7 @@ for (let r = 0; r < RESTARTS; r++) {
     if (ce.score >= ev.score - (rand() < 0.05 ? 1.5 : 0)) {
       lv = cand;
       ev = ce;
-      if (ev.score > best.ev.score && ev.par <= parMax) best = { lv, ev };
+      if ((ev.score > best.ev.score || !best.ev.keep) && ev.keep && ev.par <= parMax) best = { lv, ev };
     }
     if (ev.par > parMax + 6) {
       lv = best.lv;
@@ -343,7 +381,7 @@ for (let r = 0; r < RESTARTS; r++) {
       plv.things.forEach((t, i) => { if (t.ch !== 'W') tries.push((l) => { l.things.splice(i, 1); }); });
       for (const [x, y] of inner(plv)) {
         const ter = plv.grid[y][x];
-        if (ter === '#') continue;
+        if (ter === '#' || (spec.hushEdge && x === 1)) continue;
         if (plv.things.some((t) => t.x === x && t.y === y)) continue;
         tries.push((l) => { l.grid[y][x] = '#'; });
         if (ter !== '.') tries.push((l) => { l.grid[y][x] = '.'; });
@@ -352,7 +390,7 @@ for (let r = 0; r < RESTARTS; r++) {
         const cand = clone(plv);
         f(cand);
         const ce = evaluate(cand);
-        if (ce && ce.par >= pev.par && ce.idle <= pev.idle) {
+        if (ce && ce.par >= pev.par && ce.idle <= pev.idle && (ce.keep || !pev.keep)) {
           plv = cand;
           pev = ce;
           changed = true;
@@ -365,8 +403,10 @@ for (let r = 0; r < RESTARTS; r++) {
   const e = best.ev;
   if (seedLevel && seeds.some((sd) => differs(best.lv, sd.lv) < 6)) {
     process.stderr.write(`restart ${r}: too close to a shipped level\n`);
+  } else if (!e.keep) {
+    process.stderr.write(`restart ${r}: no level where the creep forces a detour\n`);
   } else if (e.par >= parMin && e.par <= parMax) {
-    results.push({ from: seedLevel ? seedLevel.def.id : null, par: e.par, score: +e.score.toFixed(2), idle: e.idle, creatureMoves: e.creatureMoves, explored: e.explored, searched: e.searched, moves: e.moves, map: e.def.map, under: e.def.under });
+    results.push({ from: seedLevel ? seedLevel.def.id : null, par: e.par, score: +e.score.toFixed(2), idle: e.idle, creatureMoves: e.creatureMoves, crept: e.crept, stillPar: e.stillPar, dark: e.dark, explored: e.explored, searched: e.searched, moves: e.moves, map: e.def.map, under: e.def.under });
     process.stderr.write(`restart ${r}: par ${e.par} score ${e.score.toFixed(1)} idle ${e.idle} (${Math.round((Date.now() - t0) / 1000)}s)\n`);
     // written as it goes, so a long run that is stopped early still leaves its results
     if (out) fs.writeFileSync(out, JSON.stringify([...results].sort((a, b) => b.score - a.score), null, 1));
@@ -377,7 +417,7 @@ for (let r = 0; r < RESTARTS; r++) {
 results.sort((a, b) => b.score - a.score);
 if (out) fs.writeFileSync(out, JSON.stringify(results, null, 1));
 for (const r of results.slice(0, Number(opt('top', 8)))) {
-  console.log(`par ${r.par} score ${r.score} idle ${r.idle} cm ${r.creatureMoves} explored ${r.explored} ${r.moves}`);
+  console.log(`par ${r.par} score ${r.score} idle ${r.idle} cm ${r.creatureMoves}${r.stillPar !== null && r.stillPar !== undefined ? ` still ${r.stillPar} crept ${r.crept} dark ${r.dark}` : ''} explored ${r.explored} ${r.moves}`);
   for (const row of r.map) console.log('   ' + row);
   if (r.under) console.log('   under ' + JSON.stringify(r.under));
 }

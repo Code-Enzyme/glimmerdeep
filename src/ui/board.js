@@ -13,6 +13,7 @@ const KIND = {
 const SOUND_OF_MOVE = {
   M: 'moth', S: 'whelkMove', T: 'stumpStep', D: 'newtStep', K: 'emberStep', O: 'gloamDrift', R: 'beetleCrawl',
 };
+const CREEP_FADE = 320;   // ms the Hush takes to darken in over a tile it crept onto
 const BEAM_REACH = 4.6;   // how far the darkness lets an aimed lantern's glow reach, in tiles
 // an Emberwick warming, going cold and catching
 const SOUND_OF_HEAT = { warm: 'emberWarm', cool: 'emberCool', ignite: 'emberIgnite' };
@@ -83,8 +84,10 @@ export class BoardView {
     this.computeLayout();
   }
 
-  // Everything about a tile that never changes during a level is worked out once.
+  // Everything about a tile that never changes during a level is worked out once (again whenever the Hush
+  // creeps, in a Gloam encounter: the engine hands over a new `tiles` array then).
   buildTiles(state) {
+    this.tilesOf = state.tiles;
     const { w, h } = state;
     const kindAt = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 'wall' : KIND[state.tiles[y][x]] || 'floor');
     const tiles = [];
@@ -196,6 +199,7 @@ export class BoardView {
     this.dropAnim();
     this.shake = null;
     this.state = next;
+    if (next.tiles !== this.tilesOf) this.buildTiles(next);
     if (o.facing) this.facing = o.facing;
     const T = this.timing();
     const slide = tween ? Math.min(T.slide, 100) : T.slide;
@@ -215,6 +219,8 @@ export class BoardView {
       bridgeAt: Infinity,         // when a settling moth's puddle turns into a bridge
       radius: null,               // { from, to } while the lantern is being planted or picked up
       budAt: new Map(),           // bud index -> time it comes into bloom
+      creep: null,                // tile indexes the Hush crept onto this turn (they darken in from creepAt)
+      creepAt: 0,
       cues: [],
       cue: 0,
       litAt: 0,
@@ -308,6 +314,14 @@ export class BoardView {
           break;
         }
         case 'gate': once(a.settleAt, e.open ? 'gateOpen' : 'gateClose'); break;
+        case 'creep':
+          a.creep = new Set(e.tiles.map((c) => c.y * next.w + c.x));
+          a.creepAt = a.settleAt;
+          once(a.settleAt, 'creep');
+          break;
+        case 'caught':
+          cue(a.settleAt + CREEP_FADE * 0.5, 'caught', { type: 'caught', x: e.x, y: e.y });
+          break;
         case 'bud': {
           const index = next.buds.findIndex((b) => b.x === e.x && b.y === e.y);
           const at = a.settleAt + buds * 110;
@@ -321,7 +335,7 @@ export class BoardView {
     }
     a.cues.sort((p, q) => p.at - q.at);
     a.endAt = Math.max(a.settleAt + (a.ghosts.length ? T.drop : 0), tween ? 0 : T.hold);
-    a.doneAt = Math.max(a.endAt, a.radius ? 240 : 0, a.cues.length ? a.cues[a.cues.length - 1].at : 0);
+    a.doneAt = Math.max(a.endAt, a.radius ? 240 : 0, a.cues.length ? a.cues[a.cues.length - 1].at : 0, a.creep ? a.creepAt + CREEP_FADE : 0);
     this.anim = a;
   }
 
@@ -397,8 +411,8 @@ export class BoardView {
   }
 
   addEffect(fx, now) {
-    const dur = fx.type === 'bloom' ? 620 : fx.type === 'cross' ? 420 : 380;
-    if (this.reduced && fx.type !== 'bloom' && fx.type !== 'cross') return;
+    const dur = fx.type === 'bloom' ? 620 : fx.type === 'cross' ? 420 : fx.type === 'caught' ? 900 : 380;
+    if (this.reduced && fx.type !== 'bloom' && fx.type !== 'cross' && fx.type !== 'caught') return;
     if (this.effects.length > 24) this.effects.shift();
     this.effects.push({ type: fx.type, x: fx.x, y: fx.y, grow: !!fx.grow, t0: now !== undefined ? now : performance.now(), dur });
   }
@@ -626,7 +640,16 @@ export class BoardView {
           }
         }
       }
-      drawTile(ctx, kind, ox + tile.x * size, oy + tile.y * size, size, o);
+      const creeping = a && a.creep && a.creep.has(i) ? clamp01((tau - a.creepAt) / CREEP_FADE) : 1;
+      if (creeping < 1) {
+        // the Hush darkens in over the floor it crept onto
+        drawTile(ctx, 'floor', ox + tile.x * size, oy + tile.y * size, size, o);
+        ctx.globalAlpha = creeping;
+        drawTile(ctx, kind, ox + tile.x * size, oy + tile.y * size, size, o);
+        ctx.globalAlpha = 1;
+      } else {
+        drawTile(ctx, kind, ox + tile.x * size, oy + tile.y * size, size, o);
+      }
     }
 
     for (let i = 0; i < things.length; i++) {
@@ -940,6 +963,19 @@ export class BoardView {
           ctx.arc(x + (k - 1) * size * 0.17, y - size * (0.62 + 0.1 * e), size * 0.05, 0, TAU);
           ctx.fill();
         }
+        ctx.globalAlpha = 1;
+      } else if (fx.type === 'caught') {
+        // the Hush closes over Wren: the board dims, and a dark ring shrinks onto the tile
+        const dim = Math.sin(Math.PI * p);
+        ctx.globalAlpha = 0.45 * dim;
+        ctx.fillStyle = PALETTE.ink;
+        ctx.fillRect(L.ox, L.oy, L.w * size, L.h * size);
+        ctx.globalAlpha = 0.85 * (1 - p);
+        ctx.beginPath();
+        ctx.arc(x, y, size * (1.6 - 1.1 * e), 0, TAU);
+        ctx.lineWidth = line * 3 * (1 - p) + 0.5;
+        ctx.strokeStyle = PALETTE.ink;
+        ctx.stroke();
         ctx.globalAlpha = 1;
       } else if (fx.type === 'cross') {
         const k = size * 0.16;

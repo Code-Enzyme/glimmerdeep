@@ -3,7 +3,8 @@
 import { ACTIONS, parseLevel, step, key } from './engine.js';
 
 // Breadth-first search, so the first solution found is a shortest one. Among equally short solutions the
-// one that uses earlier entries of `actions` first wins, which keeps the result deterministic.
+// one that uses earlier entries of `actions` first wins, which keeps the result deterministic. A position
+// where the Hush caught Wren (section 17) is a dead end and is not counted.
 //
 // -> { solved, moves, explored, exhausted }
 //    explored:  how many distinct positions were reached (never more than maxStates).
@@ -23,7 +24,7 @@ export function solve(state, { maxStates = 300000, actions = ACTIONS } = {}) {
     queue[head] = null;    // an expanded state is never needed again; the path lives in parent/via
     for (let a = 0; a < actionCount; a++) {
       const next = step(current, actions[a]);
-      if (next === null) continue;
+      if (next === null || next.caught) continue;
       if (next.solved) {
         const moves = [actions[a]];
         for (let i = head; parent[i] >= 0; i = parent[i]) moves.push(actions[via[i]]);
@@ -64,7 +65,7 @@ const SPECIES = {
   O: { chars: 'O', name: 'Gloamling' },
   R: { chars: '/\\', name: 'Mirrorbeetle' },
 };
-const FEATURES = 'M, S, T, D, K, O, R, L, A';
+const FEATURES = 'M, S, T, D, K, O, R, L, A, H';
 
 // The level with every creature of one species taken out. Whatever terrain was under a creature stays.
 function withoutSpecies(levelDef, species) {
@@ -87,7 +88,7 @@ function withoutSpecies(levelDef, species) {
 //    explored:  positions reached by the search for the shortest solution.
 //    searched:  positions reached by all searches together, the necessity searches included.
 //    featureOk: one entry per character of `feature`; true only when the level without that feature was
-//               searched exhaustively and has no solution.
+//               searched exhaustively and has no solution (for H: has no solution of exactly par moves).
 //    problems:  one sentence per reason the level is not ok.
 // `opts` are the solve() options and apply to every search.
 export function checkLevel(levelDef, opts) {
@@ -152,6 +153,23 @@ export function checkLevel(levelDef, opts) {
         continue;
       }
       without = solve(parseLevel({ ...levelDef, shutter: false }), options);
+    } else if (f === 'H') {
+      // The creeping Hush (section 17): necessary when, with the Hush staying put, no solution takes exactly par.
+      if (!start.creep) {
+        problems.push("feature 'H': the level is not a Gloam encounter (gloam: true)");
+        continue;
+      }
+      const still = solve(parseLevel({ ...levelDef, gloam: false }), options);
+      result.searched += still.explored;
+      checkSize(still, 'with the Hush staying put');
+      if (still.solved && still.moves.length === levelDef.par) {
+        problems.push(`feature 'H' is not necessary: solvable in ${plural(still.moves.length, 'move')} with the Hush staying put (${still.moves.join('')})`);
+      } else if (!still.solved && !still.exhausted) {
+        problems.push(`feature 'H': necessity not proven, the search with the Hush staying put stopped at maxStates (${plural(still.explored, 'position')})`);
+      } else {
+        result.featureOk[f] = true;
+      }
+      continue;
     } else if (Object.prototype.hasOwnProperty.call(SPECIES, f)) {
       what = `any ${SPECIES[f].name}`;
       if (!start.creatures.some((c) => c.type === f)) {

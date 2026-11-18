@@ -1,7 +1,7 @@
 // Tests for src/solver.js: the breadth-first solver, the hint (nextMove) and the level check.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIONS, parseLevel, step } from '../src/engine.js';
+import { ACTIONS, parseLevel, step, key } from '../src/engine.js';
 import { solve, nextMove, checkLevel } from '../src/solver.js';
 import ch1 from '../src/levels/ch1.js';
 
@@ -398,4 +398,52 @@ test('checkLevel: the search options are passed on', () => {
   const noPlanting = checkLevel(level, { actions: NO_PLANTING });
   assert.equal(noPlanting.ok, false);
   assert.equal(noPlanting.shortest, null);
+});
+
+// ---------------------------------------------------------------- Gloam encounters (SPEC section 17)
+
+// The Hush to the east takes the short way along the top before Wren gets there, so Wren goes round below.
+const ROUND_BELOW = ['########', '#W....H#', '#.###G##', '#.....##', '########'];
+
+test('solve: in a Gloam encounter the creeping Hush can force the long way round', () => {
+  assert.deepEqual(solve(parseLevel({ id: 't', map: ROUND_BELOW, gloam: true })).moves, ['S', 'S', 'E', 'E', 'E', 'E']);
+  assert.deepEqual(solve(parseLevel({ id: 't', map: ROUND_BELOW })).moves, ['E', 'E', 'E', 'E'], 'the Hush staying put');
+});
+
+test('solve: a position where the Hush caught Wren is a dead end and is not counted', () => {
+  // Wren in a Gloamling's shadow: waiting gets Wren caught; walking onto the Hush or planting does not
+  const start = parseLevel({ id: 't', map: ['######', '#HWO.#', '#G####'], gloam: true });
+  const seen = new Set([key(start)]);
+  const queue = [start];
+  let caught = 0;
+  for (let head = 0; head < queue.length; head++) {
+    for (const a of ACTIONS) {
+      const next = step(queue[head], a);
+      if (next === null) continue;
+      if (next.caught) { caught++; continue; }
+      if (!seen.has(key(next))) { seen.add(key(next)); queue.push(next); }
+    }
+  }
+  assert.ok(caught > 0, 'some move gets Wren caught');
+  const result = solve(start);
+  assert.equal(result.solved, false);
+  assert.equal(result.exhausted, true);
+  assert.equal(result.explored, seen.size);
+});
+
+test("checkLevel: feature 'H' is necessary when the Hush staying put changes the shortest solution", () => {
+  const level = { id: 't', name: 'T', note: '', map: ROUND_BELOW, gloam: true, par: 6, feature: 'H' };
+  const r = checkLevel(level);
+  assert.deepEqual(r.problems, []);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.featureOk, { H: true });
+  assert.ok(r.searched > r.explored, 'the search with the Hush staying put is counted');
+});
+
+test("checkLevel: feature 'H' needs a Gloam encounter, and a creep that matters", () => {
+  const plain = checkLevel({ id: 't', map: ROUND_BELOW, par: 4, feature: 'H' });
+  assert.deepEqual(plain.problems, ["feature 'H': the level is not a Gloam encounter (gloam: true)"]);
+  const idle = checkLevel({ id: 't', map: ['#######', '#H#W.G#', '#######'], gloam: true, par: 1, feature: 'H' });
+  assert.deepEqual(idle.problems, ["feature 'H' is not necessary: solvable in 1 move with the Hush staying put (E)"]);
+  assert.deepEqual(idle.featureOk, { H: false });
 });

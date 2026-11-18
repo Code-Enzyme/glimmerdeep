@@ -121,6 +121,14 @@ test('journal: story entries are unlocked like their pages, with a kicker naming
   assert.equal(j.pages[2].chapter.name, chapter(2).name);
 });
 
+test('journal: a page that has been seen stays unlocked, so saves from before the encounters keep their pages (SPEC section 17)', () => {
+  // the old last level of chapter 2 solved and its page seen, but not the encounter that now ends the chapter
+  const before = chapter(2).levels.slice(0, -1).map((d) => d.id);
+  const j = journal(saveWith([...chapter(1).levels.map((d) => d.id), ...before], ['prologue', 'ch1', 'ch2']), CHAPTERS);
+  assert.deepEqual(j.pages.map((p) => p.unlocked).slice(0, 4), [true, true, true, false]);
+  assert.deepEqual(storyDue(saveWith(before, ['prologue']), CHAPTERS), [], 'an unseen page still waits for its last level');
+});
+
 test('notes: every species has Wren\'s note', () => {
   for (const kind of ['M', 'S', 'T', 'D', 'K', 'O', 'R']) assert.ok(typeof NOTES[kind] === 'string' && NOTES[kind].length > 20, kind);
 });

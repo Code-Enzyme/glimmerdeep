@@ -124,8 +124,10 @@ export function speciesOf(def) {
 const solved = (save, def) => !!(save && save.levels && save.levels[def.id]);
 const seenSet = (save) => new Set(save && Array.isArray(save.seen) ? save.seen : []);
 
+// A page unlocks when its chapter's last level is solved, and stays unlocked once seen (SPEC section 17: the
+// encounters became the chapters' last levels after some pages had been read).
 function unlocked(page, save, chapters) {
-  if (page.chapter === 0) return true;
+  if (page.chapter === 0 || seenSet(save).has(page.id)) return true;
   const chapter = chapters.find((c) => c.id === page.chapter);
   const levels = (chapter && chapter.levels) || [];
   return levels.length > 0 && solved(save, levels[levels.length - 1]);

@@ -190,4 +190,23 @@ export default [
     ],
     note: 'Only a beam bent east along the water row reaches the bud, so the backslash beetle has to end up right under the lantern at the top of the middle shaft: walk both beetles round the loop until that one trails straight behind Wren up the shaft, then plant and aim down.',
   },
+  {
+    // the chapter's Gloam encounter (SPEC section 17)
+    id: '7-11',
+    name: 'Mirror Against the Dark',
+    feature: 'RH',
+    par: 18,
+    gloam: true,
+    map: [
+      '#########',
+      '#H##..###',
+      '#H##W.###',
+      '#H.....\\#',
+      '#H#.##G.#',
+      '#HL.....#',
+      '#########',
+    ],
+    note: 'The short way down the middle is swallowed by the Hush within two turns. Go round the east side while the beetle crawls west and dams the Hush along the middle row, fetch the planted lantern from the far corner, and carry it back east to the bud.',
+    tip: 'The Hush cannot creep where a creature stands.',
+  },
 ];

@@ -3,6 +3,8 @@
 //
 // States are plain JSON-safe objects and are never mutated. A new state shares everything that did not
 // change with the state it came from (tiles, buds, and usually creatures, bridges, gates and the light map).
+// `tiles` changes only in a Gloam encounter, where the Hush creeps (section 17); every state with the same
+// crept Hush shares one `tiles` array, so the per-terrain data below is worked out once per shape.
 
 export const ACTIONS = ['N', 'E', 'S', 'W', 'L', 'Z'];
 export const DIRS = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
@@ -58,7 +60,7 @@ function metaOf(state) {
   return meta;
 }
 
-function buildMeta(tiles, w, h) {
+function buildMeta(tiles, w, h, base) {
   const n = w * h;
   const terr = new Uint8Array(n);
   const roots = [[], [], []];      // tile indexes of the roots, per channel
@@ -75,11 +77,35 @@ function buildMeta(tiles, w, h) {
     }
   }
   const channels = [0, 1, 2].filter((c) => present[c]);
-  return {
+  const meta = {
     w, h, n, terr, roots, channels, buds,
     dark: Object.freeze(new Array(n).fill(0)),   // the light map of a smothered lantern
     light: new Array(n * 17),                    // light-map cache, see lightMap()
+    base: null,                                  // the level's own terrain, before any Hush crept
+    shapes: null,                                // on the base: crept Hush ('x,y;x,y') -> its shared tiles array
   };
+  meta.base = base || meta;
+  if (!base) meta.shapes = new Map();
+  return meta;
+}
+
+// The tiles array for the level's terrain with Hush on every tile of `hush` (sorted 'x,y' strings), shared
+// by every state with that crept Hush.
+function creptTiles(meta, tiles, hush) {
+  const base = meta.base;
+  const name = hush.join(';');
+  let shaped = base.shapes.get(name);
+  if (shaped === undefined) {
+    const rows = tiles.map((row) => row.split(''));
+    for (const at of hush) {
+      const comma = at.indexOf(',');
+      rows[+at.slice(comma + 1)][+at.slice(0, comma)] = 'H';
+    }
+    shaped = rows.map((row) => row.join(''));
+    base.shapes.set(name, shaped);
+    META.set(shaped, buildMeta(shaped, meta.w, meta.h, base));
+  }
+  return shaped;
 }
 
 // ---------------------------------------------------------------- parseLevel (SPEC section 6)
@@ -158,6 +184,8 @@ export function parseLevel(levelDef) {
     tiles.push(row);
   }
   if (wrens !== 1) fail(`the map needs exactly one Wren ('W'), found ${wrens}`);
+  const creep = levelDef.gloam === true;
+  if (creep && !tiles.some((row) => row.includes('H'))) fail('a Gloam encounter (gloam: true) needs at least one Hush tile (H)');
   if (lanterns > 1) fail(`the map may have at most one planted lantern ('L'), found ${lanterns}`);
 
   // Nothing may start where the terrain table (section 1) and the planting rule (section 2) say it can never be.
@@ -185,8 +213,11 @@ export function parseLevel(levelDef) {
     buds,
     bloom: null,
     shutter: levelDef.shutter === true,
+    creep,
+    hush: [],
     turn: 0,
     solved: false,
+    caught: false,
     events: [],
   };
   // Phases 4 to 6 run once for the initial state (section 2): a bud lit at the start is already in bloom.
@@ -531,7 +562,7 @@ function readingOrder(creatures, w) {
 }
 
 export function step(state, action) {
-  if (state.solved) return null;
+  if (state.solved || state.caught) return null;
   const meta = metaOf(state);
   const w = meta.w;
   const terr = meta.terr;
@@ -606,8 +637,11 @@ export function step(state, action) {
     buds: state.buds,
     bloom: state.bloom,
     shutter: state.shutter,
+    creep: state.creep,
+    hush: state.hush,
     turn: state.turn + 1,
     solved: false,
+    caught: false,
     events,
   };
 
@@ -767,7 +801,38 @@ export function step(state, action) {
       events.push({ type: 'solved' });
     }
   }
-  return next;   // phase 7: `turn` was already counted up above
+
+  // Phase 7: the creep (section 17). In an encounter that is not solved, every dark floor tile beside the
+  // Hush with no creature and no planted lantern on it turns to Hush, all at once; Wren on one is caught.
+  if (state.creep && !next.solved) creep(meta, state, next, lit);
+  return next;   // phase 8: `turn` was already counted up above
+}
+
+function creep(meta, state, next, lit) {
+  const { w, h, terr } = meta;
+  const { creatures, lantern } = next;
+  let crept = null;
+  let caught = false;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (terr[i] !== FLOOR || lit[i] === 1) continue;
+      const beside = (x > 0 && terr[i - 1] === HUSH) || (x < w - 1 && terr[i + 1] === HUSH)
+        || (y > 0 && terr[i - w] === HUSH) || (y < h - 1 && terr[i + w] === HUSH);
+      if (!beside || creatureIndexAt(creatures, x, y) >= 0) continue;
+      if (!lantern.carried && lantern.x === x && lantern.y === y) continue;
+      if (next.wren.x === x && next.wren.y === y) caught = true;
+      (crept || (crept = [])).push({ x, y });
+    }
+  }
+  if (crept === null) return;
+  next.hush = state.hush.concat(crept.map((t) => `${t.x},${t.y}`)).sort();
+  next.tiles = creptTiles(meta, state.tiles, next.hush);
+  next.events.push({ type: 'creep', tiles: crept });
+  if (caught) {
+    next.caught = true;
+    next.events.push({ type: 'caught', x: next.wren.x, y: next.wren.y });
+  }
 }
 
 // ---------------------------------------------------------------- key (SPEC section 7)
@@ -780,14 +845,16 @@ const KIND = {
   M: 0, S: 1, TN: 2, TE: 3, TS: 4, TW: 5, DN: 6, DE: 7, DS: 8, DW: 9, K0: 10, K1: 11, K2: 12, O: 13, 'R/': 14, 'R\\': 15,
 };
 const BRIDGE_KIND = 16;
+const HUSH_KIND = 17;   // a tile the Hush crept onto (section 17)
+const CAUGHT = '!';     // ends the key of a caught state; never one of the CHAR codes
 // The lantern in a key: its tile * 6 + 0 planted and round, 1 carried, 2 to 5 aimed N, E, S, W.
 const lanternMode = (lantern) => (lantern.carried ? 1 : lantern.beam === undefined ? 0 : 2 + DIR_INDEX[lantern.beam]);
 const CODES = [];   // scratch for key()
 
 // Identifies a position: Wren, the lantern (tile, carried, beam), the bloom flags, every creature (species,
-// tile, facing, shell, heat) and every bridge. Light, gates and `solved` follow from those, so they are not part of it;
-// `turn`, `events` and creature ids are deliberately left out. Two characters, one more per nine buds, and
-// one per creature and per bridge.
+// tile, facing, shell, heat), every bridge, every tile the Hush crept onto, and a catch. Light, gates and
+// `solved` follow from those, so they are not part of it; `turn`, `events` and creature ids are deliberately
+// left out. Two characters, one more per nine buds, one per creature, bridge and crept tile, and one if caught.
 export function key(state) {
   const w = state.w;
   const lantern = state.lantern;
@@ -802,7 +869,10 @@ export function key(state) {
   }
   const creatures = state.creatures;
   const bridges = state.bridges;
-  const n = creatures.length + bridges.length;
+  const hush = state.hush;
+  const nb = creatures.length + bridges.length;
+  const n = nb + hush.length;
+  if (state.caught) k += CAUGHT;   // fixed position, before any code, so it cannot be mistaken for one
   if (n === 0) return k;
 
   // One code per creature and per bridge: tile index * 32 + kind. The codes are sorted, which makes the
@@ -814,9 +884,9 @@ export function key(state) {
       const kind = c.type === 'M' || c.type === 'S' || c.type === 'O' ? KIND[c.type] : c.type === 'K' ? KIND[`K${c.heat}`] : KIND[c.type + c.dir];
       code = (c.y * w + c.x) * 32 + kind;
     } else {
-      const b = bridges[i - creatures.length];
+      const b = i < nb ? bridges[i - creatures.length] : hush[i - nb];
       const comma = b.indexOf(',');
-      code = (+b.slice(comma + 1) * w + +b.slice(0, comma)) * 32 + BRIDGE_KIND;
+      code = (+b.slice(comma + 1) * w + +b.slice(0, comma)) * 32 + (i < nb ? BRIDGE_KIND : HUSH_KIND);
     }
     let j = i - 1;
     while (j >= 0 && CODES[j] > code) {

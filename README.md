@@ -23,6 +23,9 @@ The Daily Glimmer, the map's first card, is one cavern a day, the same for every
 light it to keep a streak going, and earn a Glimmer the first time each day. The Full Expedition opens
 the last six days too, so a missed day can be mended (SPEC section 15).
 
+Each chapter ends with a Gloam encounter: the Gloam's Hush creeps a tile a turn over every dark floor tile
+beside it, and only light holds it back. If it reaches Wren, three moves go back (SPEC section 17).
+
 The save lives in `localStorage`. In the Android app every save is also written to a file
 (`android/.../SaveFilePlugin.java`), on disk before a purchase is confirmed, so an app swiped away right
 after a purchase still has it when it opens again (SPEC section 16).
@@ -61,7 +64,7 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `SPEC.md` | The rules contract: board, turn order, creatures, light, level format, module contracts |
 | `docs/glimmerdeep-design.md` | The full game design document |
 | `src/engine.js`, `src/solver.js` | Rules and the shortest-solution solver (pure) |
-| `src/levels/` | The levels, by chapter (70 in seven chapters), and the Daily Glimmer's 34 caverns (`daily.js`) |
+| `src/levels/` | The levels, by chapter (77 in seven chapters, each ending with its Gloam encounter), and the Daily Glimmer's 34 caverns (`daily.js`) |
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |

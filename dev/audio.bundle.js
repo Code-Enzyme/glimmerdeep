@@ -67,7 +67,9 @@ var GAudio = (() => {
     "restart",
     "ui",
     "hint",
-    "page"
+    "page",
+    "creep",
+    "caught"
   ];
   var MASTER_LEVEL = 0.75;
   var MUSIC_LEVEL = 1;
@@ -122,7 +124,9 @@ var GAudio = (() => {
     restart: 0.195,
     ui: 0.115,
     hint: 0.185,
-    page: 0.34
+    page: 0.34,
+    creep: 0.3,
+    caught: 0.3
   };
   var FOLEY = {
     step: 1,
@@ -674,6 +678,24 @@ var GAudio = (() => {
     const a = tone(k, "triangle", 392, t, 0.3, 0.012, 0.34);
     a.frequency.exponentialRampToValueAtTime(196, t + 0.3);
     tone(k, "sine", 98, t + 0.08, 0.25, 0.05, 0.4);
+  };
+  SOUNDS.creep = function(k, t) {
+    const v = 1 + (k.r() - 0.5) * 0.1;
+    const f = hiss(k, "lowpass", 380 * v, 1.2, t, 0.34, 0.18, 0.32);
+    f.frequency.setValueAtTime(380 * v, t);
+    f.frequency.exponentialRampToValueAtTime(190 * v, t + 0.5);
+    const o = tone(k, "sine", 82 * v, t + 0.04, 0.22, 0.16, 0.34);
+    o.frequency.exponentialRampToValueAtTime(64 * v, t + 0.5);
+  };
+  SOUNDS.caught = function(k, t) {
+    const f = hiss(k, "bandpass", 1500, 1.4, t, 0.3, 0.04, 0.7);
+    f.frequency.setValueAtTime(1500, t);
+    f.frequency.exponentialRampToValueAtTime(160, t + 0.7);
+    const a = tone(k, "triangle", 330, t, 0.26, 0.03, 0.62);
+    a.frequency.exponentialRampToValueAtTime(110, t + 0.62);
+    const b = tone(k, "sine", 247, t + 0.05, 0.2, 0.05, 0.6);
+    b.frequency.exponentialRampToValueAtTime(82, t + 0.6);
+    tone(k, "sine", 55, t + 0.12, 0.4, 0.04, 0.6);
   };
   SOUNDS.aim = function(k, t) {
     const f = hiss(k, "bandpass", 1800, 3, t, 0.22, 0.01, 0.12);

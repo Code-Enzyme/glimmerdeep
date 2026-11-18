@@ -76,11 +76,13 @@ An illegal action returns `null` and spends no turn. A legal action runs these p
    rest of the level even after the light leaves. The level is solved iff there is at least one Glowbud and
    every Glowbud is in bloom. (Changed from the design doc's "all lit at once": with one lantern that rule
    forces all buds into one cluster.)
-7. `turn` increases by 1.
+7. **Creep** (Gloam encounters only, section 17): if the level is not solved, the Hush creeps, and may
+   catch Wren.
+8. `turn` increases by 1.
 
 The initial state (from `parseLevel`) runs phases 4 to 6 once, with `turn = 0` (so a bud lit at the start
 is already in bloom). A level must not start solved.
-After a level is solved, `step` returns `null` for every action.
+After a level is solved, or Wren is caught (section 17), `step` returns `null` for every action.
 
 ## 3. Creatures
 
@@ -216,6 +218,7 @@ feature-removed variants) must stay under 150,000 positions, so that hints are i
   tip: 'Swipe to walk.',  // optional: one short player-facing line shown when the level opens (no spoilers)
   tutorial: [ ... ],      // optional: guided steps for a player's first visit (section 12)
   shutter: true,          // optional: the lantern can be aimed (section 2)
+  gloam: true,            // optional: a Gloam encounter, where the Hush creeps (section 17)
 }
 ```
 
@@ -227,9 +230,10 @@ in a JavaScript string), and optionally `L` a lantern that starts planted (then 
 `L`). A planted lantern always starts round.
 
 `feature` is a string of one or more of: `M`, `S`, `T`, `D`, `K`, `O`, `R` (the species), `L` (planting the
-lantern), `A` (aiming it). Necessity check, run for each listed character: for a species, the level with every
+lantern), `A` (aiming it), `H` (the creeping Hush). Necessity check, run for each listed character: for a species, the level with every
 creature of that species removed must be unsolvable; for `L`, the level must be unsolvable without the `L`
-action; for `A`, the level with `shutter: false` must be unsolvable.
+action; for `A`, the level with `shutter: false` must be unsolvable; for `H`, the level with `gloam: false`
+(the Hush stays put) must have no solution of exactly `par` moves (its shortest is shorter, or there is none).
 
 Optional `shutter: true` lets the lantern be aimed (section 2). Only levels that teach or use aiming have it.
 
@@ -246,6 +250,7 @@ export function step(state, action)         // -> NEW state, or null if illegal.
 export function key(state)                  // -> string that identifies the position (for the solver's visited set)
 export function isLit(state, x, y)          // -> boolean, from the stored light map
 export function terrainAt(state, x, y)      // -> one of '#', '.', '~', 'bridge', 'G', 'H', 'a'..'c', 'A'..'C'; '#' when out of bounds
+                                            //    (crept Hush is 'H')
 export function creatureAt(state, x, y)     // -> creature object or null
 export function canEnter(state, who, x, y)  // who: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R'. Terrain and occupancy check used by the rules.
 export function isGateOpen(state, channel)  // channel: 'A' | 'B' | 'C'
@@ -260,7 +265,8 @@ State (plain JSON-safe data; treat as immutable):
 ```js
 {
   w, h,
-  tiles: ['#########', ...],   // terrain only: creatures, Wren and L replaced by floor or the `under` terrain; never changes
+  tiles: ['#########', ...],   // terrain only: creatures, Wren and L replaced by floor or the `under` terrain; changes only
+                               // in a Gloam encounter, where crept Hush shows as 'H'
   wren: { x, y },
   lantern: { x, y, carried },  // when carried, x and y equal Wren's; an aimed lantern also has beam: 'N'|'E'|'S'|'W'
   creatures: [ { id, type: 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R', x, y, dir } ],   // id is stable for the whole level; dir is 'N'|'E'|'S'|'W' for T and D,
@@ -272,8 +278,11 @@ State (plain JSON-safe data; treat as immutable):
   buds: [ { x, y } ],          // Glowbud positions (static, reading order)
   bloom: [0, 1, ...],          // parallel to buds: 1 once that bud has been lit; never goes back to 0
   shutter: false,              // from the level: whether the lantern can be aimed
+  creep: false,                // from the level (`gloam`): whether the Hush creeps (section 17)
+  hush: [ 'x,y', ... ],        // floor tiles the Hush crept onto, sorted (always empty outside an encounter)
   turn: 0,
   solved: false,
+  caught: false,               // the Hush crept onto Wren (section 17)
   events: [ ... ],             // what happened in the step that produced this state, in order (empty at turn 0)
 }
 ```
@@ -295,10 +304,12 @@ Events (the UI animates and plays sounds from these; emit them in the order thin
 { type: 'gate', channel, open }    // a channel's gates changed
 { type: 'bud', x, y, lit: true }   // a Glowbud came into bloom (emitted once per bud)
 { type: 'solved' }
+{ type: 'creep', tiles: [{x, y}, ...] }   // the Hush crept onto these floor tiles (reading order)
+{ type: 'caught', x, y }           // ... and one of them was Wren's (after 'creep')
 ```
 
 `key(state)` must include Wren, the lantern (position, carried and beam), every creature (type, position, facing or shell, heat;
-order-independent), the bridges and the bloom flags. It must not depend on `turn`, `events` or creature ids.
+order-independent), the bridges, the crept Hush, `caught` and the bloom flags. It must not depend on `turn`, `events` or creature ids.
 
 ### `src/solver.js` (pure)
 
@@ -307,6 +318,7 @@ order-independent), the bridges and the bloom flags. It must not depend on `turn
 export function solve(state, { maxStates = 300000, actions = ACTIONS } = {})
 // -> { solved: boolean, moves: string[], explored: number, exhausted: boolean }
 //    exhausted is true when the whole reachable space was searched (so solved:false means truly unsolvable).
+//    A caught state (section 17) is a dead end: it is never expanded.
 
 export function nextMove(state, opts)   // -> the first action of a shortest solution from this state, or null
 
@@ -349,7 +361,7 @@ export function play(name)               // one-shot sound; unknown names are ig
 //   names: 'step' 'blocked' 'plant' 'pickup' 'wait' 'moth' 'settle' 'whelkMove' 'whelkHide' 'whelkEmerge'
 //          'stumpStep' 'stumpBump' 'stumpWake' 'newtStep' 'newtTurn' 'newtDoze' 'newtWake'
 //          'emberWarm' 'emberCool' 'emberIgnite' 'emberStep' 'gloamDrift' 'gloamSnuff' 'aim' 'beetleCrawl' 'beetleGlint'
-//          'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint' 'page'
+//          'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint' 'page' 'creep' 'caught'
 export function setMusic({ playing, intensity, chapter })   // adaptive bed: intensity 0..1 = share of Glowbuds lit; chapter 1..3
 ```
 
@@ -373,6 +385,7 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - **Pressure root and gate:** "A gate opens while something heavy rests on its root."
 - **Puddle:** "Too deep for Wren. A Fluffmoth can bridge it."
 - **Hush:** "Darkness that eats light. Wren can only cross it with the lantern in hand, and the lantern goes dark inside."
+- **The Gloam's Hush** (in a Gloam encounter, section 17): "The Gloam's Hush creeps onto every dark floor tile beside it, one step each turn. Light holds it back. If it reaches Wren, you step back three turns."
 
 ## 9. Details settled during implementation
 
@@ -432,7 +445,8 @@ and never ask for a move the solution does not need.
     gesture: 'swipe-E',        // optional: 'swipe-N' | 'swipe-E' | 'swipe-S' | 'swipe-W' | 'tap' | 'hold', drawn at the point
     when: 'planted',           // optional: the step only shows while this holds: 'planted' | 'carried'
     card: 'S',                 // optional: opens that creature's rule card when the step comes up ("meet" card);
-                               //   'A' opens the Shutter card, in a level with a shutter
+                               //   'A' opens the Shutter card, in a level with a shutter; 'H' the Gloam's Hush
+                               //   card, in a Gloam encounter (section 17)
     until: 'step' }            // what finishes the step, see below
   ```
 - **point:** `'wren'`; `'lantern'` (the planted lantern); a species letter `M` `S` `T` `D` `K` `O` `R` (the first such
@@ -442,7 +456,7 @@ and never ask for a move the solution does not need.
 - **until:** `'move'` (any legal action), `'step'` (Wren walks), `'arrive'` (Wren stands on the `[x, y]`
   point), `'plant'`, `'pickup'`, `'wait'`, `'settle'` (a moth became a bridge), `'hide'`, `'wake'`,
   `'sleep'`, `'turn'`, `'ignite'` (an Emberwick catches), `'aim'` (the lantern is aimed or opened), `'glint'` (a Mirrorbeetle
-  becomes lit), `'gate'` (a gate opens), `'bud'` (a Glowbud comes into bloom), `'card'` (the
+  becomes lit), `'gate'` (a gate opens), `'bud'` (a Glowbud comes into bloom), `'creep'` (the Hush crept), `'card'` (the
   step's card was closed), `'solved'`. The events are the engine's (section 7).
 - **Undo** never takes a step back. **Restart** goes back to the first step that is not a card step.
 - **Stuck nudge:** on a level that has never been solved, with Tutorials on, once per visit: when the move
@@ -605,3 +619,37 @@ Play as soon as it is granted, so a lost save would lose the Glimmer for good.
   of the last copy (`savedDurably`), with no Capacitor, tested in Node; `src/ui/native.js` provides the
   copy. The device check kills the app as soon as the game says the purchase is saved, and the purchase
   must be there after the restart.
+
+## 17. Gloam encounters (decided 18 Nov 2026)
+
+There is no combat. Each chapter ends with a Gloam encounter, the design doc's set piece: the Gloam's Hush
+creeps toward Wren one tile a turn, and only light holds it back. Plant the lantern to hold a choke point,
+run ahead in the dark, and get back to the light before the Hush gets there.
+
+- **Level:** an encounter is the last level of its chapter (`'1-11'` to `'7-11'`) and has `gloam: true`.
+  It must have at least one Hush tile (`parseLevel` throws otherwise). In an encounter every Hush tile creeps.
+  Its `feature` lists `H`, and it uses the chapter's creature too.
+- **Creep** (phase 7 of a turn, section 2): when the level is not solved, every **floor** tile (`.` terrain:
+  not a root, gate, puddle, bridge or Glowbud) that is orthogonally next to a Hush tile, is **not lit in
+  Light B**, and has **no creature and no planted lantern** on it becomes Hush, all at the same moment (a
+  tile that became Hush this turn creeps on next turn). From then on it is Hush in every way (section 1):
+  light never enters it, creatures cannot enter it, and Wren may cross it only with the lantern in hand.
+- **Caught:** if Wren stands on a tile the Hush creeps onto, Wren is caught: the state has `caught: true`,
+  and `step` returns `null` for every action, as after a solve. A carried lantern lights Wren's own tile,
+  so it is Wren without the lantern, or Wren in a Gloamling's shadow, who can be caught. Standing on a root,
+  a gate or a bridge, or on Hush with the lantern in hand, Wren cannot be caught.
+- **State and key** (section 7): `creep`, `hush` and `caught`; crept Hush shows in `tiles`. The solver
+  never expands a caught state.
+- **Playing:** crept tiles darken in with `'creep'`, a low breath. A catch plays `'caught'`, the board
+  dims for a moment, the status row says "The Hush caught you. Three steps back." and three moves are
+  undone (all of them if fewer were made). A catch costs nothing else. After the second catch in a visit
+  the Hint button pulses, as for the stuck nudge (section 12), until the next hint, undo or restart.
+- **Rule card** (Gloam), shown instead of the Hush card in an encounter: by holding a Hush tile, and as a
+  meet card on a player's first visit (tutorial `card: 'H'`):
+  "The Gloam's Hush creeps onto every dark floor tile beside it, one step each turn. Light holds it back.
+  If it reaches Wren, you step back three turns."
+- **Map and story:** an encounter's node on the map is drawn darker, with a ring of Hush, and its label adds
+  "Gloam encounter". The next chapter's first level opens once the encounter is solved, in the usual
+  order. A chapter's story page unlocks when its last level, now the encounter, is solved, and **a page
+  that has been seen stays unlocked**, so saves from before the encounters keep their pages.
+- **Size:** every encounter keeps to the size limit (section 5), and its par is from 14 to 34.

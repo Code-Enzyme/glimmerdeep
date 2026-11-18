@@ -131,10 +131,12 @@ export function renderMap(root, opts) {
         if (record) node.classList.add('solved');
         if (!open) node.classList.add('locked');
         if (def === firstOpen) node.classList.add('next');
+        if (def.gloam) node.classList.add('gloam');   // a Gloam encounter (SPEC section 17): ringed with Hush
         const stars = record ? record.stars : 0;
+        const what = def.gloam ? ', Gloam encounter' : '';
         node.setAttribute('aria-label', open
-          ? `Level ${def.id}, ${def.name}` + (record ? `, ${stars} of 3 star moss, best ${record.moves} moves` : ', not solved yet')
-          : paid ? `Level ${def.id}, locked. Part of the Full Expedition.` : `Level ${def.id}, locked. Solve the level before it first.`);
+          ? `Level ${def.id}, ${def.name}${what}` + (record ? `, ${stars} of 3 star moss, best ${record.moves} moves` : ', not solved yet')
+          : paid ? `Level ${def.id}${what}, locked. Part of the Full Expedition.` : `Level ${def.id}${what}, locked. Solve the level before it first.`);
         if (!open && !paid) node.setAttribute('aria-disabled', 'true');   // a paid level still acts: it opens the store
         const dot = el('span', 'dot', levelNumber(def, i));
         if (!open) dot.appendChild(el('span', 'lock ico'));

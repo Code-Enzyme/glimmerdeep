@@ -200,6 +200,18 @@ test('checkTutorial: catches what would break or mislead', () => {
   assert.ok(bad([{ say: 'x'.repeat(130), until: 'move' }]), 'too long for the status row');
 });
 
+test("checkTutorial: the Gloam's Hush card belongs to a Gloam encounter, and the creep is an event (SPEC section 17)", () => {
+  const map = ['#######', '#H...W#', '#G#####'];
+  const steps = [{ card: 'H', until: 'card' }, { say: 'Keep the Hush in the light.', point: 'wren', until: 'creep' }];
+  assert.deepEqual(checkTutorial(def(map, steps, { gloam: true })), []);
+  assert.deepEqual(checkTutorial(def(map, steps)), ["step 1: the Gloam's Hush card but the level is not a Gloam encounter"]);
+  const t = new Tutorial(steps);
+  t.cardClosed();
+  const s = step(parseLevel({ ...def(map, steps), gloam: true }), 'Z');
+  t.advance(s.events, s);
+  assert.equal(t.done, true);
+});
+
 test('checkTutorial: knows the Emberwick and its ignite event', () => {
   const ember = def(['######', '#L~K.#', '###..#', '#G...#', '##.W.#', '######'], [
     { card: 'K', until: 'card' },

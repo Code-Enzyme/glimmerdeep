@@ -177,4 +177,23 @@ export default [
     ],
     note: 'Only a lantern planted at the foot of the west passage reaches the bud, and the Emberwick stands in the way: herd the whelk off toward the east room, catch the Emberwick, then lead it round and step past it into the passage.',
   },
+  {
+    // the chapter's Gloam encounter (SPEC section 17)
+    id: '5-11',
+    name: 'Ember in the Hush',
+    feature: 'KH',
+    par: 17,
+    gloam: true,
+    map: [
+      '#########',
+      '#H.G..###',
+      '#H###.###',
+      '#HW#~K###',
+      '#H.#.####',
+      '#H...####',
+      '#########',
+    ],
+    note: 'Wren cannot reach the bud before the Hush closes the way, and the lantern goes dark in the Hush. Catch the Emberwick with the planted lantern across the pool, then lead it round through the north passage while Wren wades the Hush: its own glow lights the bud.',
+    tip: 'In the Hush your lantern goes dark. Something else will have to shine.',
+  },
 ];

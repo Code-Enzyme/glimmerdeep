@@ -178,4 +178,23 @@ export default [
     note: 'The whelk on the root guards the bud, and its only way out is across the puddle. Plant the lantern near it so it stays lit and the gate lets the moth out, lead the moth up into the puddle as a bridge, then come round from below so the whelk backs over the bridge and out of the way.',
     tip: 'A whelk can walk on a moth bridge.',
   },
+  {
+    // the chapter's Gloam encounter (SPEC section 17)
+    id: '2-11',
+    name: 'Shells Before the Dark',
+    feature: 'SH',
+    par: 19,
+    gloam: true,
+    map: [
+      '#########',
+      '#H#GS.M.#',
+      '#H..##.##',
+      '#H##...##',
+      '#HW..####',
+      '#H..#####',
+      '#########',
+    ],
+    note: 'With the Hush staying put Wren walks straight up its edge to the bud. The creep takes that edge at once, so the moth has to be drawn down and parked on the lantern while the whelk backs off into the far corner, then led round the long way while the Hush follows close behind.',
+    tip: 'The Hush takes the short way first.',
+  },
 ];

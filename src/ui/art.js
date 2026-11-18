@@ -102,6 +102,12 @@ export function portraitUrl(kind, accent) {
       case 'gate': drawTile(g, 'gate', px, py, size, { t, seed: 3, channel: 'A', open: false }); break;
       case 'puddle': drawTile(g, 'puddle', px, py, size, { t, seed: 3 }); break;
       case 'hush': drawTile(g, 'hush', px, py, size, { t, seed: 3 }); break;
+      case 'H':   // the Gloam's Hush (SPEC section 17): a wall of it on the west, reaching into the middle
+        for (let y = -1; y <= 1; y++) {
+          drawTile(g, 'hush', px - size, py + y * size, size, { t, seed: 5 + y, neighbors: { n: y > -1, s: y < 1, e: y === 0, w: false } });
+        }
+        drawTile(g, 'hush', px, py, size, { t, seed: 3, neighbors: { n: false, s: false, e: false, w: true } });
+        break;
       default: break;
     }
   });

@@ -34,6 +34,9 @@ const QUEUE_MAX = 2;       // inputs remembered while an animation runs
 const HINT_BUDGET = 150000;
 const STUCK_TEXT = 'Stuck? Hint shows the next move, and Undo steps back.';
 const STUCK_FOR = 4;       // moves the stuck nudge stays up
+const CAUGHT_TEXT = 'The Hush caught you. Three steps back.';
+const CATCH_BACK = 3;      // moves a catch takes back (SPEC section 17)
+const CATCH_PAUSE = 450;   // ms the catch stays on screen before the steps back
 const DIR_WORD = { N: 'north', E: 'east', S: 'south', W: 'west' };
 // The lantern button: [label, screen-reader label] and the hint for each thing it can do (session.lanternAction()).
 const LANTERN_LABEL = {
@@ -110,6 +113,9 @@ let gesture = null;
 let armedAt = 0;           // a rule card ignores taps until the finger that opened it has lifted
 let tutorial = null;       // this visit's guided steps (SPEC section 12), or null
 let stuck = -1;            // the stuck nudge: 0 armed, above 0 showing until that move count, -1 used up or off
+let catches = 0;           // times the Hush caught Wren this visit (SPEC section 17)
+let catchNudge = false;    // after the second catch the Hint button pulses until a hint, an undo or a restart
+let rewindTimer = 0;
 let book = null;           // story pages showing (SPEC section 13): { ids, index, reading, then }
 let journalTab = 'creatures';
 const queue = [];
@@ -502,6 +508,9 @@ function openLevel(def, adhoc, day) {
   const guided = save.settings.tutorials && (day ? !save.daily[day] : !current.adhoc && !save.levels[def.id]);
   tutorial = guided && Array.isArray(def.tutorial) && def.tutorial.length ? new Tutorial(def.tutorial) : null;
   stuck = guided && typeof def.par === 'number' ? 0 : -1;
+  catches = 0;
+  catchNudge = false;
+  window.clearTimeout(rewindTimer);
   moved = false;
   message = '';
   celebrating = false;
@@ -554,7 +563,7 @@ function refreshHud() {
     counterEl.setAttribute('aria-label', hasPar ? `Moves: ${moves}. Par: ${def.par}.` : `Moves: ${moves}.`);
   }
 
-  const over = session.solved;
+  const over = session.solved || session.caught;
   setDisabled(btn.undo, !session.canUndo);
   setDisabled(btn.restart, !session.canUndo && session.state === session.start);
   setDisabled(btn.wait, over);
@@ -636,7 +645,7 @@ function refreshCoach() {
   for (const name of Object.keys(COACH_BUTTON)) {
     COACH_BUTTON[name].classList.toggle('coach', !!point && point.kind === 'button' && point.name === name);
   }
-  pulse(btn.hint, stuck > 0);
+  pulse(btn.hint, stuck > 0 || catchNudge);
 }
 
 // A step that meets a new creature opens its rule card as soon as it comes up.
@@ -657,16 +666,17 @@ function tutorialAfter(next) {
   else if (stuck > 0 && session.moves >= stuck) stuck = -1;
 }
 
-// An undo, a restart or a hint sends the nudge away for the rest of the visit.
+// An undo, a restart or a hint sends the nudge away for the rest of the visit (and the nudge after catches).
 function dismissStuck() {
   if (stuck > 0) stuck = -1;
+  catchNudge = false;
 }
 
 // ---------------------------------------------------------------- actions
 
 // One engine step, animated. -> true when the action was legal.
 function doAction(action) {
-  if (!session || session.solved) return false;
+  if (!session || session.solved || session.caught) return false;
   const prev = session.state;
   const next = session.act(action);
   if (next === null) {
@@ -680,15 +690,38 @@ function doAction(action) {
   tutorialAfter(next);
   view.playTurn(prev, next, { facing: session.facing, speed: queue.length ? 1.5 : 1 });
   buzz('tick');
+  if (next.caught) caughtNow();
   refreshHud();
   openTutorialCard();
   return true;
 }
 
+// The Hush crept onto Wren (SPEC section 17). The board plays the catch; once it settles, three moves go back.
+function caughtNow() {
+  queue.length = 0;
+  cancelWalk();
+  catches++;
+  if (catches >= 2) catchNudge = true;
+  message = CAUGHT_TEXT;
+  buzz('tap');
+}
+
+function rewindAfterCatch() {
+  const s = session;
+  window.clearTimeout(rewindTimer);
+  rewindTimer = window.setTimeout(() => {
+    if (session !== s || !s.caught) return;
+    const before = s.state;
+    s.rewind(CATCH_BACK);
+    view.playTween(before, s.state, { facing: s.facing });
+    refreshHud();
+  }, CATCH_PAUSE);
+}
+
 // An action asked for by the player. Waits its turn if the board is still moving.
 function userAction(action) {
   cancelWalk();
-  if (!session || panel || celebrating || session.solved) return;
+  if (!session || panel || celebrating || session.solved || session.caught) return;
   if (view.busy) {
     if (queue.length < QUEUE_MAX) queue.push(action);
     return;
@@ -700,6 +733,10 @@ function onSettled() {
   if (!session) return;
   if (session.solved) {
     if (!celebrating) beginCelebration();
+    return;
+  }
+  if (session.caught) {
+    rewindAfterCatch();
     return;
   }
   pump();
@@ -757,7 +794,7 @@ function restart() {
 // ---------------------------------------------------------------- tap to walk
 
 function tapTile(tile) {
-  if (!session || panel || celebrating || session.solved) return;
+  if (!session || panel || celebrating || session.solved || session.caught) return;
   const s = session.state;
   if (tile.x === s.wren.x && tile.y === s.wren.y) {
     userAction('L');
@@ -825,7 +862,7 @@ function refreshHintLabel() {
 }
 
 function requestHint() {
-  if (!session || session.solved || celebrating || thinking || panel) return;
+  if (!session || session.solved || session.caught || celebrating || thinking || panel) return;
   // paid for when asked, whatever it finds; with nothing to pay with, the store says when the next free one comes
   if (!payHint(save.shop, Date.now())) {
     play('ui');
@@ -1569,6 +1606,8 @@ window.__gd = {
   key: () => (session ? key(session.state) : null),
   moves: () => (session ? session.moves : 0),
   hints: () => (session ? session.hints : 0),
+  caught: () => (session ? session.caught : false),
+  catches: () => catches,
   panel: () => panel,
   busy: () => view.busy || celebrating && panel !== 'result',
   hint: () => (view.hint ? (view.hint.dir || 'ring') : null),

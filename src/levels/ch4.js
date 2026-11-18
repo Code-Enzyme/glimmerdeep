@@ -186,4 +186,23 @@ export default [
     ],
     note: 'The moth slips in front of Wren whichever way Wren heads for the bud, so leave the lantern planted at the start while the newt wanders down into the lower room, then go round over the top with the moth trailing behind.',
   },
+  {
+    // the chapter's Gloam encounter (SPEC section 17)
+    id: '4-11',
+    name: 'Root Before the Dark',
+    feature: 'DH',
+    par: 27,
+    gloam: true,
+    map: [
+      '#########',
+      '#HW###..#',
+      '#H###...#',
+      '#H###aM.#',
+      '#H....s##',
+      '#H##..AG#',
+      '#########',
+    ],
+    note: 'The Hush takes the low floor behind Wren, so the newt has to be walked north and turned onto the root from above, with the planted lantern dozing it there, before Wren slips through the gate to the bud.',
+    tip: 'The newt has to reach the root before the Hush does.',
+  },
 ];

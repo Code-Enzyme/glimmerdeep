@@ -375,6 +375,15 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   background-size: 17px 17px;
   border-radius: 50%;
 }
+/* a Gloam encounter (SPEC section 17): a darker node in a ring of Hush */
+.node.gloam .dot {
+  color: var(--paper);
+  background: #3A2A48;
+  box-shadow: 0 0 0 4px var(--ink), 0 0 12px 8px rgba(36, 22, 46, 0.5);
+}
+.node.gloam.solved .dot { color: var(--ink); background: var(--accent); }
+.node.gloam.next .dot { color: var(--ink); background: #FFF6E2; box-shadow: 0 0 0 4px var(--amber), 0 0 0 8px var(--ink), 0 0 14px 12px rgba(36, 22, 46, 0.5); }
+.node.gloam.locked .dot { color: rgba(255, 246, 226, 0.7); background: repeating-linear-gradient(135deg, #4A3A58 0 5px, #3A2A48 5px 10px); box-shadow: 0 0 10px 6px rgba(36, 22, 46, 0.4); }
 .moss-row { display: flex; gap: 1px; height: 15px; }
 .node.wiggle .dot { animation: wiggle 0.32s ease-in-out; }
 

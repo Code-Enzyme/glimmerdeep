@@ -183,4 +183,23 @@ export default [
     ],
     note: 'The moth tags along and fills every narrow path behind Wren. Light the lower bud first, then take the moth up into the top-right nook and wake the Stumpcap there so it marches down the east side out of the way, leaving Wren free to come round to the top bud.',
   },
+  {
+    // the chapter's Gloam encounter (SPEC section 17)
+    id: '3-11',
+    name: 'The Gate in the Dark',
+    feature: 'TH',
+    par: 26,
+    gloam: true,
+    map: [
+      '#########',
+      '#HGA#..##',
+      '#H..#.~##',
+      '#H#aM.<##',
+      '#HW.##.##',
+      '#H#....##',
+      '#########',
+    ],
+    note: 'With the Hush staying put Wren just wades up its edge to the bud, but the creep takes the floor beside it first. The only other light reaches the bud through the gate, so the Stumpcap has to be woken and walked onto the root while the moth is kept out of its way.',
+    tip: 'The short way will not last. Find another way to the bud.',
+  },
 ];

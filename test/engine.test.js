@@ -88,8 +88,8 @@ test('parseLevel: extracts terrain and puts floor under Wren and the creatures',
 test('parseLevel: the state has exactly the documented fields and is plain JSON data', () => {
   const s = parse(['W.M', 'aA.']);
   assert.deepEqual(Object.keys(s).sort(), [
-    'bloom', 'bridges', 'buds', 'creatures', 'events', 'gates', 'h', 'lantern', 'lit', 'shutter', 'solved', 'tiles', 'turn',
-    'w', 'wren',
+    'bloom', 'bridges', 'buds', 'caught', 'creatures', 'creep', 'events', 'gates', 'h', 'hush', 'lantern', 'lit', 'shutter',
+    'solved', 'tiles', 'turn', 'w', 'wren',
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(s)), s);
   assert.deepEqual(Object.keys(s.creatures[0]).sort(), ['dir', 'id', 'type', 'x', 'y']);
@@ -1677,6 +1677,132 @@ test('goal: uses Light B, the light after the creatures have moved', () => {
   assert.equal(t.solved, true);
 });
 
+// ---------------------------------------------------------------- the creeping Hush (SPEC section 17)
+
+const gloam = (map, extra) => parse(map, { gloam: true, ...extra });
+
+test('creep: a Gloam encounter starts with the Hush creeping, nothing crept and nobody caught', () => {
+  const s = gloam(['#######', '#H...W#', '#G#####']);
+  assert.equal(s.creep, true);
+  assert.deepEqual(s.hush, []);
+  assert.equal(s.caught, false);
+  const plain = parse(['#######', '#H...W#', '#G#####']);
+  assert.equal(plain.creep, false);
+  assert.deepEqual(plain.hush, []);
+  assert.equal(plain.caught, false);
+  assert.throws(() => gloam(['W..G']), /Hush/, 'an encounter needs a Hush tile');
+});
+
+test('creep: each turn the Hush creeps one tile onto dark floor, and light holds it back', () => {
+  let s = gloam(['########', '#H....W#', '#G######']);
+  s = step(s, 'Z');
+  assert.deepEqual(s.tiles[1], '#HH....#');
+  assert.deepEqual(s.hush, ['2,1']);
+  assert.deepEqual(s.events.at(-1), { type: 'creep', tiles: [{ x: 2, y: 1 }] });
+  assert.equal(terrainAt(s, 2, 1), 'H');
+  s = step(s, 'Z');
+  assert.deepEqual(s.tiles[1], '#HHH...#', 'one tile a turn: what crept this turn creeps on next turn');
+  s = step(s, 'Z');
+  assert.deepEqual(s.tiles[1], '#HHHH..#');
+  assert.deepEqual(s.hush, ['2,1', '3,1', '4,1']);
+  s = step(s, 'Z');
+  assert.deepEqual(s.tiles[1], '#HHHH..#', 'the lit tile next to Wren holds it');
+  assert.equal(s.events.some((e) => e.type === 'creep'), false, 'no creep event when nothing crept');
+  assert.equal(s.caught, false);
+});
+
+test('creep: in a level that is not an encounter the Hush stays put', () => {
+  const s = run(parse(['########', '#H....W#', '#G######']), ['Z', 'Z', 'Z']);
+  assert.deepEqual(s.tiles[1], '#H.....#');
+  assert.deepEqual(s.hush, []);
+});
+
+test('creep: only onto floor; roots, gates, puddles, bridges, buds, creatures and a planted lantern stop it', () => {
+  const s = step(gloam([
+    '#########',
+    '#H~.....#',
+    '#Ha.....#',
+    '#HA.....#',
+    '#HG.....#',
+    '#H>.....#',
+    '#HLO....#',
+    '#H.....W#',
+    '#########',
+  ]), 'Z');
+  assert.deepEqual(s.tiles.slice(1, 8), [
+    '#H~.....#',
+    '#Ha.....#',
+    '#HA.....#',
+    '#HG.....#',
+    '#H......#',   // the sleeping Stumpcap stands on it
+    '#H......#',   // the planted lantern, dark in the Gloamling's shadow
+    '#HH.....#',
+  ]);
+  assert.deepEqual(s.hush, ['2,7']);
+});
+
+test('creep: the Hush never takes a bridge a moth made', () => {
+  // the moth drops straight into the puddle below it; the floor on either side goes to the Hush
+  const s = step(gloam(['#######', '#HM...#', '#H~...#', '#H....#', '#H....#', '#HW...#', '#G#####']), 'Z');
+  assert.deepEqual(s.bridges, ['2,2']);
+  assert.deepEqual(s.tiles.slice(1, 4), ['#HH...#', '#H~...#', '#HH...#']);
+  assert.deepEqual(s.hush, ['2,1', '2,3']);
+});
+
+test('creep: Wren without the lantern on a tile the Hush creeps onto is caught, and the level is over', () => {
+  // the planted lantern lights x 3 to 5; Wren steps west out of its light, next to the Hush
+  let s = gloam(['#######', '#H.W.L#', '#G#####']);
+  s = step(s, 'W');
+  assert.deepEqual(s.wren, { x: 2, y: 1 });
+  assert.equal(s.caught, true);
+  assert.equal(s.solved, false);
+  assert.deepEqual(s.events.slice(-2), [{ type: 'creep', tiles: [{ x: 2, y: 1 }] }, { type: 'caught', x: 2, y: 1 }]);
+  for (const a of ACTIONS) assert.equal(step(s, a), null, `${a} after a catch`);
+});
+
+test('creep: a carried lantern keeps Wren safe, unless a Gloamling eats its light', () => {
+  const safe = run(gloam(['#######', '#HW...#', '#G#####']), ['Z', 'Z']);
+  assert.equal(safe.caught, false);
+  const shaded = step(gloam(['#######', '#HWO..#', '#G#####']), 'Z');
+  assert.equal(shaded.caught, true, "in the Gloamling's shadow the carried lantern lights nothing");
+});
+
+test('creep: Wren cannot be caught on Hush with the lantern, nor on a root', () => {
+  const onHush = step(gloam(['#######', '#HHW..#', '#G#####']), 'W');
+  assert.deepEqual(onHush.wren, { x: 2, y: 1 });
+  assert.equal(onHush.caught, false);
+  // without the lantern, in the dark, right beside the Hush: a root is not floor
+  const onRoot = step(gloam(['#######', '#HW..L#', '#G#####'], { under: { '2,1': 'a' } }), 'Z');
+  assert.equal(onRoot.caught, false);
+  assert.deepEqual(onRoot.hush, []);
+});
+
+test('creep: a turn that lights the last bud wins before the Hush moves', () => {
+  // Wren steps out of the light beside the Hush as the Stumpcap walks out of the bud's way
+  const s = step(gloam(['#########', '#H.W.LvG#', '######.##', '#########']), 'W');
+  assert.equal(s.solved, true);
+  assert.equal(s.caught, false);
+  assert.deepEqual(s.hush, []);
+});
+
+test('key: tells crept Hush and a catch apart', () => {
+  const a = gloam(['########', '#H....W#', '#G######']);
+  const b = step(step(a, 'Z'), 'Z');
+  const c = run(a, ['W', 'E', 'Z', 'Z']);   // ... back where it was, with the Hush two tiles further
+  assert.notEqual(key(a), key(b));
+  assert.deepEqual(b.wren, a.wren);
+  assert.notEqual(key(b), key(c));
+  assert.notEqual(key(b), key({ ...b, caught: true }));
+  assert.equal(key(b), key(run(a, ['Z', 'Z'])));
+});
+
+test('creep: states with the same crept Hush share one tiles array', () => {
+  const a = gloam(['#########', '#H.....W#', '#G#######']);
+  const viaWait = run(a, ['Z', 'Z']);
+  const viaWalk = run(a, ['W', 'E']);
+  assert.equal(viaWait.tiles, viaWalk.tiles);
+});
+
 // ---------------------------------------------------------------- events (SPEC section 7)
 
 const wrenMove = (fx, fy, tx, ty) => ({ type: 'move', who: 'wren', from: { x: fx, y: fy }, to: { x: tx, y: ty } });
@@ -1928,11 +2054,11 @@ test('worked example: without the bridge Wren cannot pass the puddle', () => {
 
 // ---------------------------------------------------------------- cross-check against a naive reference
 
-// A second implementation of SPEC sections 1 to 4, written to be read next to the spec rather than to be
+// A second implementation of SPEC sections 1 to 4 and 17, written to be read next to the spec rather than to be
 // fast: it copies everything, keeps light as a set of 'x,y' strings and recomputes all of it every turn.
 // It returns what step() must agree with (everything except turn and events), or null for an illegal action.
 function referenceStep(s, action) {
-  if (s.solved) return null;
+  if (s.solved || s.caught) return null;
   const tile = (x, y) => (x < 0 || y < 0 || x >= s.w || y >= s.h ? '#' : s.tiles[y][x]);
   const at = (x, y) => `${x},${y}`;
   let wren = { ...s.wren };
@@ -2100,7 +2226,30 @@ function referenceStep(s, action) {
   for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) lit.push(lightB.has(at(x, y)) ? 1 : 0);
   const bloom = s.buds.map((b, i) => (s.bloom[i] === 1 || lightB.has(at(b.x, b.y)) ? 1 : 0));   // never back to 0
   const solved = bloom.length > 0 && bloom.every((flag) => flag === 1);
-  return { wren, lantern, creatures, bridges, lit, gates, bloom, solved };
+
+  // Phase 7 (section 17): dark floor beside the Hush, with no creature and no planted lantern, turns to Hush.
+  let tiles = s.tiles;
+  let hush = s.hush;
+  let caught = false;
+  if (s.creep && !solved) {
+    const crept = [];
+    for (let y = 0; y < s.h; y++) {
+      for (let x = 0; x < s.w; x++) {
+        if (tile(x, y) !== '.' || lightB.has(at(x, y)) || creatureOn(x, y)) continue;
+        if (!lantern.carried && lantern.x === x && lantern.y === y) continue;
+        if (!Object.values(DIRS).some(([dx, dy]) => tile(x + dx, y + dy) === 'H')) continue;
+        crept.push([x, y]);
+        if (wren.x === x && wren.y === y) caught = true;
+      }
+    }
+    if (crept.length) {
+      const rows = s.tiles.map((row) => [...row]);
+      for (const [x, y] of crept) rows[y][x] = 'H';
+      tiles = rows.map((row) => row.join(''));
+      hush = [...s.hush, ...crept.map(([x, y]) => at(x, y))].sort();
+    }
+  }
+  return { wren, lantern, creatures, bridges, lit, gates, bloom, solved, tiles, hush, caught };
 }
 
 test('step agrees with a naive reference implementation on every move of thousands of positions', async (t) => {
@@ -2121,14 +2270,20 @@ test('step agrees with a naive reference implementation on every move of thousan
     'a shutter, Mirrorbeetles and a bud': { shutter: true, map: ['W.L..\\...', '.......~.', '/..#..G..', '.....\\...'] },
     'a shutter, beetles and every other species': { shutter: true, map: ['W..L.v.\\.', '.K.a.A.S.', '/.e..~M..', 'G...H..O\\'] },
     'a ring of beetles round an aimed lantern': { shutter: true, map: ['.......', './...\\.', '.......', '.\\WL./.', '.......'] },
+    'a Gloam encounter with moths and a puddle': { gloam: true, map: ['H..M.....', 'H.#..~...', 'H...W..a.', 'H.#....A.', 'H.....G..'] },
+    'an encounter with a planted lantern, whelks and a Stumpcap': { gloam: true, map: ['H.S......', '..#.L.v..', 'W...~.S..', 'H.b.B..G.'] },
+    'an encounter with Gloamlings, newts and an ember': { gloam: true, map: ['W..O.e...', '.K.a.A...', 'H.H..~M..', 'G...H..O.'] },
+    'an encounter with a shutter and beetles': { gloam: true, shutter: true, map: ['W..L.\\...', 'H......~.', '/.#..G...', 'HH...\\...'] },
   };
   const byId = (a, b) => (a.id < b.id ? -1 : 1);
   for (const [name, board] of Object.entries(boards)) {
     await t.test(name, () => {
-      const start = Array.isArray(board) ? parse(board) : parse(board.map, { shutter: board.shutter });
+      const start = Array.isArray(board) ? parse(board) : parse(board.map, { shutter: board.shutter, gloam: board.gloam });
       const seen = new Set([key(start)]);
       const queue = [start];
       let compared = 0;
+      let crept = 0;
+      let caught = 0;
       for (let head = 0; head < queue.length; head++) {
         const s = queue[head];
         for (const a of ACTIONS) {
@@ -2140,9 +2295,11 @@ test('step agrees with a naive reference implementation on every move of thousan
             continue;
           }
           assert.notEqual(actual, null, `${a} should be legal after ${JSON.stringify(s)}`);
-          const { wren, lantern, bridges, lit, gates, bloom, solved } = actual;
+          if (actual.hush.length > s.hush.length) crept++;
+          if (actual.caught) caught++;
+          const { wren, lantern, bridges, lit, gates, bloom, solved, tiles, hush } = actual;
           assert.deepEqual(
-            { wren, lantern, creatures: [...actual.creatures].sort(byId), bridges, lit, gates, bloom, solved },
+            { wren, lantern, creatures: [...actual.creatures].sort(byId), bridges, lit, gates, bloom, solved, tiles, hush, caught: actual.caught },
             { ...expected, creatures: expected.creatures.sort(byId) },
             `${a} after ${JSON.stringify(s)}`,
           );
@@ -2153,6 +2310,7 @@ test('step agrees with a naive reference implementation on every move of thousan
         }
       }
       assert.ok(compared >= 1000, `only ${compared} moves compared`);
+      if (start.creep) assert.ok(crept >= 50 && caught >= 5, `the Hush crept on ${crept} moves and caught Wren on ${caught}`);
     });
   }
 });

@@ -59,6 +59,11 @@ export const RULE_CARDS = {
     title: 'Hush',
     text: 'Darkness that eats light. Wren can only cross it with the lantern in hand, and the lantern goes dark inside.',
   },
+  // the Hush in a Gloam encounter (SPEC section 17); 'H' is also the tutorial's card for it
+  H: {
+    title: "The Gloam's Hush",
+    text: "The Gloam's Hush creeps onto every dark floor tile beside it, one step each turn. Light holds it back. If it reaches Wren, you step back three turns.",
+  },
 };
 
 // Which card a long-press on tile (x, y) opens: Wren first, then a creature, the planted lantern, the
@@ -72,7 +77,7 @@ export function cardKindAt(state, x, y) {
   const terrain = terrainAt(state, x, y);
   if (terrain === 'G') return 'bud';
   if (terrain === '~' || terrain === 'bridge') return 'puddle';
-  if (terrain === 'H') return 'hush';
+  if (terrain === 'H') return state.creep ? 'H' : 'hush';
   if (terrain === 'a' || terrain === 'b' || terrain === 'c') return 'root';
   if (terrain === 'A' || terrain === 'B' || terrain === 'C') return 'gate';
   return null;

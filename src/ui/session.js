@@ -23,6 +23,11 @@ export class Session {
     return this.state.solved;
   }
 
+  // The Hush crept onto Wren (SPEC section 17): nothing moves until the attempt is rewound.
+  get caught() {
+    return this.state.caught === true;
+  }
+
   get canUndo() {
     return this.history.length > 0;
   }
@@ -47,6 +52,17 @@ export class Session {
     // Stepping back never hands a hint back; undoing a restart brings the earlier attempt's count along.
     this.hints = Math.max(this.hints, entry.hints);
     return true;
+  }
+
+  // After a catch: steps back up to n moves, never past the start of this attempt (a restart stays undoable).
+  // -> how many moves were taken back
+  rewind(n) {
+    let back = 0;
+    while (back < n && this.state !== this.start && this.history.length > 0) {
+      this.undo();
+      back++;
+    }
+    return back;
   }
 
   // Back to the opening position. The restart itself can be undone. A fresh attempt starts with no hints used.

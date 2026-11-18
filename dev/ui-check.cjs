@@ -1682,6 +1682,61 @@ async function main() {
       eq('no Glimmer: then a hint costs one', [(await np.gd('hint')) !== null, (await np.gd('shop')).glimmer, await txt('#hint-val')], [true, 9, '9 left']);
       await np.close();
     }
+
+    // ---------------------------------------------------------------- Gloam encounters (SPEC section 17)
+    console.log('gloam encounters');
+    {
+      const ge = await phone({ tag: 'gloam' });
+      const txt = async (sel) => ((await ge.page.locator(sel).textContent()) || '').trim();
+      // the Hush creeps east a tile a turn; Wren waits at x 5 without the lantern and is caught on turn 4
+      const CREEP = { id: 'T-G', name: 'Creep Test', par: 9, feature: 'H', gloam: true, map: ['#########', '#H...W..#', '#######L#', '#G#######'] };
+      const CAUGHT = 'The Hush caught you. Three steps back.';
+      await ge.open();
+      await ge.gd('loadLevelDef', CREEP);
+      await ge.hold(await ge.tile(1, 1), 620);
+      await ge.page.waitForFunction(() => window.__gd.panel() === 'card', null, { timeout: 2000 }).catch(() => {});
+      eq('gloam: holding the Hush opens the Gloam\'s card', [await txt('#card-title'), await txt('#card-text')],
+        ["The Gloam's Hush", "The Gloam's Hush creeps onto every dark floor tile beside it, one step each turn. Light holds it back. If it reaches Wren, you step back three turns."]);
+      await ge.page.keyboard.press('Escape');
+      for (let i = 0; i < 3; i++) {
+        await ge.gd('act', 'Z');
+        await ge.idle();
+      }
+      eq('gloam: the Hush crept a tile a turn', (await ge.gd('state')).hush, ['2,1', '3,1', '4,1']);
+      await ge.gd('act', 'Z');
+      eq('gloam: Wren is caught', [await ge.gd('caught'), await ge.gd('catches')], [true, 1]);
+      eq('gloam: the status row says so', await txt('#status'), CAUGHT);
+      ok('gloam: nothing moves while caught', (await ge.gd('state')).caught && !(await ge.page.evaluate(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        return window.__gd.state().turn !== 4;
+      })));
+      await ge.page.waitForTimeout(250);
+      await ge.shot('gloam-caught');
+      await ge.page.waitForFunction(() => !window.__gd.caught(), null, { timeout: 5000 }).catch(() => {});
+      ok('gloam: the catch plays its sound', (await ge.gd('heard')).includes('caught'));
+      eq('gloam: then three moves go back', [await ge.gd('caught'), await ge.gd('moves'), (await ge.gd('state')).hush], [false, 1, ['2,1']]);
+      eq('gloam: the message stays until the next move', await txt('#status'), CAUGHT);
+      ok('gloam: one catch does not pulse Hint', !(await ge.page.locator('#btn-hint').getAttribute('class')).includes('pulse'));
+      for (let i = 0; i < 3; i++) {
+        await ge.gd('act', 'Z');
+        await ge.idle().catch(() => {});
+      }
+      await ge.page.waitForFunction(() => window.__gd.catches() === 2 && !window.__gd.caught(), null, { timeout: 5000 }).catch(() => {});
+      eq('gloam: caught again, and back again', [await ge.gd('catches'), await ge.gd('moves')], [2, 1]);
+      ok('gloam: after two catches Hint pulses', (await ge.page.locator('#btn-hint').getAttribute('class')).includes('pulse'));
+      await ge.page.locator('#btn-undo').tap();
+      ok('gloam: an undo sends the pulse away', !(await ge.page.locator('#btn-hint').getAttribute('class')).includes('pulse'));
+      await auditPage(ge, 'gloam encounter');
+      // the map: every chapter ends with its encounter, ringed with Hush
+      await ge.gd('setToday', '2026-11-18');
+      await ge.open();
+      await ge.toMap();
+      const enc = CHAPTERS.map((c) => c.levels[c.levels.length - 1]);
+      ok('gloam: every chapter ends with an encounter', enc.every((d) => d.gloam === true), enc.map((d) => d.id).join(' '));
+      eq('gloam: their nodes are marked', await ge.page.locator('.node.gloam').count(), CHAPTERS.length);
+      ok('gloam: and say so', (await ge.page.locator(`.node[data-level="${enc[0].id}"]`).getAttribute('aria-label')).includes('Gloam encounter'));
+      await ge.close();
+    }
   }
 
   // ------------------------------------------------------------------ screenshots

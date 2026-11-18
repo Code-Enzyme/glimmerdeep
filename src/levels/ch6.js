@@ -186,4 +186,24 @@ export default [
     ],
     note: 'The Stumpcap overshoots the root unless a shadow stops it, so bring the Gloamling round to wait beside the root, wake the Stumpcap from behind, then lead the Gloamling off round the top before going down through the gate and the Hush to the bud.',
   },
+  {
+    // the chapter's Gloam encounter (SPEC section 17)
+    id: '6-11',
+    name: 'The Gloam\'s Shadow',
+    feature: 'OH',
+    par: 16,
+    gloam: true,
+    map: [
+      '#########',
+      '#H#.#.###',
+      '#H>..a.W#',
+      '#HM.~.#.#',
+      '#H###A#.#',
+      '#H###.#.#',
+      '#H##G.#O#',
+      '#########',
+    ],
+    note: 'Lead the Gloamling west along the top row, then step into the nook and plant and lift the lantern until the Gloamling drifts into the far nook and the Stumpcap marches onto its root. By then the moth has bridged the pool, so cross it and go down through the gate before the Hush closes in.',
+    tip: 'Something here eats light. Mind where it drifts.',
+  },
 ];

@@ -181,4 +181,27 @@ export default [
     note: 'Three pools, three moths. Send the east moth up into the corner pool first so the low pools stay free; then one of the pair by the bud bridges the west pool and the other must be led all the way to the east pool, clearing the column up to the bud.',
     tip: 'The moths by the bud need a way out before Wren can find a way in.',
   },
+  {
+    // the chapter's Gloam encounter (SPEC section 17)
+    id: '1-11',
+    name: 'The Gloam Wakes',
+    feature: 'MLH',
+    par: 20,
+    gloam: true,
+    map: [
+      '#########',
+      '#H....W##',
+      '#H##...G#',
+      '#H#G#####',
+      '#H#~~#.##',
+      '#H....M##',
+      '#########',
+    ],
+    note: 'The Hush swallows the floor from the west. Light the near bud while the moth drops into the pool, then wade through the Hush with the lantern in hand and plant it on the new bridge to reach the walled-in bud. With the Hush staying put the low corridor is the short way; the creep closes it.',
+    tip: 'The Hush is waking. It creeps a tile every turn.',
+    tutorial: [
+      { card: 'H', until: 'card' },
+      { say: 'Light holds the Hush back, and Wren can wade through it with the lantern in hand.', until: 'move' },
+    ],
+  },
 ];
