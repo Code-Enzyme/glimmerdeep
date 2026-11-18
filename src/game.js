@@ -20,6 +20,7 @@ import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg, wayMoveSvg
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { HintLadder, pieceText } from './ui/hints.js';
 import { previewOf } from './ui/preview.js';
+import { reducedMotion } from './ui/comfort.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
   onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror,
@@ -72,6 +73,8 @@ const KEYS = {
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
+// the phone's reduce-motion setting, which the Comfort sheet's As phone follows (SPEC section 22)
+const motion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 const titleEl = $('screen-title');
 const mapEl = $('screen-map');
 const levelEl = $('screen-level');
@@ -1120,7 +1123,7 @@ function showResult() {
 
 function openPanel(name) {
   panel = name;
-  if (name === 'shop') {
+  if (name === 'shop' || name === 'comfort') {
     shopScrim.hidden = false;
   } else if (name !== 'confirm') {
     scrim.hidden = false;
@@ -1130,7 +1133,7 @@ function openPanel(name) {
   el.hidden = false;
   const focus = name === 'result'
     ? ($('result-next').hidden ? $('result-replay') : $('result-next'))
-    : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : $('confirm-no');
+    : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : name === 'comfort' ? $('comfort-close') : $('confirm-no');
   try {
     focus.focus({ preventScroll: true });
   } catch (e) {
@@ -1343,6 +1346,27 @@ function syncSettings() {
   app.classList.toggle('hc', s.contrast);
   view.highContrast = s.contrast;
   setMuted(!s.sound);
+  // Comfort (SPEC section 22)
+  set('set-comfort', s.textSize !== 1 || s.readable || s.motion !== 'system', `${Math.round(s.textSize * 100)}%`);
+  app.style.setProperty('--ts', String(s.textSize));
+  app.classList.toggle('readable', s.readable);
+  app.classList.toggle('motion-reduced', s.motion === 'reduced');
+  app.classList.toggle('motion-full', s.motion === 'full');
+  for (const b of $('comfort').querySelectorAll('.choice')) {
+    const on = b.dataset.size !== undefined ? Number(b.dataset.size) === s.textSize
+      : b.dataset.readable !== undefined ? (b.dataset.readable === 'true') === s.readable
+        : b.dataset.motion === s.motion;
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  syncMotion();
+}
+
+// A choice on the Comfort sheet: { textSize } | { readable } | { motion }
+function setComfort(change) {
+  Object.assign(save.settings, change);
+  writeSave(save);
+  syncSettings();
+  play('ui');
 }
 
 function toggleSetting(name) {
@@ -1507,8 +1531,24 @@ onClick($('shop-close'), () => {
   closePanel();
 });
 shopScrim.addEventListener('click', () => {
-  if (panel === 'shop') closePanel();
+  if (panel === 'shop' || panel === 'comfort') closePanel();
 });
+onClick($('set-comfort'), () => {
+  play('ui');
+  if (panel) closePanel();
+  openPanel('comfort');
+});
+onClick($('comfort-close'), () => {
+  play('ui');
+  closePanel();
+});
+for (const b of $('comfort').querySelectorAll('.choice')) {
+  onClick(b, () => {
+    if (b.dataset.size !== undefined) setComfort({ textSize: Number(b.dataset.size) });
+    else if (b.dataset.readable !== undefined) setComfort({ readable: b.dataset.readable === 'true' });
+    else setComfort({ motion: b.dataset.motion });
+  });
+}
 onClick($('btn-journal'), () => {
   play('ui');
   showJournal('creatures');
@@ -1661,9 +1701,8 @@ document.addEventListener('touchmove', (e) => {
   if (!scroller || e.touches.length > 1) e.preventDefault();
 }, { passive: false });
 
-const motion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 function syncMotion() {
-  view.reduced = !!(motion && motion.matches);
+  view.reduced = reducedMotion(save.settings.motion, !!(motion && motion.matches));
   titleArt.setStill(view.reduced);
   if (screen === 'title') titleArt.start();
 }
@@ -1717,6 +1756,7 @@ window.__gd = {
   hint: () => (view.hint ? (view.hint.dir || (view.hint.at ? 'key' : 'ring')) : null),
   hintAt: () => (view.hint && view.hint.at ? { ...view.hint.at } : null),
   preview: () => (view.preview ? JSON.parse(JSON.stringify(view.preview)) : null),
+  reduced: () => view.reduced,
   hintStep: () => (ladder ? ladder.tier : 0),
   way: () => {
     const way = ladder && session && !session.solved ? ladder.following(session.state) : null;

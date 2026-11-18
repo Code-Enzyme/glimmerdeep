@@ -2,6 +2,7 @@
    system serif for headings, system sans for small labels. No external fonts or images. */
 
 :root {
+  --ts: 1;   /* the Comfort text size (SPEC section 22): 1, 1.5 or 2 */
   --plum: #2B1E3A;
   --plum-deep: #1D1428;
   --plum-soft: #3B2B50;
@@ -313,7 +314,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   border-radius: 12px 9px 13px 10px;
 }
 .empty, .waits {
-  font: italic 15px/1.4 var(--serif);
+  font: italic calc(15px * var(--ts))/1.4 var(--serif);
   color: #5A4660;
   padding: 10px 2px 8px 40px;
 }
@@ -429,7 +430,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   z-index: 4;
   animation: lift 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
-.confirm p { font: 17px/1.35 var(--serif); margin-bottom: 14px; }
+.confirm p { font: calc(17px * var(--ts))/1.35 var(--serif); margin-bottom: 14px; }
 
 /* The Field Journal and Store buttons: wide paper buttons just above the settings, in thumb reach. */
 .journal-row { flex: none; display: flex; justify-content: center; gap: 10px; padding: 6px 14px 10px; }
@@ -494,7 +495,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 }
 .story-page h2 { font: 700 26px/1.15 var(--serif); margin: 2px 0 10px; }
 .story-lines p {
-  font: italic 18px/1.45 var(--serif);
+  font: italic calc(18px * var(--ts))/1.45 var(--serif);
   color: #2E1E38;
   margin-bottom: 10px;
   padding-left: 12px;
@@ -571,10 +572,10 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .entry.unmet .entry-art { background: radial-gradient(circle at 40% 35%, #3B2B50, #160F20 70%); }
 .entry-body { flex: 1; min-width: 0; }
 .entry h3 { font: 700 21px/1.2 var(--serif); margin: 1px 0 4px; }
-.entry .rule { font: 16px/1.4 var(--serif); }
+.entry .rule { font: calc(16px * var(--ts))/1.4 var(--serif); }
 .entry .note {
   margin-top: 8px;
-  font: italic 16px/1.4 var(--serif);
+  font: italic calc(16px * var(--ts))/1.4 var(--serif);
   color: #4B3856;
   padding-left: 10px;
   border-left: 3px solid rgba(201, 132, 42, 0.55);
@@ -595,7 +596,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 }
 .entry-open:active { background: rgba(201, 132, 42, 0.12); }
 .entry .preview {
-  font: 15px/1.4 var(--serif);
+  font: calc(15px * var(--ts))/1.4 var(--serif);
   color: #4B3856;
   overflow: hidden;
   display: -webkit-box;
@@ -670,7 +671,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   justify-content: center;
   gap: 8px;
   padding: 2px 16px 6px;
-  font: italic 15px/1.25 var(--serif);
+  font: italic calc(15px * var(--ts))/1.25 var(--serif);
   color: #E4D5B6;
   text-align: center;
 }
@@ -722,6 +723,9 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   transform: translateX(-50%);
   z-index: 6;
   padding: 18px 18px 16px;
+  max-height: calc(100% - 28px - var(--safe-t) - var(--safe-b));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   animation: rise 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
 .sheet h3 { font: 700 26px/1.15 var(--serif); }
@@ -737,19 +741,19 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   border-radius: var(--blob);
   box-shadow: 2px 3px 0 rgba(36, 22, 46, 0.4);
 }
-.card p { font: 18px/1.45 var(--serif); }
+.card p { font: calc(18px * var(--ts))/1.45 var(--serif); }
 /* what a held creature does next turn (SPEC section 21) */
 .card p.card-preview {
   margin-top: 12px;
   padding: 8px 12px;
-  font: italic 17px/1.4 var(--serif);
+  font: italic calc(17px * var(--ts))/1.4 var(--serif);
   color: #3E2A48;
   border: 1.5px dashed rgba(36, 22, 46, 0.5);
   border-radius: 12px 9px 13px 10px;
 }
 
 .result { text-align: center; }
-.result-moves { margin-top: 4px; font: 600 16px/1.3 var(--sans); color: #4B3856; white-space: pre; }
+.result-moves { margin-top: 4px; font: 600 calc(16px * var(--ts))/1.3 var(--sans); color: #4B3856; white-space: pre; }
 .marks {
   list-style: none;
   display: flex;
@@ -770,7 +774,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .marks li.earned .moss { animation: pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.5) both; }
 .marks li:nth-child(2) .moss { animation-delay: 0.14s; }
 .marks li:nth-child(3) .moss { animation-delay: 0.28s; }
-.result-best { margin-top: 8px; font: italic 15px/1.3 var(--serif); color: #4B3856; }
+.result-best { margin-top: 8px; font: italic calc(15px * var(--ts))/1.3 var(--serif); color: #4B3856; }
 
 @keyframes rise {
   from { transform: translate(-50%, 26px); opacity: 0; }
@@ -810,7 +814,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   padding-bottom: 4px;
   overflow-wrap: anywhere;
 }
-.daily-streak { font: 15px/1.3 var(--serif); color: #5A4660; margin-top: 2px; }
+.daily-streak { font: calc(15px * var(--ts))/1.3 var(--serif); color: #5A4660; margin-top: 2px; }
 .daily-play {
   flex: none;
   min-width: 92px;
@@ -911,11 +915,10 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   .settings .tool { min-height: 66px; }
 }
 
-/* On a phone the five settings sit in two rows of three columns, so every label fits whatever the font. */
+/* On a phone the six settings sit in two rows of three columns, so every label fits whatever the font. */
 @media (max-width: 499px) {
   .settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .settings .tool { min-height: 60px; }
-  #set-reset { grid-column: span 2; }
 }
 
 @media (min-width: 700px) {
@@ -926,24 +929,62 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   .tool { flex: 0 1 132px; min-height: 76px; font-size: 16px; }
   .tool .ico { width: 34px; height: 34px; }
   .heading h2 { font-size: 26px; }
-  .status { font-size: 18px; }
+  .status { font-size: calc(18px * var(--ts)); }
   .chapter { padding: 16px 20px 12px; }
   .chapter h2 { font-size: 28px; }
 }
 
+/* Motion (SPEC section 22): As phone follows the phone, Reduced holds still, Full plays everything. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  .app:not(.motion-full), .app:not(.motion-full) *, .app:not(.motion-full) *::before, .app:not(.motion-full) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
+.app.motion-reduced, .app.motion-reduced *, .app.motion-reduced *::before, .app.motion-reduced *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* Readable font (SPEC section 22): plain, upright, a little more room between letters and words */
+.app.readable {
+  --serif: Verdana, Tahoma, 'Segoe UI', Roboto, Arial, sans-serif;
+  --sans: Verdana, Tahoma, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+.app.readable * { font-style: normal !important; }
+.app.readable p, .app.readable .status, .app.readable .entry .rule {
+  letter-spacing: 0.03em;
+  word-spacing: 0.12em;
+}
+
+/* The Comfort sheet */
+.comfort { z-index: 8; }
+.opt { margin-top: 14px; padding-top: 12px; border-top: 1.5px dashed rgba(36, 22, 46, 0.35); }
+.opt h4 { font: 700 19px/1.2 var(--serif); }
+.opt-note { margin-top: 2px; font: calc(15px * var(--ts))/1.35 var(--serif); color: #4B3856; }
+.choices { display: flex; gap: 8px; margin-top: 8px; }
+.choice {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 8px;
+  font: 700 16px/1.1 var(--sans);
+  color: var(--ink);
+  background: var(--paper-shade);
+  border: 2px solid var(--ink);
+  border-radius: var(--wobble-small);
+}
+.choice[aria-pressed="true"] { background: var(--amber); box-shadow: inset 0 -3px 0 rgba(36, 22, 46, 0.25); }
+.hc .choice { background: #FFFFFF; }
+.hc .choice[aria-pressed="true"] { background: #FFD27A; }
 
 /* ------------------------------------------------------------------ store (SPEC section 14) */
 
 .shop { z-index: 8; }
 #shop-scrim { z-index: 7; }
-.shop-why { margin-top: 6px; font: 600 16px/1.35 var(--sans); color: #6B2A2A; }
+.shop-why { margin-top: 6px; font: 600 calc(16px * var(--ts))/1.35 var(--sans); color: #6B2A2A; }
 .offer {
   display: flex;
   align-items: center;
@@ -954,10 +995,10 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 }
 .offer-text { flex: 1; min-width: 0; }
 .offer h4 { font: 700 19px/1.2 var(--serif); }
-.offer p { margin-top: 3px; font: 15px/1.35 var(--serif); color: #3B2A47; }
+.offer p { margin-top: 3px; font: calc(15px * var(--ts))/1.35 var(--serif); color: #3B2A47; }
 .offer .buy { flex: none; min-width: 96px; }
 .offer .buy[aria-disabled="true"] { background: transparent; border-style: dashed; box-shadow: none; }
-.shop-note { min-height: 0; margin-top: 10px; font: 600 15px/1.35 var(--sans); color: #2F5A3A; }
+.shop-note { min-height: 0; margin-top: 10px; font: 600 calc(15px * var(--ts))/1.35 var(--sans); color: #2F5A3A; }
 .shop-note:empty { display: none; }
 .shop-test { margin-top: 8px; font: 600 14px/1.3 var(--sans); color: #6B4B2A; }
 .hc .offer p, .hc .shop-test, .hc .shop-why, .hc .shop-note { color: var(--ink); }

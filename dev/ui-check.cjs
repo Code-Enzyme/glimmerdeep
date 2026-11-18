@@ -773,7 +773,7 @@ async function main() {
     await h.page.locator('#back').tap();
     await h.page.locator('#set-contrast').tap();
     await h.page.locator('#set-sound').tap();
-    eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true });
+    eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system' });
 
     // Unlock all skips the level order, never the purchase (SPEC section 14)
     const paidCount = LEVELS.filter((def) => !CHAPTERS.find((c) => c.id === 1).levels.includes(def)).length + NIGHT.length;
@@ -1933,6 +1933,132 @@ async function main() {
       eq('garden: the tally counts the lit puzzle', await txt('#garden .tally'), `1 of ${NIGHT.length} lit`);
       ok('garden: and the second opened', !(await gd.page.locator(`.node[data-level="${n2.id}"]`).getAttribute('class')).includes('locked'));
       await gd.close();
+    }
+
+    // ---------------------------------------------------------------- comfort settings (SPEC section 22)
+    console.log('comfort');
+    {
+      const cf = await phone({ tag: 'comfort' });
+      const txt = async (sel) => ((await cf.page.locator(sel).textContent()) || '').trim();
+      const pressed = (sel) => cf.page.locator(sel).getAttribute('aria-pressed');
+      const px = (sel, prop) => cf.page.evaluate(([s, p]) => getComputedStyle(document.querySelector(s))[p], [sel, prop]);
+      // nothing on the page wider than the screen, and nothing inside a sheet wider than the sheet
+      const sideways = () => cf.page.evaluate(() => {
+        const out = [];
+        const W = window.innerWidth;
+        if (document.documentElement.scrollWidth > W + 1) out.push(`page ${document.documentElement.scrollWidth}`);
+        for (const el of document.querySelectorAll('#app *')) {
+          const r = el.getBoundingClientRect();
+          if (!r.width || getComputedStyle(el).visibility === 'hidden' || el.closest('[hidden]')) continue;
+          if (el.closest('.chapters, .trail, .daily-week, canvas')) continue;   // the map's own scrolling column
+          if (r.right > W + 1 || r.left < -1) out.push(`${el.id || el.className || el.tagName} ${Math.round(r.left)}..${Math.round(r.right)}`);
+          if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'hidden' && el.clientWidth > 0
+            && /^(P|H[1-6]|SPAN|LI|BUTTON|ASIDE)$/.test(el.tagName)) out.push(`${el.id || el.className || el.tagName} scrolls sideways`);
+        }
+        return out.slice(0, 8);
+      });
+      await cf.open();
+      await cf.toMap();
+      eq('comfort: a sixth setting, at 100%', [await txt('#set-comfort .lbl'), await txt('#set-comfort .val'), await pressed('#set-comfort')], ['Comfort', '100%', 'false']);
+      await cf.page.locator('#set-comfort').tap();
+      await cf.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+      ok('comfort: the sheet opens', await cf.page.locator('#comfort').isVisible());
+      eq('comfort: Done has the focus', await cf.page.evaluate(() => document.activeElement && document.activeElement.id), 'comfort-close');
+      eq('comfort: the defaults are pressed', await cf.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[aria-pressed="true"]')].map((b) => b.textContent)),
+        ['100%', 'Off', 'As phone']);
+      await auditPage(cf, 'comfort sheet');
+      await cf.shot('comfort-sheet');
+      await cf.page.locator('#comfort .choice[data-size="2"]').tap();
+      eq('comfort: 200% chosen', [await pressed('#comfort .choice[data-size="2"]'), await pressed('#comfort .choice[data-size="1"]')], ['true', 'false']);
+      eq('comfort: saved', (await cf.gd('save')).settings.textSize, 2);
+      eq('comfort: the setting shows it', [await txt('#set-comfort .val'), await pressed('#set-comfort')], ['200%', 'true']);
+      eq('comfort: the sheet itself fits sideways at 200%', await sideways(), []);
+      await cf.page.locator('#comfort-close').tap();
+      eq('comfort: Done closes it', await cf.gd('panel'), null);
+      await cf.page.locator('#set-comfort').tap();
+      await cf.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+      await cf.page.keyboard.press('Escape');
+      eq('comfort: Escape closes it', [await cf.gd('panel'), await cf.gd('screen')], [null, 'map']);
+      await cf.page.locator('#set-comfort').tap();
+      await cf.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+      await cf.page.touchscreen.tap(195, 30);
+      eq('comfort: a tap outside closes it', await cf.gd('panel'), null);
+      eq('comfort: the map at 200% does not spill sideways', await sideways(), []);
+
+      // reading text doubles, controls keep their size
+      await cf.gd('loadLevel', first.id);
+      eq('comfort: the status row at 200%', await px('#status', 'fontSize'), '30px');
+      eq('comfort: buttons keep their size', await px('#btn-undo .lbl', 'fontSize'), await (async () => {
+        const plain = await phone({ tag: 'comfort-plain' });
+        await plain.open();
+        await plain.gd('loadLevel', first.id);
+        const v = await plain.page.evaluate(() => getComputedStyle(document.querySelector('#btn-undo .lbl')).fontSize);
+        await plain.close();
+        return v;
+      })());
+      eq('comfort: the level at 200% does not spill sideways', await sideways(), []);
+      const s1 = engine.parseLevel(first);
+      const moth = s1.creatures.find((c) => c.type === 'M');
+      await cf.hold(await cf.tile(moth.x, moth.y), 620);
+      await cf.page.waitForFunction(() => window.__gd.panel() === 'card', null, { timeout: 2000 }).catch(() => {});
+      eq('comfort: a rule card at 200%', [await px('#card-text', 'fontSize'), await px('#card-preview', 'fontSize')], ['36px', '34px']);
+      {
+        const box = await cf.page.locator('#card').boundingBox();
+        ok('comfort: the card stays on screen', box.y >= 0 && box.y + box.height <= 844 + 1, JSON.stringify(box));
+        await cf.page.locator('#card-close').scrollIntoViewIfNeeded();
+        ok('comfort: and Got it can be reached', await cf.page.locator('#card-close').isVisible());
+      }
+      eq('comfort: the card does not spill sideways', await sideways(), []);
+      await cf.page.evaluate(() => { document.getElementById('card').scrollTop = 0; });
+      await cf.shot('comfort-card-200');
+      await cf.page.keyboard.press('Escape');
+
+      // the readable font
+      await cf.page.locator('#back').tap();
+      await cf.page.waitForFunction(() => window.__gd.screen() === 'map');
+      await cf.page.locator('#set-comfort').tap();
+      await cf.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+      await cf.page.locator('#comfort .choice[data-readable="true"]').tap();
+      ok('comfort: readable font on', await cf.page.evaluate(() => document.getElementById('app').classList.contains('readable')));
+      ok('comfort: the sheet now reads in a plain sans', /^Verdana/.test(await px('#comfort .opt-note', 'fontFamily')), await px('#comfort .opt-note', 'fontFamily'));
+      eq('comfort: and upright', await px('#comfort .opt-note', 'fontStyle'), 'normal');
+      eq('comfort: still nothing sideways with both on', await sideways(), []);
+      await cf.page.keyboard.press('Escape');
+      await cf.gd('loadLevel', first.id);
+      eq('comfort: the status row is upright too', await px('#status', 'fontStyle'), 'normal');
+      eq('comfort: the level does not spill sideways with both on', await sideways(), []);
+      await cf.shot('comfort-level-readable');
+
+      // motion: Reduced holds the board still on a phone that asks for nothing
+      eq('comfort: As phone, a phone asking for nothing moves', await cf.gd('reduced'), false);
+      await cf.page.locator('#back').tap();
+      await cf.page.waitForFunction(() => window.__gd.screen() === 'map');
+      await cf.page.locator('#set-comfort').tap();
+      await cf.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+      await cf.page.locator('#comfort .choice[data-motion="reduced"]').tap();
+      eq('comfort: Reduced holds still', [await cf.gd('reduced'), (await cf.gd('save')).settings.motion], [true, 'reduced']);
+      ok('comfort: and stops the page\'s animations', await cf.page.evaluate(() => document.getElementById('app').classList.contains('motion-reduced')));
+      await cf.page.keyboard.press('Escape');
+      // kept over a reload
+      await cf.page.reload();
+      await cf.page.waitForFunction(() => window.__gd && window.__gd.screen());
+      await cf.toMap();
+      eq('comfort: kept over a reload', [(await cf.gd('save')).settings.textSize, (await cf.gd('save')).settings.readable, (await cf.gd('save')).settings.motion, await cf.gd('reduced')],
+        [2, true, 'reduced', true]);
+      eq('comfort: and applied again', await cf.page.evaluate(() => document.getElementById('app').style.getPropertyValue('--ts')), '2');
+      await cf.close();
+
+      // a phone that asks for reduced motion: As phone follows it, Full overrides it
+      const rm = await phone({ tag: 'comfort-motion', reducedMotion: 'reduce' });
+      await rm.open();
+      await rm.toMap();
+      eq('comfort: As phone follows a phone that asks for less', await rm.gd('reduced'), true);
+      await rm.page.locator('#set-comfort').tap();
+      await rm.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+      await rm.page.locator('#comfort .choice[data-motion="full"]').tap();
+      eq('comfort: Full plays everything anyway', await rm.gd('reduced'), false);
+      ok('comfort: the page too', await rm.page.evaluate(() => document.getElementById('app').classList.contains('motion-full')));
+      await rm.close();
     }
   }
 

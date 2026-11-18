@@ -1898,7 +1898,7 @@ function paintGlow(g) {
 // Icons
 // ---------------------------------------------------------------------------
 
-const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book'];
+const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort'];
 
 function arrowHead(g, x, y, ang, len) {
   g.moveTo(x + Math.cos(ang + 2.5) * len, y + Math.sin(ang + 2.5) * len);
@@ -2054,6 +2054,19 @@ function iconPath(g, name) {
       g.quadraticCurveTo(0.32, 0.5, 0.41, 0.54);
       g.moveTo(0.59, 0.41);
       g.quadraticCurveTo(0.68, 0.37, 0.76, 0.4);
+      break;
+    case 'comfort':
+      // a large A and a small a, for the Comfort settings (SPEC section 22)
+      g.moveTo(0.1, 0.8);
+      g.lineTo(0.33, 0.2);
+      g.lineTo(0.56, 0.8);
+      g.moveTo(0.19, 0.58);
+      g.lineTo(0.47, 0.58);
+      g.moveTo(0.6, 0.8);
+      g.lineTo(0.75, 0.44);
+      g.lineTo(0.9, 0.8);
+      g.moveTo(0.66, 0.67);
+      g.lineTo(0.84, 0.67);
       break;
     default:
       g.arc(0.5, 0.5, 0.08, 0, TAU);

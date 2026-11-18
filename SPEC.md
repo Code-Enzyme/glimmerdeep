@@ -773,3 +773,27 @@ what it will do on the next turn.
   have no preview line, and neither does a card opened when the level is solved or Wren is caught.
 - `src/ui/preview.js` holds this (no DOM): `previewOf(state, id)` -> null, or
   `{ id, type, x, y, to: { x, y } | null, text }`.
+
+## 22. Comfort settings (decided 18 Nov 2026)
+
+The design doc's accessibility list, beyond what the game already does (no timers, encounters rewind, every
+state shown by shape, High contrast): bigger text, a plainer font, and motion the player chooses.
+
+- **Where:** a sixth button in the map's settings bar, **Comfort** (icon: a large and a small A), opens the
+  Comfort sheet. On a phone the six settings sit in two rows of three. The sheet closes with Done, Back
+  (Escape) or a tap outside it, like the other sheets.
+- **Text size:** 100%, 150% or 200% (three buttons; the chosen one is pressed). It scales the reading text:
+  the status row (tips, tutorial lines, hints), rule cards and their preview line, story pages, the Field
+  Journal, the result panel's lines, the store's offers, the Daily Glimmer streak and the map's notes.
+  Button labels, titles and the board keep their size so every control stays where the thumb expects it.
+  Nothing may scroll sideways at any size; a sheet that grows taller than the screen scrolls.
+- **Readable font:** on or off. On, every serif and italic text turns into a plain sans-serif (Verdana,
+  Tahoma, Segoe UI, Roboto, Arial), upright, with a little extra space between letters and words.
+- **Motion:** As phone, Reduced or Full. As phone (the default) follows the phone's reduce-motion setting.
+  Reduced is what that setting does today: no screen shake, no hops or pulses, the Hush and the title stand
+  still, moves play quickly. Full plays every animation even when the phone asks for less.
+- **Saved** with the other settings (section 7): `textSize` 1, 1.5 or 2 (default 1), `readable` (default
+  false), `motion` 'system', 'reduced' or 'full' (default 'system'). Anything else in a save falls back to the
+  default. Reset progress keeps them.
+- `src/ui/comfort.js` holds the rules (no DOM): `TEXT_SIZES`, `MOTIONS`, `readComfort(settings)` (the
+  three, validated) and `reducedMotion(motion, phoneReduces)`.

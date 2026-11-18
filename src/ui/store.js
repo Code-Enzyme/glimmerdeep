@@ -6,17 +6,19 @@
 
 import { freshShop, readShop } from './shop.js';
 import { readDaily } from './daily.js';
+import { COMFORT_DEFAULTS, readComfort } from './comfort.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
-const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true };
+const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS };
 
 function freshSave() {
   return { levels: {}, seen: [], shop: freshShop(), daily: {}, settings: { ...SETTING_DEFAULTS }, rev: 0 };
 }
 
 // -> { levels: { [id]: { moves, stars } }, seen: [story page id], shop: { full, glimmer, freeAt, paid },
-//      daily: { [YYYY-MM-DD]: { moves, stars } }, settings: { sound, contrast, unlockAll, tutorials }, rev }
+//      daily: { [YYYY-MM-DD]: { moves, stars } },
+//      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion }, rev }
 export function loadSave() {
   let raw = null;
   try {
@@ -53,8 +55,9 @@ export function parseSave(raw) {
     data.daily = readDaily(parsed.daily);
     if (parsed.settings && typeof parsed.settings === 'object') {
       for (const k of Object.keys(SETTING_DEFAULTS)) {
-        if (typeof parsed.settings[k] === 'boolean') data.settings[k] = parsed.settings[k];
+        if (typeof parsed.settings[k] === 'boolean' && typeof SETTING_DEFAULTS[k] === 'boolean') data.settings[k] = parsed.settings[k];
       }
+      Object.assign(data.settings, readComfort(parsed.settings));   // SPEC section 22
     }
     const rev = Number(parsed.rev);
     if (Number.isFinite(rev) && rev > 0) data.rev = Math.floor(rev);

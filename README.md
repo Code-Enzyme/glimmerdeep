@@ -11,6 +11,8 @@ First visits are guided: the opening levels teach the controls by pointing at th
 creature is met through its rule card, and a stuck player is nudged toward Hint and Undo. The
 Tutorials setting on the map turns all of that off. Holding anything on the board opens its field note,
 and holding a creature also shows what it will do next turn if Wren waits (SPEC section 21).
+The Comfort setting makes the reading text up to twice as big, swaps in a plain readable font, and
+lets motion follow the phone, stay still, or stay on (SPEC section 22).
 
 A hint helps a step at a time: the first press names the key creature, the next shows the first move,
 and the third lays out the whole way from where Wren stands, following along as it is played. One hint
