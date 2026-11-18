@@ -137,10 +137,15 @@ async function killApp(device, webview) {
   if (!(await page.evaluate(() => window.__gd.shop().full))) fail('the Full Expedition from the test store was not granted');
   else console.log('store: the Full Expedition bought in the test store');
 
-  // kill the app and open it again: the bests must still be there. The WebView writes localStorage to disk a
-  // few seconds after a change, so a force-stop a second after the purchase lost it (CI, 18 Nov). Give the
-  // write the time it gets on a phone; a Play purchase also comes back from Play at the next start.
-  await page.waitForTimeout(6000);
+  // kill the app as soon as the game says the purchase is saved, and open it again: the bests and the purchase
+  // must still be there. The WebView writes localStorage to disk a few seconds after a change (a force-stop a
+  // second after the purchase lost it, CI 18 Nov), so this needs the second copy of the save (SPEC section 16).
+  const saveFile = await page.evaluate(() => !!(window.Capacitor && window.Capacitor.isPluginAvailable && window.Capacitor.isPluginAvailable('SaveFile')));
+  if (!saveFile) fail('the SaveFile plugin is not registered in the app');
+  const saved = await page.evaluate(() => window.__gd.saved && window.__gd.saved());
+  if (saved !== true) fail(`window.__gd.saved() answered ${JSON.stringify(saved)}, not true`);
+  const revBefore = await page.evaluate(() => window.__gd.save().rev);
+  console.log(`save: SaveFile plugin ${saveFile ? 'present' : 'missing'}, revision ${revBefore} on disk; killing the app now`);
   const oldPid = webview.pid();
   await killApp(device, webview);
   ({ webview, page } = await openApp(device, oldPid));
@@ -155,6 +160,9 @@ async function killApp(device, webview) {
   else console.log(`save kept across restart: ${after.join(', ')}`);
   if (!(await page.evaluate(() => window.__gd.shop().full))) fail('the Full Expedition was lost across the restart');
   else console.log('purchases kept across restart');
+  const revAfter = await page.evaluate(() => window.__gd.save().rev);
+  if (!(revAfter >= revBefore)) fail(`the save came back at revision ${revAfter}, older than ${revBefore}`);
+  else console.log(`save revision after the restart: ${revAfter}`);
   const seen = await page.evaluate(() => window.__gd.save().seen.length);
   if (seen !== CHAPTERS.length + 1) fail(`${seen} story pages counted as seen, not ${CHAPTERS.length + 1}`);
   else console.log(`story pages seen: ${seen}`);

@@ -23,6 +23,10 @@ The Daily Glimmer, the map's first card, is one cavern a day, the same for every
 light it to keep a streak going, and earn a Glimmer the first time each day. The Full Expedition opens
 the last six days too, so a missed day can be mended (SPEC section 15).
 
+The save lives in `localStorage`. In the Android app every save is also written to a file
+(`android/.../SaveFilePlugin.java`), on disk before a purchase is confirmed, so an app swiped away right
+after a purchase still has it when it opens again (SPEC section 16).
+
 Android first, iOS later. The game is plain JavaScript drawn on a canvas, wrapped as a native app with
 [Capacitor](https://capacitorjs.com/).
 

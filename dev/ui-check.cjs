@@ -1494,6 +1494,13 @@ async function main() {
       await st.page.waitForFunction(() => window.__gd.shop().full === true);
       eq('store: the Full Expedition says thank you', await txt('#shop-note'), 'Thank you! Every chapter is open now.');
       eq('store: and shows as owned', [await txt('#shop-full'), await st.page.locator('#shop-full').getAttribute('aria-disabled')], ['Owned', 'true']);
+      // SPEC section 16: a browser has no second copy, so the save is "on disk" at once, and every write counts
+      eq('save: in a browser __gd.saved() answers true', await st.page.evaluate(() => window.__gd.saved()), true);
+      {
+        const stored = await st.page.evaluate(() => JSON.parse(localStorage.getItem('glimmerdeep.v1')));
+        ok('save: the stored save counts its writes', Number.isInteger(stored.rev) && stored.rev >= 2, stored.rev);
+        eq('save: and the game holds the same revision', (await st.gd('save')).rev, stored.rev);
+      }
       await st.page.locator('#shop-restore').tap();
       await st.page.waitForFunction(() => !/Waiting/.test(document.getElementById('shop-note').textContent));
       eq('store: Restore with nothing new', await txt('#shop-note'), 'Nothing new to restore.');

@@ -11,12 +11,16 @@ import { CHAPTERS, LEVELS } from './levels/index.js';
 import { DAILY } from './levels/daily.js';
 import { initAudio, setMuted, play, setAppHidden } from './audio.js';
 import { Session } from './ui/session.js';
-import { loadSave, writeSave, recordResult, clearProgress } from './ui/store.js';
+import {
+  loadSave, writeSave, recordResult, clearProgress, parseSave, newerSave, setSaveMirror, saveWrites, savedDurably,
+} from './ui/store.js';
 import { BoardView } from './ui/board.js';
 import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { renderMap, layoutMap } from './ui/map.js';
-import { onBackButton, exitApp, haptic, onAppState, openStore } from './ui/native.js';
+import {
+  onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror,
+} from './ui/native.js';
 import { PRODUCTS, CATALOG, FREE_CHAPTER, chapterOpen, hintCost, payHint, hintLabel, minutesWord, settle } from './ui/shop.js';
 import { TitleArt } from './ui/title.js';
 import { Tutorial, resolvePoint, STUCK_AFTER } from './ui/tutorial.js';
@@ -80,6 +84,7 @@ const btn = {
 const COACH_BUTTON = { plant: btn.lantern, wait: btn.wait, undo: btn.undo, hint: btn.hint };
 
 const save = loadSave();
+setSaveMirror(mirrorSave);   // every write also goes to the app's own file (SPEC section 16)
 let params;
 try {
   params = new URLSearchParams(window.location.search);
@@ -275,11 +280,15 @@ function leaveLevel() {
 
 function showTitle() {
   leaveLevel();
+  titleProgress();
+  showScreen('title');
+}
+
+function titleProgress() {
   const lit = LEVELS.filter((def) => save.levels[def.id]).length;
   const progress = $('title-progress');
   progress.textContent = lit ? `${lit} of ${LEVELS.length} caverns lit` : '';
   progress.hidden = !lit;
-  showScreen('title');
 }
 
 function showMap() {
@@ -1072,11 +1081,13 @@ function renderShop() {
   $('shop-test').hidden = !store || store.kind !== 'test';
 }
 
-// Grants what the store reports, saves before confirming with the store, and redraws. -> the product ids granted
+// Grants what the store reports, saves, confirms with the store once the save is on disk (SPEC section 16), and
+// redraws. -> the product ids granted
 function applyPurchases(purchases) {
   const out = settle(save.shop, purchases);
   if (out.granted.length) writeSave(save);
-  if (store) store.confirm(out.confirm);
+  const s = store;
+  if (s && out.confirm.length) savedDurably().then(() => s.confirm(out.confirm));
   if (out.granted.length) {
     sfx('solve');
     if (screen === 'map') drawMap();
@@ -1130,6 +1141,31 @@ async function restorePurchases() {
   buying = false;
   shopNote = note;
   renderShop();
+}
+
+// The second copy of the save was written more often (the app was killed before localStorage reached the disk):
+// take it, write it back, and redraw what shows the save. SPEC section 16.
+function adoptSave(other) {
+  if (newerSave(save, other) === save) return;
+  for (const k of ['levels', 'seen', 'shop', 'daily', 'settings', 'rev']) save[k] = other[k];
+  writeSave(save);
+  syncSettings();
+  if (screen === 'title') titleProgress();
+  if (screen === 'map') drawMap();
+  if (session) refreshHud();
+}
+
+// Reads the second copy, then opens the store, so a purchase is always settled on the right save. A copy that
+// does not answer in 3 s is left alone.
+function startSave() {
+  const writesAtStart = saveWrites();
+  const wait = new Promise((resolve) => { window.setTimeout(() => resolve(null), 3000); });
+  Promise.race([readSaveMirror(), wait])
+    .then((raw) => {
+      if (raw && saveWrites() === writesAtStart) adoptSave(parseSave(raw));
+    })
+    .catch(() => {})
+    .then(startStore);
 }
 
 function startStore() {
@@ -1545,6 +1581,8 @@ window.__gd = {
   tutorial: () => (tutorial ? { index: tutorial.index, done: tutorial.done } : null),
   heard: () => heard.slice(),
   shop: () => ({ ...JSON.parse(JSON.stringify(save.shop)), kind: store ? store.kind : null, prices: { ...prices } }),
+  // resolves true once every save so far is on disk (SPEC section 16)
+  saved: () => savedDurably().then(() => true),
   // the Daily Glimmer's date, in place of the clock ('YYYY-MM-DD', or null for the clock again)
   setToday: (day) => {
     todayOverride = day || null;
@@ -1559,7 +1597,7 @@ applyIcons(document);
 syncMotion();
 syncSettings();
 showTitle();
-startStore();
+startSave();
 // the Hint button's "in 7 min" counts down
 window.setInterval(() => {
   if (screen === 'level' && session) refreshHintLabel();

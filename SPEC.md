@@ -584,3 +584,24 @@ Numbers marked [PLACEHOLDER - PLAYTEST] are starting points.
   chapter's tally, the story (section 13) or which chapter a creature was met in.
 - **Code:** the date rules live in `src/ui/daily.js` (no DOM, no clock: callers pass the date), tested in
   Node. The `__gd.setToday(date)` check hook stands in for the clock.
+
+## 16. A save that survives a quick kill (decided 18 Nov 2026)
+
+The WebView writes `localStorage` to disk a few seconds after a change, so an app killed right after a
+save (swiped away, or stopped by the system) can come back without it. A Glimmer jar is consumed on Google
+Play as soon as it is granted, so a lost save would lose the Glimmer for good.
+
+- **Revision:** the save gains `rev`, a count of its writes. Every write adds 1; Reset progress keeps
+  counting (it never goes back), so a reset is never mistaken for an older save.
+- **Second copy:** in the Android app every write also goes to a file in the app's own storage
+  (`SaveFilePlugin`, glue only), written atomically and on disk before the plugin answers. In a browser
+  there is no second copy.
+- **Starting:** the game loads `localStorage` at once, then reads the file. If the file's `rev` is higher
+  and nothing has been saved since the start, the file's save replaces it (and is written back to
+  `localStorage`). The store opens after that read.
+- **Purchases:** a purchase is confirmed with the store (acknowledged or consumed, section 14) only after the
+  write that granted it is on disk (the file write has answered, or failed).
+- **Code:** `src/ui/store.js` keeps the revision, the choice between two saves (`newerSave`) and the promise
+  of the last copy (`savedDurably`), with no Capacitor, tested in Node; `src/ui/native.js` provides the
+  copy. The device check kills the app as soon as the game says the purchase is saved, and the purchase
+  must be there after the restart.

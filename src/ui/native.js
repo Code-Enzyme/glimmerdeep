@@ -64,3 +64,36 @@ export async function openStore(catalog) {
   }
   return testStore(catalog);
 }
+
+// ---------------------------------------------------------------- the second copy of the save (SPEC section 16)
+//
+// In the Android app every save is also written to a file in the app's own storage (SaveFilePlugin), on disk
+// before the plugin answers. In a browser there is no second copy: mirrorSave answers at once, readSaveMirror
+// gives null.
+
+const SaveFile = registerPlugin('SaveFile');
+
+function hasSaveFile() {
+  try {
+    return isNative() && Capacitor.isPluginAvailable('SaveFile');
+  } catch (e) {
+    return false;
+  }
+}
+
+// -> Promise, resolved once the copy is on disk (rejected if it could not be written)
+export function mirrorSave(json) {
+  if (!hasSaveFile()) return Promise.resolve();
+  return SaveFile.write({ data: json });
+}
+
+// -> Promise of the saved string, or null when there is none
+export async function readSaveMirror() {
+  if (!hasSaveFile()) return null;
+  try {
+    const out = await SaveFile.read();
+    return out && typeof out.data === 'string' ? out.data : null;
+  } catch (e) {
+    return null;
+  }
+}

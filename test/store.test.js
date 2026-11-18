@@ -1,7 +1,9 @@
 // The save (src/ui/store.js): read and written through window.localStorage, which is stubbed here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSave, writeSave, recordResult, clearProgress, SAVE_KEY } from '../src/ui/store.js';
+import {
+  loadSave, writeSave, recordResult, clearProgress, SAVE_KEY, parseSave, newerSave, setSaveMirror, savedDurably, saveWrites,
+} from '../src/ui/store.js';
 
 function withStorage(initial) {
   const data = new Map(initial === undefined ? [] : [[SAVE_KEY, initial]]);
@@ -113,4 +115,82 @@ test('store: reset progress clears the Daily Glimmer records too', () => {
   save.daily['2026-11-18'] = { moves: 14, stars: 3 };
   clearProgress(save);
   assert.deepEqual(save.daily, {});
+});
+
+// ---------------------------------------------------------------- SPEC section 16: a save that survives a quick kill
+
+test('store: every write counts up the save\'s revision, and a reset keeps counting', () => {
+  const data = withStorage();
+  const save = loadSave();
+  assert.equal(save.rev, 0);
+  writeSave(save);
+  writeSave(save);
+  assert.equal(save.rev, 2);
+  assert.equal(JSON.parse(data.get(SAVE_KEY)).rev, 2);
+  assert.equal(loadSave().rev, 2);
+  clearProgress(save);
+  writeSave(save);
+  assert.equal(loadSave().rev, 3, 'a reset never goes back');
+  withStorage(JSON.stringify({ levels: {}, rev: 'x' }));
+  assert.equal(loadSave().rev, 0);
+  withStorage(JSON.stringify({ levels: {}, rev: -4 }));
+  assert.equal(loadSave().rev, 0);
+  withStorage(JSON.stringify({ levels: {}, rev: 7.9 }));
+  assert.equal(loadSave().rev, 7);
+});
+
+test('store: parseSave reads a saved string like loadSave, and junk as a fresh save', () => {
+  withStorage();
+  const save = loadSave();
+  recordResult(save, '2-3', 9, 2);
+  save.shop.full = true;
+  const data = withStorage();
+  writeSave(save);
+  const parsed = parseSave(data.get(SAVE_KEY));
+  assert.deepEqual(parsed, loadSave());
+  assert.deepEqual(parsed.levels, { '2-3': { moves: 9, stars: 2 } });
+  for (const junk of [null, '', 'nope', '42', '[]']) assert.deepEqual(parseSave(junk), parseSave(null));
+  assert.equal(parseSave(null).rev, 0);
+});
+
+test('store: of two saves, the one with more writes wins; a tie keeps the first', () => {
+  const a = { ...parseSave(null), rev: 4 };
+  const b = { ...parseSave(null), rev: 6 };
+  assert.equal(newerSave(a, b), b);
+  assert.equal(newerSave(b, a), b);
+  assert.equal(newerSave(a, { ...a }), a);
+  assert.equal(newerSave(a, null), a);
+});
+
+test('store: every write goes to the mirror too, and savedDurably waits for it', async () => {
+  const data = withStorage();
+  const save = loadSave();
+  const got = [];
+  let finish;
+  setSaveMirror((json) => {
+    got.push(json);
+    return new Promise((resolve) => { finish = resolve; });
+  });
+  const before = saveWrites();
+  writeSave(save);
+  assert.equal(saveWrites(), before + 1);
+  assert.deepEqual(got, [data.get(SAVE_KEY)], 'the mirror gets exactly what was written');
+  let done = false;
+  savedDurably().then(() => { done = true; });
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(done, false, 'not durable until the mirror answers');
+  finish();
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(done, true);
+
+  // a mirror that fails, or throws, still lets the game go on
+  setSaveMirror(() => Promise.reject(new Error('disk full')));
+  writeSave(save);
+  await savedDurably();
+  setSaveMirror(() => { throw new Error('gone'); });
+  assert.equal(writeSave(save), true);
+  await savedDurably();
+  setSaveMirror(null);
+  writeSave(save);
+  await savedDurably();
 });
