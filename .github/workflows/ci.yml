@@ -113,6 +113,12 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: node dev/device-check.cjs apk/app-debug.apk
+      - name: Why the emulator stopped, if it did
+        if: failure()
+        run: |
+          free -m
+          sudo dmesg | grep -i -E 'out of memory|killed process|oom' | tail -n 20 || true
+          tail -n 60 dev/device-shots/logcat.txt || true
       - name: Upload device screenshots
         if: always()
         uses: actions/upload-artifact@v4

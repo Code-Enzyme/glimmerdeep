@@ -71,6 +71,11 @@ async function killApp(device, webview) {
   const [device] = await android.devices({ omitDriverInstall: true });
   if (!device) throw new Error('no Android device');
   current = device;
+  // the device's whole log, kept on the host as it happens, so it survives the emulator going away
+  const { spawn } = require('child_process');
+  const logcat = spawn('adb', ['-s', device.serial(), 'logcat', '-v', 'time'], { stdio: ['ignore', fs.openSync(path.join(shots, 'logcat.txt'), 'w'), 'ignore'] });
+  logcat.unref();
+  process.on('exit', () => logcat.kill());
   console.log(`device: ${device.model()} (${device.serial()})`);
   await device.installApk(fs.readFileSync(apk));
   await device.shell(`pm clear ${PKG}`);
