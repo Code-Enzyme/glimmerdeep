@@ -1,4 +1,4 @@
-// Checks every level in src/levels/index.js with the solver and prints one line per level:
+// Checks every level in src/levels/index.js and the Daily Glimmer pool in src/levels/daily.js with the solver and prints one line per level:
 // id, name, declared par, shortest solution found, positions explored, feature necessity, time, OK or FAIL.
 // A level's tutorial (SPEC section 12) is checked too.
 // Exits with status 1 if any level is not ok.
@@ -6,7 +6,8 @@
 //   node tools/verify-levels.js                    check all levels
 //   node tools/verify-levels.js --max-states N     give each search a budget of N positions (default 300000)
 //   node tools/verify-levels.js --bench            also time the solver on a fixed mid-size board
-import { LEVELS } from '../src/levels/index.js';
+import { LEVELS as CHAPTER_LEVELS } from '../src/levels/index.js';
+import { DAILY } from '../src/levels/daily.js';
 import { parseLevel } from '../src/engine.js';
 import { checkLevel, solve } from '../src/solver.js';
 import { checkTutorial } from '../src/ui/tutorial.js';
@@ -33,6 +34,7 @@ let failed = 0;
 let searched = 0;
 let totalMs = 0;
 const seenIds = new Set();
+const LEVELS = [...CHAPTER_LEVELS, ...DAILY];
 
 if (LEVELS.length > 0) {
   const nameWidth = Math.max(4, ...LEVELS.map((level) => String(level && level.name).length));

@@ -19,6 +19,10 @@ instant hints; a free hint comes every ten minutes anyway. No ads, no energy, no
 sell through Google Play Billing (`android/.../BillingPlugin.java`); debug builds and browsers use a
 free test store, so every purchase can be tried without a Play account (SPEC section 14).
 
+The Daily Glimmer, the map's first card, is one cavern a day, the same for everyone on the same date:
+light it to keep a streak going, and earn a Glimmer the first time each day. The Full Expedition opens
+the last six days too, so a missed day can be mended (SPEC section 15).
+
 Android first, iOS later. The game is plain JavaScript drawn on a canvas, wrapped as a native app with
 [Capacitor](https://capacitorjs.com/).
 
@@ -53,11 +57,11 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `SPEC.md` | The rules contract: board, turn order, creatures, light, level format, module contracts |
 | `docs/glimmerdeep-design.md` | The full game design document |
 | `src/engine.js`, `src/solver.js` | Rules and the shortest-solution solver (pure) |
-| `src/levels/` | The levels, by chapter (70 in seven chapters) |
+| `src/levels/` | The levels, by chapter (70 in seven chapters), and the Daily Glimmer's 34 caverns (`daily.js`) |
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |
-| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the app-shell bridge (`ui/native.js`) |
+| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the Daily Glimmer's date rules (`ui/daily.js`), the app-shell bridge (`ui/native.js`) |
 | `tools/` | Build, level verifier, icon maker |
 | `dev/` | Browser and device checks, plus the level-design search scripts |
 | `android/` | The Capacitor Android project |

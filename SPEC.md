@@ -545,3 +545,42 @@ lives. Prices and amounts marked [PLACEHOLDER - PLAYTEST] are starting points, n
   Debug builds, browsers and every check use the **test store**: every purchase succeeds at once, free, and
   the panel says "Test build: purchases are free." `src/ui/native.js` picks the store; the rest of the
   game never knows which one it has.
+
+## 15. Daily Glimmer (decided 18 Nov 2026)
+
+One cavern a day, the same for every player on the same date (design doc section 6, Replayability).
+Numbers marked [PLACEHOLDER - PLAYTEST] are starting points.
+
+- **The pool:** `src/levels/daily.js` exports `DAILY`, levels in the section 6 format with ids `D-01`,
+  `D-02`, … Like the chapters' levels, each solves at exactly its par and needs its featured elements
+  (`npm run verify` checks both lists). The pool mixes the species of chapters 1 to 6 but never the shutter
+  or the Mirrorbeetle, so every daily cavern can be played without learning to aim. No daily cavern has a
+  tutorial; instead, when a cavern not lit yet opens with a creature the player has not met in the chapters
+  (no level of theirs with it is lit), that creature's rule card opens first. Consecutive days never feature
+  the same set of creatures. The pool starts with [PLACEHOLDER - PLAYTEST] a few dozen
+  caverns found by `dev/levels-gen.js` and sifted by `dev/daily-pick.mjs`; the design aims at 365.
+- **Which cavern:** the date is the player's local calendar date, written `YYYY-MM-DD`. Its day number
+  counts days from `2026-01-01` (day 0), and the day's cavern is `DAILY[dayNumber mod DAILY.length]`
+  (always a non-negative index, so dates before 2026 work too).
+- **Who can play:** today's cavern is free for everyone. The **archive**, the 6 days before today, is part
+  of the Full Expedition (section 14); a locked day opens the store. Days further back are not offered.
+- **Records:** the save gains `daily: { [date]: { moves, stars } }`, a best per date kept like a level's
+  best (fewest moves, most star moss). Only the last 400 dates are kept. Reset progress clears it.
+- **Streak:** the dates in a row, ending today, or yesterday when today's cavern is not lit yet, that have a
+  record. Missing a day costs nothing earned: star moss and Glimmer stay, and the streak simply starts
+  again. The best streak is the longest such run among the kept records. Archive solves count, so the Full
+  Expedition can mend a missed day.
+- **Reward:** the first time today's cavern is lit, on its own date, it gives 1 Glimmer
+  [PLACEHOLDER - PLAYTEST]; the result panel says so ("+1 Glimmer"). Archive days and replays give none.
+- **The map card:** the map's first card, above chapter 1. It shows "Daily Glimmer", today's date
+  ("Wed 18 Nov"), the cavern's name, the streak ("3-day streak, best 7", or "Light today's cavern to start a
+  streak." followed by " Best 7." once there has been one), a row of the last 7 days (the 6 archive days, then today) and a **Play** button with today's
+  star moss. A day in the row is a button: lit once that date has a record, ringed for today, with a lock
+  on archive days without the Full Expedition. Each button's label names the date and its state.
+- **Playing:** the level screen shows "Daily Glimmer" and the date in place of the level id ("Daily
+  Glimmer, 18 Nov": no weekday, so it fits a small phone's top bar). The result
+  panel has no Next level; Map, Replay and Back work as for any level. Hints cost as usual (section 14).
+- **Not counted elsewhere:** daily caverns do not count toward the title screen's "caverns lit", a
+  chapter's tally, the story (section 13) or which chapter a creature was met in.
+- **Code:** the date rules live in `src/ui/daily.js` (no DOM, no clock: callers pass the date), tested in
+  Node. The `__gd.setToday(date)` check hook stands in for the clock.

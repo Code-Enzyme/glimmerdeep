@@ -1,10 +1,12 @@
-// Integration check: play every shipped level through the real UI with the solver's shortest solution.
+// Integration check: play every shipped level, the Daily Glimmer's caverns too, through the real UI with the
+// solver's shortest solution.
 const { chromium } = require('playwright');
 const path = require('path');
 const { pathToFileURL } = require('url');
 (async () => {
   const root = path.resolve(__dirname, '..');
   const { LEVELS } = await import(pathToFileURL(path.join(root, 'src/levels/index.js')).href);
+  const { DAILY } = await import(pathToFileURL(path.join(root, 'src/levels/daily.js')).href);
   const { parseLevel } = await import(pathToFileURL(path.join(root, 'src/engine.js')).href);
   const { solve } = await import(pathToFileURL(path.join(root, 'src/solver.js')).href);
   const shots = path.join(root, 'dev/play-shots');
@@ -18,9 +20,10 @@ const { pathToFileURL } = require('url');
   await page.goto(pathToFileURL(path.join(root, 'dist/glimmerdeep.html')).href + '?unlock=1');
   await page.waitForFunction(() => window.__gd);
   let bad = 0;
-  for (const level of LEVELS) {
+  for (const level of [...LEVELS, ...DAILY]) {
     const sol = solve(parseLevel(level));
-    await page.evaluate((id) => window.__gd.loadLevel(id), level.id);
+    if (DAILY.includes(level)) await page.evaluate((def) => window.__gd.loadLevelDef(def), level);
+    else await page.evaluate((id) => window.__gd.loadLevel(id), level.id);
     await page.waitForTimeout(250);
     // a chapter's first level meets its creature with a rule card (SPEC section 12): read it, close it
     if (await page.evaluate(() => window.__gd.panel() === 'card')) await page.keyboard.press('Escape');

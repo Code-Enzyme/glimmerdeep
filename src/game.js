@@ -8,6 +8,7 @@
 import { key, DIRS } from './engine.js';
 import { nextMove } from './solver.js';
 import { CHAPTERS, LEVELS } from './levels/index.js';
+import { DAILY } from './levels/daily.js';
 import { initAudio, setMuted, play, setAppHidden } from './audio.js';
 import { Session } from './ui/session.js';
 import { loadSave, writeSave, recordResult, clearProgress } from './ui/store.js';
@@ -19,7 +20,8 @@ import { onBackButton, exitApp, haptic, onAppState, openStore } from './ui/nativ
 import { PRODUCTS, CATALOG, FREE_CHAPTER, chapterOpen, hintCost, payHint, hintLabel, minutesWord, settle } from './ui/shop.js';
 import { TitleArt } from './ui/title.js';
 import { Tutorial, resolvePoint, STUCK_AFTER } from './ui/tutorial.js';
-import { NOTES, storyDue, journal, pageById } from './ui/story.js';
+import { NOTES, storyDue, journal, pageById, speciesOf } from './ui/story.js';
+import { dateKey, dayLabel, dateLabel, dailyLevel, streakOf, weekOf, dayOpen, finishDaily } from './ui/daily.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
@@ -151,6 +153,59 @@ function isUnlocked(def) {
   return !!save.levels[def.id] || !!save.levels[LEVELS[i - 1].id];
 }
 
+// ---------------------------------------------------------------- the Daily Glimmer (SPEC section 15)
+
+const DAILY_CHAPTER = { id: 0, name: 'Daily Glimmer', accent: '#F2C46D', levels: [] };
+let todayOverride = null;   // __gd.setToday stands in for the clock in checks
+
+function today() {
+  return todayOverride || dateKey(new Date());
+}
+
+// ?unlock=1 (a developer link) opens the archive as it opens the chapters
+function dailyOpen(day) {
+  return dayOpen(forceUnlock ? { ...save.shop, full: true } : save.shop, day, today());
+}
+
+// What the map's card shows (src/ui/map.js dailyCard), or null with no pool.
+function dailyView() {
+  const t = today();
+  const def = dailyLevel(DAILY, t);
+  if (!def) return null;
+  return {
+    dateLabel: dayLabel(t),
+    name: def.name,
+    streak: streakOf(save.daily, t),
+    todayStars: save.daily[t] ? save.daily[t].stars : 0,
+    week: weekOf(save.daily, t).map((d) => ({ ...d, open: dailyOpen(d.key) })),
+    onPlay: () => {
+      play('ui');
+      openDaily(t);
+    },
+    onDay: (day) => {
+      play('ui');
+      openDaily(day);
+    },
+    onLocked: () => {
+      play('ui');
+      openShop('archive');
+    },
+  };
+}
+
+function openDaily(day) {
+  const def = dailyLevel(DAILY, day);
+  return def && dailyOpen(day) ? openLevel(def, true, day) : false;
+}
+
+// A daily cavern not lit yet opens the rule card of the first creature in it not met in the chapters.
+function openDailyCard() {
+  if (!current.day || save.daily[current.day] || panel || screen !== 'level') return;
+  const met = new Set(journal(save, CHAPTERS).creatures.filter((c) => c.met).map((c) => c.kind));
+  const kind = speciesOf(current.def).find((k) => !met.has(k) && RULE_CARDS[k]);
+  if (kind) openCard(kind);
+}
+
 function nextLevelAfter(def) {
   const i = LEVELS.indexOf(def);
   return i >= 0 && i + 1 < LEVELS.length ? LEVELS[i + 1] : null;
@@ -254,6 +309,7 @@ function drawMap() {
       play('ui');
       openShop('chapter', chapter);
     },
+    daily: dailyView(),
   });
   for (const lock of chaptersEl.querySelectorAll('.lock')) setIcon(lock, 'lock');
   const j = journal(save, CHAPTERS);
@@ -418,7 +474,8 @@ function renderJournal() {
 }
 
 // Starts a level. -> false when the definition does not parse.
-function openLevel(def, adhoc) {
+// day: the date of a Daily Glimmer cavern ('YYYY-MM-DD'); its levels are ad hoc for the chapters' records.
+function openLevel(def, adhoc, day) {
   let fresh;
   try {
     fresh = new Session(def);
@@ -431,9 +488,9 @@ function openLevel(def, adhoc) {
   cancelWalk();
   queue.length = 0;
   session = fresh;
-  current = { def, chapter: chapterOf(def), adhoc: !!adhoc || !LEVELS.includes(def), result: null };
+  current = { def, chapter: day ? DAILY_CHAPTER : chapterOf(def), adhoc: !!adhoc || !LEVELS.includes(def), day: day || null, result: null };
   // Tutorials and the stuck nudge are for a level's first visits: never solved, and the setting on.
-  const guided = save.settings.tutorials && !current.adhoc && !save.levels[def.id];
+  const guided = save.settings.tutorials && (day ? !save.daily[day] : !current.adhoc && !save.levels[def.id]);
   tutorial = guided && Array.isArray(def.tutorial) && def.tutorial.length ? new Tutorial(def.tutorial) : null;
   stuck = guided && typeof def.par === 'number' ? 0 : -1;
   moved = false;
@@ -442,12 +499,13 @@ function openLevel(def, adhoc) {
   lastBloom = -1;
   view.highContrast = save.settings.contrast;
   view.setLevel(session.state, { accent: current.chapter.accent, facing: session.facing });
-  $('level-id').textContent = def.id !== undefined ? `Level ${def.id}` : 'Test cavern';
+  $('level-id').textContent = day ? `Daily Glimmer, ${dateLabel(day)}` : def.id !== undefined ? `Level ${def.id}` : 'Test cavern';
   $('level-name').textContent = def.name || 'Unnamed cavern';
   clearHint();
   showScreen('level');
   refreshHud();
   openTutorialCard();
+  openDailyCard();
   return true;
 }
 
@@ -846,8 +904,16 @@ function beginCelebration() {
   const marks = session.marks();
   const stars = session.stars();
   const moves = session.moves;
-  const result = { marks, stars, moves, best: null, firstTime: false, improved: false };
-  if (!current.adhoc) {
+  const result = { marks, stars, moves, best: null, firstTime: false, improved: false, glimmer: 0 };
+  if (current.day) {
+    const old = save.daily[current.day];
+    const daily = finishDaily(save.daily, save.shop, current.day, today(), moves, stars);
+    result.firstTime = !old;
+    result.improved = !!old && moves < old.moves;
+    result.best = daily.record;
+    result.glimmer = daily.glimmer;
+    writeSave(save);
+  } else if (!current.adhoc) {
     const old = save.levels[def.id];
     result.firstTime = !old;
     result.improved = !!old && moves < old.moves;
@@ -869,7 +935,8 @@ function onCelebrated() {
 function showResult() {
   const def = current.def;
   const r = current.result;
-  $('result-id').textContent = def.id !== undefined ? `Level ${def.id} lit` : 'Cavern lit';
+  $('result-id').textContent = current.day ? `Daily Glimmer, ${dateLabel(current.day)}`
+    : def.id !== undefined ? `Level ${def.id} lit` : 'Cavern lit';
   $('result-name').textContent = def.name || 'Unnamed cavern';
   const hasPar = typeof def.par === 'number';
   $('result-moves').textContent = `${r.moves} move${r.moves === 1 ? '' : 's'}` + (hasPar ? `  ·  par ${def.par}` : '');
@@ -895,14 +962,15 @@ function showResult() {
   }
   list.setAttribute('aria-label', `${r.stars} of 3 star moss`);
   const best = $('result-best');
+  const lines = [];
   if (r.best && !r.firstTime) {
-    best.textContent = r.improved
+    lines.push(r.improved
       ? `A new best: ${r.best.moves} moves.`
-      : `Your best: ${r.best.moves} move${r.best.moves === 1 ? '' : 's'}, ${r.best.stars} of 3 star moss.`;
-    best.hidden = false;
-  } else {
-    best.hidden = true;
+      : `Your best: ${r.best.moves} move${r.best.moves === 1 ? '' : 's'}, ${r.best.stars} of 3 star moss.`);
   }
+  if (r.glimmer) lines.push(`+${r.glimmer} Glimmer for lighting today's cavern.`);
+  best.textContent = lines.join(' ');
+  best.hidden = !lines.length;
   const next = nextLevelAfter(def);
   $('result-next').hidden = !next || current.adhoc;
   openPanel('result');
@@ -964,13 +1032,15 @@ function openCard(kind) {
 
 const NEXT_PAID = LEVELS.filter((def) => chapterOf(def).id !== FREE_CHAPTER).length;
 
-// reason: 'chapter' (a locked chapter, or Next after chapter 1), 'hint' (nothing left to pay with), or none
+// reason: 'chapter' (a locked chapter, or Next after chapter 1), 'hint' (nothing left to pay with), 'archive' (a
+// locked Daily Glimmer day), or none
 function openShop(reason, chapter) {
   if (panel) closePanel();
   cancelWalk();
   queue.length = 0;
   shopNote = '';
   if (reason === 'chapter' && chapter) shopWhy = `Chapter ${chapter.id}, ${chapter.name}, is part of the Full Expedition.`;
+  else if (reason === 'archive') shopWhy = 'The Daily Glimmer archive is part of the Full Expedition.';
   else if (reason === 'hint') shopWhy = `No Glimmer left. The next free hint comes in ${minutesWord(hintCost(save.shop, Date.now()).waitMs)}.`;
   else shopWhy = '';
   renderShop();
@@ -1228,7 +1298,7 @@ onClick($('result-next'), () => {
 });
 onClick($('result-replay'), () => {
   play('ui');
-  if (current) openLevel(current.def, current.adhoc);
+  if (current) openLevel(current.def, current.adhoc, current.day);
 });
 onClick($('result-map'), () => {
   play('ui');
@@ -1353,7 +1423,7 @@ document.addEventListener('keydown', (e) => {
   if (panel === 'shop') return;   // the store keeps the board still; Escape closes it
   if (what === 'undo') undo();
   else if (what === 'restart') {
-    if (panel === 'result') openLevel(current.def, current.adhoc);
+    if (panel === 'result') openLevel(current.def, current.adhoc, current.day);
     else restart();
   } else if (panel) return;
   else if (what === 'hint') requestHint();
@@ -1380,6 +1450,7 @@ onAppState((active) => {
   if (active) {
     startLoop();
     if (screen === 'title') titleArt.start();
+    if (screen === 'map') drawMap();   // the Daily Glimmer may be a new day
   } else {
     stopLoop();
     titleArt.stop();
@@ -1474,6 +1545,12 @@ window.__gd = {
   tutorial: () => (tutorial ? { index: tutorial.index, done: tutorial.done } : null),
   heard: () => heard.slice(),
   shop: () => ({ ...JSON.parse(JSON.stringify(save.shop)), kind: store ? store.kind : null, prices: { ...prices } }),
+  // the Daily Glimmer's date, in place of the clock ('YYYY-MM-DD', or null for the clock again)
+  setToday: (day) => {
+    todayOverride = day || null;
+    if (screen === 'map') drawMap();
+    return today();
+  },
 };
 
 // ---------------------------------------------------------------- start

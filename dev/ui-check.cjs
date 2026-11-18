@@ -82,6 +82,8 @@ async function main() {
   const solver = await import(pathToFileURL(path.join(ROOT, 'src/solver.js')).href);
   const { CHAPTERS, LEVELS } = await import(pathToFileURL(path.join(ROOT, 'src/levels/index.js')).href);
   const { STORY, NOTES } = await import(pathToFileURL(path.join(ROOT, 'src/ui/story.js')).href);
+  const { DAILY } = await import(pathToFileURL(path.join(ROOT, 'src/levels/daily.js')).href);
+  const { dailyLevel } = await import(pathToFileURL(path.join(ROOT, 'src/ui/daily.js')).href);
   const CARDS = ruleCards();
   const first = LEVELS[0];
   const solutionOf = (def) => {
@@ -1513,6 +1515,108 @@ async function main() {
       await st.page.locator('#confirm-yes').tap();
       eq('store: Reset progress keeps purchases', [(await st.gd('shop')).full, (await st.gd('shop')).glimmer], [true, 13]);
       await st.close();
+    }
+    // ---------------------------------------------------------------- Daily Glimmer (SPEC section 15)
+    console.log('daily glimmer');
+    {
+      const dg = await phone({ tag: 'daily' });
+      const txt = async (sel) => ((await dg.page.locator(sel).textContent()) || '').trim();
+      const TODAY = '2026-11-18';
+      const today = dailyLevel(DAILY, TODAY);
+      const solveDaily = async (def) => {
+        await dg.page.waitForFunction(() => window.__gd.screen() === 'level');
+        if ((await dg.gd('panel')) === 'card') await dg.page.keyboard.press('Escape');
+        for (const m of solutionOf(def)) await dg.gd('act', m);
+        await waitResult(dg);
+      };
+      await dg.open();
+      await dg.gd('setToday', TODAY);
+      await dg.toMap();
+      eq('daily: the card comes first on the map', await dg.page.evaluate(() => document.querySelector('#chapters > *').id), 'daily');
+      eq('daily: its title and date', [await txt('#daily .kicker'), await txt('#daily-date')], ['Daily Glimmer', 'Wed 18 Nov']);
+      eq('daily: today\'s cavern by name', await txt('#daily-name'), today.name);
+      eq('daily: no streak yet', await txt('#daily-streak'), 'Light today\'s cavern to start a streak.');
+      eq('daily: a row of seven days', await dg.page.locator('#daily-week .day').count(), 7);
+      eq('daily: the last day is today', await dg.page.locator('#daily-week .day').last().getAttribute('class'), 'day today');
+      eq('daily: archive days are locked without the Full Expedition', await dg.page.locator('#daily-week .day.locked').count(), 6);
+      eq('daily: a day says what it is', await dg.page.locator('#daily-week .day').nth(5).getAttribute('aria-label'),
+        'Tue 17 Nov, not lit. Part of the Full Expedition.');
+      eq('daily: today says what it is', await dg.page.locator('#daily-week .day').last().getAttribute('aria-label'), 'Wed 18 Nov, today, not lit yet');
+      eq('daily: Play is labelled', await dg.page.locator('#daily-play').getAttribute('aria-label'), `Play today's Daily Glimmer, ${today.name}`);
+      await auditPage(dg, 'map with the daily card');
+      await dg.shot('daily-card');
+
+      // a locked archive day opens the store
+      await dg.page.locator('#daily-week .day').nth(5).tap();
+      await dg.page.waitForFunction(() => window.__gd.panel() === 'shop');
+      eq('daily: a locked day opens the store, and says why', await txt('#shop-why'), 'The Daily Glimmer archive is part of the Full Expedition.');
+      await dg.page.locator('#shop-close').tap();
+
+      // today's cavern
+      await dg.page.locator('#daily-play').tap();
+      await dg.page.waitForFunction(() => window.__gd.screen() === 'level');
+      eq('daily: the level screen says Daily Glimmer and the date', [await txt('#level-id'), await txt('#level-name')], ['Daily Glimmer, 18 Nov', today.name]);
+      eq('daily: a creature not met in the chapters shows its rule card first', await dg.gd('panel'), 'card');
+      await solveDaily(today);
+      ok('daily: no Next level after a daily cavern', await dg.page.locator('#result-next').isHidden());
+      eq('daily: the result panel names it', await txt('#result-id'), 'Daily Glimmer, 18 Nov');
+      ok('daily: the first light gives a Glimmer, and says so', (await txt('#result-best')).includes('+1 Glimmer'), await txt('#result-best'));
+      eq('daily: one Glimmer added', (await dg.gd('shop')).glimmer, 4);
+      eq('daily: the record is kept by date', (await dg.gd('save')).daily, { [TODAY]: { moves: today.par, stars: 3 } });
+      eq('daily: no level record from it', (await dg.gd('save')).levels, {});
+      await dg.page.locator('#result-replay').tap();
+      eq('daily: no rule card once the day is lit', await dg.gd('panel'), null);
+      await solveDaily(today);
+      ok('daily: a replay says nothing about Glimmer', !(await txt('#result-best')).includes('Glimmer'), await txt('#result-best'));
+      eq('daily: and gives none', (await dg.gd('shop')).glimmer, 4);
+      await dg.page.locator('#result-map').tap();
+      eq('daily: Map goes back to the map, with no story page', [await dg.gd('screen'), await dg.gd('story')], ['map', null]);
+      eq('daily: the streak starts', await txt('#daily-streak'), '1-day streak, best 1');
+      eq('daily: today is lit in the row', await dg.page.locator('#daily-week .day').last().getAttribute('class'), 'day today lit');
+      eq('daily: Play shows today\'s star moss', await dg.page.locator('#daily-play .moss.on').count(), 3);
+      eq('daily: chapter tallies do not count it', await txt('.chapter .tally'), `0 of ${CHAPTERS[0].levels.length} lit`);
+
+      // the next day: yesterday keeps the streak alive until today is lit
+      await dg.gd('setToday', '2026-11-19');
+      eq('daily: a new day, a new date', await txt('#daily-date'), 'Thu 19 Nov');
+      eq('daily: a new cavern', await txt('#daily-name'), dailyLevel(DAILY, '2026-11-19').name);
+      eq('daily: yesterday keeps the streak', await txt('#daily-streak'), '1-day streak, best 1');
+      eq('daily: and shows lit in the row', await dg.page.locator('#daily-week .day').nth(5).getAttribute('class'), 'day lit locked');
+
+      // the archive, with the Full Expedition
+      await dg.page.locator('#btn-shop').tap();
+      await dg.page.locator('#shop-full').tap();
+      await dg.page.waitForFunction(() => window.__gd.shop().full === true);
+      await dg.page.locator('#shop-close').tap();
+      eq('daily: bought, the archive opens', await dg.page.locator('#daily-week .day.locked').count(), 0);
+      eq('daily: an open archive day says so', await dg.page.locator('#daily-week .day').nth(4).getAttribute('aria-label'), 'Tue 17 Nov, not lit');
+      await dg.page.locator('#daily-week .day').nth(4).tap();
+      const tue = dailyLevel(DAILY, '2026-11-17');
+      eq('daily: an archive day plays its own cavern', [await txt('#level-id'), await txt('#level-name')], ['Daily Glimmer, 17 Nov', tue.name]);
+      await solveDaily(tue);
+      ok('daily: an archive day gives no Glimmer', !(await txt('#result-best')).includes('Glimmer'), await txt('#result-best'));
+      eq('daily: no Glimmer from it', (await dg.gd('shop')).glimmer, 4);
+      await dg.page.keyboard.press('Escape');
+      eq('daily: Escape on its result goes to the map', await dg.gd('screen'), 'map');
+      eq('daily: the archive mends the streak', await txt('#daily-streak'), '2-day streak, best 2');
+
+      // kept over a reload; Back from a daily level; Reset clears it
+      await dg.page.reload();
+      await dg.page.waitForFunction(() => window.__gd && window.__gd.screen());
+      await dg.gd('setToday', '2026-11-19');
+      await dg.toMap();
+      eq('daily: records survive a reload', Object.keys((await dg.gd('save')).daily).sort(), ['2026-11-17', TODAY]);
+      await dg.page.locator('#daily-play').tap();
+      await dg.page.waitForFunction(() => window.__gd.screen() === 'level');
+      if ((await dg.gd('panel')) === 'card') await dg.page.keyboard.press('Escape');
+      await dg.page.locator('#back').tap();
+      eq('daily: Back from a daily cavern goes to the map', await dg.gd('screen'), 'map');
+      await dg.page.locator('#set-reset').tap();
+      await dg.page.locator('#confirm-yes').tap();
+      eq('daily: Reset progress clears the records', (await dg.gd('save')).daily, {});
+      eq('daily: and the streak', await txt('#daily-streak'), 'Light today\'s cavern to start a streak.');
+      eq('daily: Reset keeps the Glimmer', (await dg.gd('shop')).glimmer, 4);
+      await dg.close();
     }
     {
       // the Hint button's price line, on a fresh save

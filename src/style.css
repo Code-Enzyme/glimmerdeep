@@ -744,6 +744,81 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   to { transform: scale(1) rotate(0); opacity: 1; }
 }
 
+/* ------------------------------------------------------------------ the Daily Glimmer card (SPEC section 15) */
+
+.daily {
+  position: relative;
+  max-width: 560px;
+  margin: 0 auto 18px;
+  padding: 12px 14px 14px;
+  transform: rotate(0.3deg);
+  background-image:
+    radial-gradient(90% 110% at 100% 0%, rgba(242, 176, 76, 0.38), rgba(242, 176, 76, 0) 62%),
+    radial-gradient(120% 90% at 12% 0%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 55%);
+}
+.daily-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.daily-date { font: 600 14px/1.2 var(--sans); color: #5A4660; white-space: nowrap; }
+.daily-main { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.daily-words { flex: 1; min-width: 0; }
+.daily h2 {
+  font: 700 23px/1.15 var(--serif);
+  text-decoration: underline wavy var(--amber-deep);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+  padding-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.daily-streak { font: 15px/1.3 var(--serif); color: #5A4660; margin-top: 2px; }
+.daily-play {
+  flex: none;
+  min-width: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 14px;
+}
+.daily-play .lbl { font: 700 17px/1 var(--sans); }
+.daily-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.day {
+  position: relative;
+  min-width: 40px;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 47% 53% 46% 54% / 53% 47% 54% 46%;
+  box-shadow: 1px 2px 0 rgba(36, 22, 46, 0.4);
+}
+.day:nth-child(even) { border-radius: 53% 47% 54% 46% / 47% 53% 46% 54%; }
+.day:active { transform: translate(1px, 2px); box-shadow: none; }
+.day .letter { font: 700 15px/1 var(--sans); }
+.day .num { font: 600 14px/1 var(--sans); color: #5A4660; }
+.day.lit { background: var(--amber); }
+.day.lit .num { color: var(--ink); }
+.day.today { box-shadow: 0 0 0 3px var(--paper), 0 0 0 6px var(--amber-deep); }
+.day.locked {
+  border-style: dashed;
+  background: repeating-linear-gradient(135deg, #E9DCC0 0 5px, #DCCDAE 5px 10px);
+  box-shadow: none;
+}
+.day.lit.locked { background: var(--amber); }
+.day .lock {
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  width: 20px;
+  height: 20px;
+  background-color: var(--ink);
+  background-size: 14px 14px;
+  border-radius: 50%;
+}
+
 /* ------------------------------------------------------------------ high contrast */
 
 .hc { --paper-text: #FFFFFF; --plum-line: #C9B8E0; }
@@ -762,6 +837,9 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .hc .marks li.missed { color: var(--ink); }
 .hc .round { background: #171021; border-color: #FFFFFF; }
 .hc .journal-open .val { color: var(--ink); }
+.hc .daily { background-image: none; }
+.hc .daily-date, .hc .daily-streak, .hc .day .num { color: var(--ink); }
+.hc .day { border-width: 3px; }
 .hc .tab { background: #171021; border-color: #FFFFFF; color: #FFFFFF; }
 .hc .tab[aria-selected="true"] { background: #FFFAEC; color: var(--ink); }
 .hc .story-lines p, .hc .entry .note, .hc .entry .preview, .hc .story-count,

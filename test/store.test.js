@@ -92,3 +92,25 @@ test('store: reset progress keeps the purchases and the Glimmer', () => {
   assert.equal(save.shop.full, true);
   assert.equal(save.shop.glimmer, 9);
 });
+
+test('store: the Daily Glimmer records round-trip, junk is dropped, an old save gets none (SPEC section 15)', () => {
+  const data = withStorage();
+  const save = loadSave();
+  assert.deepEqual(save.daily, {});
+  save.daily['2026-11-18'] = { moves: 14, stars: 3 };
+  writeSave(save);
+  assert.deepEqual(JSON.parse(data.get(SAVE_KEY)).daily, { '2026-11-18': { moves: 14, stars: 3 } });
+  assert.deepEqual(loadSave().daily, { '2026-11-18': { moves: 14, stars: 3 } });
+  withStorage(JSON.stringify({ levels: {} }));
+  assert.deepEqual(loadSave().daily, {});
+  withStorage(JSON.stringify({ levels: {}, daily: { yesterday: { moves: 3, stars: 1 }, '2026-11-17': { moves: 8, stars: 2 } } }));
+  assert.deepEqual(loadSave().daily, { '2026-11-17': { moves: 8, stars: 2 } });
+});
+
+test('store: reset progress clears the Daily Glimmer records too', () => {
+  withStorage();
+  const save = loadSave();
+  save.daily['2026-11-18'] = { moves: 14, stars: 3 };
+  clearProgress(save);
+  assert.deepEqual(save.daily, {});
+});

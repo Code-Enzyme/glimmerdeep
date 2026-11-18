@@ -21,10 +21,72 @@ export function levelNumber(def, indexInChapter) {
   return m ? m[1] : String(indexInChapter + 1);
 }
 
+// The Daily Glimmer card (SPEC section 15). d: { dateLabel, name, streak: { current, best }, todayStars,
+//   week: [{ key, label, letter, today, stars, open }], onPlay(), onDay(key), onLocked() }
+function dailyCard(d) {
+  const card = el('section', 'daily paper');
+  card.id = 'daily';
+  card.setAttribute('aria-label', 'Daily Glimmer');
+  const head = el('div', 'daily-head');
+  head.appendChild(el('span', 'kicker ink', 'Daily Glimmer'));
+  const date = el('span', 'daily-date', d.dateLabel);
+  date.id = 'daily-date';
+  head.appendChild(date);
+  card.appendChild(head);
+
+  const main = el('div', 'daily-main');
+  const words = el('div', 'daily-words');
+  const name = el('h2', '', d.name);
+  name.id = 'daily-name';
+  words.appendChild(name);
+  const { current, best } = d.streak;
+  const streak = el('p', 'daily-streak', current
+    ? `${current}-day streak, best ${best}`
+    : `Light today's cavern to start a streak.${best ? ` Best ${best}.` : ''}`);
+  streak.id = 'daily-streak';
+  words.appendChild(streak);
+  main.appendChild(words);
+  const play = el('button', 'btn primary daily-play');
+  play.id = 'daily-play';
+  play.type = 'button';
+  play.setAttribute('aria-label', `Play today's Daily Glimmer, ${d.name}`);
+  play.appendChild(el('span', 'lbl', 'Play'));
+  const moss = el('span', 'moss-row');
+  moss.innerHTML = mossSvg(d.todayStars >= 1) + mossSvg(d.todayStars >= 2) + mossSvg(d.todayStars >= 3);
+  play.appendChild(moss);
+  play.addEventListener('click', () => d.onPlay());
+  main.appendChild(play);
+  card.appendChild(main);
+
+  const week = el('div', 'daily-week');
+  week.id = 'daily-week';
+  week.setAttribute('role', 'group');
+  week.setAttribute('aria-label', 'The last seven days');
+  for (const day of d.week) {
+    const b = el('button', 'day' + (day.today ? ' today' : '') + (day.stars ? ' lit' : '') + (day.open ? '' : ' locked'));
+    b.type = 'button';
+    b.dataset.date = day.key;
+    const state = day.stars ? `lit, ${day.stars} of 3 star moss` : day.today ? 'not lit yet' : 'not lit';
+    b.setAttribute('aria-label', `${day.label}, ${day.today ? 'today, ' : ''}${state}${day.open ? '' : '. Part of the Full Expedition.'}`);
+    b.appendChild(el('span', 'letter', day.letter));
+    b.appendChild(el('span', 'num', String(Number(day.key.slice(8)))));
+    if (!day.open) b.appendChild(el('span', 'lock ico'));
+    b.addEventListener('click', () => {
+      if (day.today) d.onPlay();
+      else if (day.open) d.onDay(day.key);
+      else d.onLocked();
+    });
+    week.appendChild(b);
+  }
+  card.appendChild(week);
+  return card;
+}
+
 // opts: { chapters, levels, records: { [id]: { moves, stars } }, isUnlocked(def), onOpen(def), onLocked(def, node),
-//         chapterLocked(chapter) (part of the Full Expedition, not bought), onShop(chapter) }
+//         chapterLocked(chapter) (part of the Full Expedition, not bought), onShop(chapter), daily (see dailyCard) }
 export function renderMap(root, opts) {
   root.textContent = '';
+  if (opts.daily) root.appendChild(dailyCard(opts.daily));
   const firstOpen = opts.levels.find((def) => !opts.records[def.id] && opts.isUnlocked(def));
   for (const chapter of opts.chapters) {
     const levels = chapter.levels || [];
