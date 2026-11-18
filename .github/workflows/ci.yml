@@ -115,12 +115,19 @@ jobs:
           target: default
           arch: x86_64
           disable-animations: true
+          # the action's defaults, plus the device's kernel log: the emulator has been going away without a
+          # word right after Play, and a guest kernel fault would show here
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
           script: node dev/device-check.cjs apk/app-debug.apk
       - name: Why the emulator stopped, if it did
         if: failure()
         run: |
           free -m
-          sudo dmesg | grep -i -E 'out of memory|killed process|oom' | tail -n 20 || true
+          "$ANDROID_HOME/emulator/emulator" -version | head -n 1 || true
+          echo '--- emulator crash reports'
+          find /tmp ~/.android -maxdepth 4 \( -name '*.dmp' -o -name 'emu-crash*' -o -name '*crash*.txt' \) 2>/dev/null | head -n 20 || true
+          echo '--- host kernel'
+          sudo dmesg | tail -n 30 || true
           tail -n 60 dev/device-shots/logcat.txt || true
       - name: Upload device screenshots
         if: always()
