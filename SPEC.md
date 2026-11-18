@@ -745,3 +745,31 @@ points; the design aims at 30 deep puzzles.
 - **Not counted elsewhere:** deep puzzles do not count toward the title screen's caverns lit, the 100 star
   moss, the story (section 13) or which chapter a creature was met in.
 
+## 21. Hold to preview a creature (decided 18 Nov 2026)
+
+The design doc's answer to "creature behaviour feels random": holding a creature shows its rule card and
+what it will do on the next turn.
+
+- **Holding a creature** (the long press of section 8) opens its rule card with one more line: what that
+  creature does on the next turn if Wren waits, worked out by the engine (`step(state, 'Z')`), in words, such
+  as "If Wren waits, it flies west." Waiting is the one move that leaves Wren and the lantern where they are,
+  so the line describes the creature, not a plan.
+- **On the board**, while that card is open, a dotted arrow runs from the creature to the tile it will step
+  onto. A creature that stays put gets no arrow.
+- **The words** (always "If Wren waits, " and then):
+  - a step: "it flies / creeps / marches / wanders / drifts / crawls north" (east, south, west) for the
+    Fluffmoth, Shellwhelk, Stumpcap, Dozer newt, Gloamling and Mirrorbeetle; a glowing Emberwick "follows Wren
+    north"
+  - a moth that lands in a puddle: "it flies west and settles in the puddle as a bridge."
+  - a blocked newt: "it is blocked and turns to face south."
+  - a lit Stumpcap with something in its way: "it wakes but cannot step forward."
+  - an Emberwick: "it warms up. One more lit turn and it catches." / "it catches and starts to glow." /
+    "it cools off."
+  - staying put: a lit whelk "it stays hidden in its shell."; a sleeping Stumpcap "it sleeps."; a dozing newt
+    "it dozes."; a cold Emberwick in the dark "it stays cold."; a glowing Emberwick beside Wren "it stays
+    beside Wren."; a basking beetle "it basks in the light."; a moth, whelk, Gloamling or beetle while the
+    lantern is smothered "it waits while the lantern is smothered."; anything else "it stays where it is."
+- Meet cards (tutorial `card` steps, a daily cavern's first creature) and cards for anything but a creature
+  have no preview line, and neither does a card opened when the level is solved or Wren is caught.
+- `src/ui/preview.js` holds this (no DOM): `previewOf(state, id)` -> null, or
+  `{ id, type, x, y, to: { x, y } | null, text }`.

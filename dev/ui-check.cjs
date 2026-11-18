@@ -86,6 +86,7 @@ async function main() {
   const { NIGHT } = await import(pathToFileURL(path.join(ROOT, 'src/levels/night.js')).href);
   const { dailyLevel } = await import(pathToFileURL(path.join(ROOT, 'src/ui/daily.js')).href);
   const hints = await import(pathToFileURL(path.join(ROOT, 'src/ui/hints.js')).href);
+  const { previewOf } = await import(pathToFileURL(path.join(ROOT, 'src/ui/preview.js')).href);
   // A legal move from `state` that leaves the hint's way (SPEC section 18) and from which the level still solves.
   const offTheWay = (def, state) => {
     const ladder = new hints.HintLadder(engine.parseLevel(def), solutionOf(def), def.feature);
@@ -566,21 +567,33 @@ async function main() {
 
     // ---------------------------------------------------------------- 6. long-press rule cards
     await h.gd('loadLevel', first.id);
-    const cardCheck = async (what, x, y, title, text) => {
+    // preview: what a held creature does next turn (SPEC section 21), from src/ui/preview.js, or null
+    const cardCheck = async (what, x, y, title, text, preview = null, shot = null) => {
       await h.hold(await h.tile(x, y), 620);
       await h.page.waitForFunction(() => window.__gd.panel() === 'card', null, { timeout: 2000 }).catch(() => {});
       eq(`rule card (${what}): title`, await h.page.locator('#card-title').textContent(), title);
       eq(`rule card (${what}): text as in SPEC`, await h.page.locator('#card-text').textContent(), text);
       ok(`rule card (${what}): visible`, await h.page.locator('#card').isVisible());
+      if (preview) {
+        eq(`rule card (${what}): says what it does next turn`, await h.page.locator('#card-preview').textContent(), preview.text);
+        ok(`rule card (${what}): the preview line shows`, await h.page.locator('#card-preview').isVisible());
+        eq(`rule card (${what}): the board shows its next step`, await h.gd('preview'), { x: preview.x, y: preview.y, to: preview.to });
+        if (shot) await h.shot(shot);
+      } else {
+        ok(`rule card (${what}): no preview line`, !(await h.page.locator('#card-preview').isVisible()));
+        eq(`rule card (${what}): nothing previewed on the board`, await h.gd('preview'), null);
+      }
       await h.page.keyboard.press('Escape');
       eq(`rule card (${what}): Escape closes it`, await h.gd('panel'), null);
+      eq(`rule card (${what}): and the preview goes`, await h.gd('preview'), null);
     };
     {
       const s = engine.parseLevel(first);
       const kBefore = await h.gd('key');
       await cardCheck('Wren', s.wren.x, s.wren.y, 'Wren', CARDS.Wren);
       const m = s.creatures.find((c) => c.type === 'M');
-      if (m) await cardCheck('Fluffmoth', m.x, m.y, 'Fluffmoth', CARDS.Fluffmoth);
+      ok('rule card: level 1-1 has a Fluffmoth to hold', !!m);
+      await cardCheck('Fluffmoth', m.x, m.y, 'Fluffmoth', CARDS.Fluffmoth, previewOf(s, m.id), '06b-hold-preview');
       const b = s.buds[0];
       await cardCheck('Glowbud', b.x, b.y, 'Glowbud', CARDS.Glowbud);
       const py = s.tiles.findIndex((row) => row.includes('~'));
@@ -819,7 +832,7 @@ async function main() {
     {
       const s = engine.parseLevel(ADHOC.whelk);
       const w = s.creatures[0];
-      await cardCheck('Shellwhelk', w.x, w.y, 'Shellwhelk', CARDS.Shellwhelk);
+      await cardCheck('Shellwhelk', w.x, w.y, 'Shellwhelk', CARDS.Shellwhelk, previewOf(s, w.id));
       await cardCheck('root', 5, 1, 'Pressure root and gate', CARDS['Pressure root and gate']);
       await cardCheck('gate', 4, 2, 'Pressure root and gate', CARDS['Pressure root and gate']);
       const moves = solutionOf(ADHOC.whelk);
@@ -834,7 +847,7 @@ async function main() {
     {
       const s = engine.parseLevel(ADHOC.stump);
       const t = s.creatures[0];
-      await cardCheck('Stumpcap', t.x, t.y, 'Stumpcap', CARDS.Stumpcap);
+      await cardCheck('Stumpcap', t.x, t.y, 'Stumpcap', CARDS.Stumpcap, previewOf(s, t.id));
     }
     // newt: its card, and its markings glow in the dark where it wanders
     await h.gd('loadLevelDef', ADHOC.newt);
@@ -842,7 +855,7 @@ async function main() {
       const s = engine.parseLevel(ADHOC.newt);
       const n = s.creatures[0];
       eq('ad-hoc newt: starts in the dark', s.lit[n.y * s.w + n.x], 0);
-      await cardCheck('Dozer newt', n.x, n.y, 'Dozer newt', CARDS['Dozer newt']);
+      await cardCheck('Dozer newt', n.x, n.y, 'Dozer newt', CARDS['Dozer newt'], previewOf(s, n.id));
       await h.page.waitForTimeout(300);
       // bright pixels in a tile: the newt's tile against a plain dark floor tile two steps east
       const bright = (x, y) => h.page.evaluate(([tx, ty]) => {
@@ -882,7 +895,7 @@ async function main() {
       await h.gd('loadLevelDef', ADHOC.ember);
       const s = engine.parseLevel(ADHOC.ember);
       const k = s.creatures[0];
-      await cardCheck('Emberwick', k.x, k.y, 'Emberwick', CARDS.Emberwick);
+      await cardCheck('Emberwick', k.x, k.y, 'Emberwick', CARDS.Emberwick, previewOf(s, k.id));
       await h.page.waitForTimeout(200);
       const cold = await bright(k.x, k.y, 690);
       await h.gd('act', 'Z');
@@ -914,7 +927,7 @@ async function main() {
       const onGloam = await bright(6, 1, 300);
       const onFloor = await bright(4, 1, 300);
       ok('ad-hoc gloam: its edge shows in the dark', onGloam > 0.006 && onGloam > onFloor * 4, JSON.stringify({ onGloam, onFloor }));
-      await cardCheck('Gloamling', 6, 1, 'Gloamling', CARDS.Gloamling);
+      await cardCheck('Gloamling', 6, 1, 'Gloamling', CARDS.Gloamling, previewOf(engine.parseLevel(def), 'O1'));
       await h.gd('act', 'E');
       await h.idle();
       await h.page.waitForTimeout(200);
@@ -951,7 +964,7 @@ async function main() {
       const onBeetle = await bright(7, 1, 300);
       const onFloor = await bright(5, 1, 300);
       ok('ad-hoc beam: a beetle\'s mirror shows in the dark', onBeetle > 0.006 && onBeetle > onFloor * 4, JSON.stringify({ onBeetle, onFloor }));
-      await cardCheck('Mirrorbeetle', 7, 1, 'Mirrorbeetle', CARDS.Mirrorbeetle);
+      await cardCheck('Mirrorbeetle', 7, 1, 'Mirrorbeetle', CARDS.Mirrorbeetle, previewOf(engine.parseLevel(def), 'R1'));
       await cardCheck('shutter lantern', 2, 1, 'Shutter', CARDS.Shutter);
       eq('ad-hoc beam: beside the lantern the button aims', await h.page.locator('#btn-lantern .lbl').textContent(), 'Aim');
       eq('ad-hoc beam: and says so to a screen reader', await h.page.locator('#btn-lantern').getAttribute('aria-label'), 'Aim the lantern');

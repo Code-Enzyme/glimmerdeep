@@ -19,6 +19,7 @@ import { BoardView } from './ui/board.js';
 import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg, wayMoveSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { HintLadder, pieceText } from './ui/hints.js';
+import { previewOf } from './ui/preview.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
   onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror,
@@ -1144,6 +1145,7 @@ function closePanel() {
   scrim.hidden = true;
   shopScrim.hidden = true;
   panel = null;
+  if (was === 'card') view.preview = null;
   // closing a tutorial's meet card finishes that step
   const step = was === 'card' ? coachStep() : null;
   if (step && step.card) {
@@ -1153,13 +1155,18 @@ function closePanel() {
   return true;
 }
 
-function openCard(kind) {
+// preview: a held creature's next step (src/ui/preview.js), or none
+function openCard(kind, preview) {
   const card = RULE_CARDS[kind];
   if (!card) return;
   cancelWalk();
   queue.length = 0;
   $('card-title').textContent = card.title;
   $('card-text').textContent = card.text;
+  const line = $('card-preview');
+  line.textContent = preview ? preview.text : '';
+  line.hidden = !preview;
+  view.preview = preview ? { x: preview.x, y: preview.y, to: preview.to } : null;
   const url = portraitUrl(kind, current ? current.chapter.accent : undefined);
   $('card-art').style.backgroundImage = url ? `url(${url})` : 'none';
   armedAt = performance.now() + 400;
@@ -1379,7 +1386,9 @@ canvas.addEventListener('pointerdown', (e) => {
         g.held = true;
         view.press = null;
         buzz('tap');
-        openCard(kind);
+        // holding a creature also shows what it does next turn (SPEC section 21)
+        const creature = session.state.creatures.find((c) => c.x === tile.x && c.y === tile.y);
+        openCard(kind, creature ? previewOf(session.state, creature.id) : null);
       }, HOLD_MS);
     }
   }
@@ -1707,6 +1716,7 @@ window.__gd = {
   busy: () => view.busy || celebrating && panel !== 'result',
   hint: () => (view.hint ? (view.hint.dir || (view.hint.at ? 'key' : 'ring')) : null),
   hintAt: () => (view.hint && view.hint.at ? { ...view.hint.at } : null),
+  preview: () => (view.preview ? JSON.parse(JSON.stringify(view.preview)) : null),
   hintStep: () => (ladder ? ladder.tier : 0),
   way: () => {
     const way = ladder && session && !session.solved ? ladder.following(session.state) : null;

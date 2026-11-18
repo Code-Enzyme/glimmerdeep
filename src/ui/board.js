@@ -55,6 +55,7 @@ export class BoardView {
     this.hint = null;      // { dir } | { ring: true } (round Wren) | { at: { x, y } } (round a tile) | null
     this.path = null;      // [{ x, y }] tiles still ahead on a tap-to-walk, the last one is the target
     this.press = null;     // { x, y, t0 } while a finger rests on something that has a rule card
+    this.preview = null;   // { x, y, to: { x, y } | null } a held creature's next step, while its card is open
     this.coach = null;     // { kind: 'wren' | 'creature' | 'tile', id?, x, y, gesture } a tutorial's pointer
     this.cssW = 0;
     this.cssH = 0;
@@ -79,6 +80,7 @@ export class BoardView {
     this.hint = null;
     this.path = null;
     this.press = null;
+    this.preview = null;
     this.coach = null;
     this.buildTiles(state);
     this.computeLayout();
@@ -903,6 +905,54 @@ export class BoardView {
         ctx.strokeStyle = PALETTE.cream;
         ctx.stroke();
       }
+    }
+
+    // a held creature's next step (SPEC section 21): a dotted ring round it, and a dotted arrow to its next tile
+    const preview = this.preview;
+    if (preview) {
+      const fx = cx(preview.x);
+      const fy = cy(preview.y);
+      const inked = (width) => {
+        ctx.lineWidth = width * 2.2;
+        ctx.strokeStyle = PALETTE.ink;
+        ctx.stroke();
+        ctx.lineWidth = width;
+        ctx.strokeStyle = PALETTE.cream;
+        ctx.stroke();
+      };
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.setLineDash([size * 0.09, size * 0.11]);
+      ctx.beginPath();
+      ctx.arc(fx, fy, size * 0.52, 0, TAU);
+      inked(line * 1.1);
+      if (preview.to) {
+        const tx = cx(preview.to.x);
+        const ty = cy(preview.to.y);
+        const dx = Math.sign(tx - fx);
+        const dy = Math.sign(ty - fy);
+        ctx.beginPath();
+        ctx.arc(tx, ty, size * 0.34, 0, TAU);
+        inked(line * 0.9);
+        ctx.beginPath();
+        ctx.moveTo(fx + dx * size * 0.56, fy + dy * size * 0.56);
+        ctx.lineTo(tx - dx * size * 0.2, ty - dy * size * 0.2);
+        inked(line * 1.1);
+        ctx.setLineDash([]);
+        ctx.translate(tx - dx * size * 0.1, ty - dy * size * 0.1);
+        ctx.rotate(Math.atan2(dy, dx));
+        ctx.beginPath();
+        ctx.moveTo(size * 0.12, 0);
+        ctx.lineTo(-size * 0.1, -size * 0.13);
+        ctx.lineTo(-size * 0.1, size * 0.13);
+        ctx.closePath();
+        ctx.lineWidth = line * 2;
+        ctx.strokeStyle = PALETTE.ink;
+        ctx.stroke();
+        ctx.fillStyle = PALETTE.cream;
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     // passing effects

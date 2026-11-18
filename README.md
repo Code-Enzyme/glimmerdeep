@@ -9,7 +9,8 @@ You never push anything; you decide where the light is.
 
 First visits are guided: the opening levels teach the controls by pointing at things, each new
 creature is met through its rule card, and a stuck player is nudged toward Hint and Undo. The
-Tutorials setting on the map turns all of that off.
+Tutorials setting on the map turns all of that off. Holding anything on the board opens its field note,
+and holding a creature also shows what it will do next turn if Wren waits (SPEC section 21).
 
 A hint helps a step at a time: the first press names the key creature, the next shows the first move,
 and the third lays out the whole way from where Wren stands, following along as it is played. One hint
