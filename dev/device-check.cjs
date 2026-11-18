@@ -19,9 +19,18 @@ function fail(msg) {
   process.exitCode = 1;
 }
 
-async function openApp(device) {
+let current = null;   // the device, for the crash log if anything throws
+
+// Opens the app and returns its WebView. `oldPid`: the process of a copy just killed, whose WebView
+// Playwright may not have dropped yet, so it is never mistaken for the new one.
+async function openApp(device, oldPid) {
   await device.shell(`am start -W -n ${ACTIVITY}`);
-  const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
+  let webview = null;
+  for (const until = Date.now() + 60000; !webview && Date.now() < until;) {
+    webview = device.webViews().find((w) => w.pkg() === PKG && w.pid() !== oldPid) || null;
+    if (!webview) await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (!webview) throw new Error(`no WebView for ${PKG}${oldPid ? ` other than the killed process ${oldPid}` : ''}`);
   const page = await webview.page();
   // the app opens on the title screen; Play goes to the map
   await page.waitForFunction(() => window.__gd && window.__gd.screen() === 'title', null, { timeout: 30000 });
@@ -61,6 +70,7 @@ async function killApp(device, webview) {
 
   const [device] = await android.devices({ omitDriverInstall: true });
   if (!device) throw new Error('no Android device');
+  current = device;
   console.log(`device: ${device.model()} (${device.serial()})`);
   await device.installApk(fs.readFileSync(apk));
   await device.shell(`pm clear ${PKG}`);
@@ -123,8 +133,12 @@ async function killApp(device, webview) {
   else console.log('store: the Full Expedition bought in the test store');
 
   // kill the app and open it again: the bests must still be there
+  const oldPid = webview.pid();
   await killApp(device, webview);
-  ({ webview, page } = await openApp(device));
+  ({ webview, page } = await openApp(device, oldPid));
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  webview.once('close', () => console.log(`the reopened app's WebView closed (pid ${webview.pid()})`));
   const book = await play(page);
   // every chapter's last level was solved, so the story so far shows as one book after the restart
   if (book !== CHAPTERS.length) fail(`after the restart Play showed ${book} story pages, not ${CHAPTERS.length}`);
@@ -143,7 +157,19 @@ async function killApp(device, webview) {
   if (errors.length) fail(`page errors: ${errors.slice(0, 5).join(' | ')}`);
   await device.close();
   console.log(process.exitCode ? 'device check FAILED' : 'device check passed');
-})().catch((e) => {
+})().catch(async (e) => {
   console.error(e);
+  // what the device saw: a native crash, or the WebView's renderer going away
+  if (current) {
+    try {
+      const pid = (await current.shell(`pidof ${PKG}`)).toString().trim();
+      console.error(`app process now: ${pid || 'not running'}`);
+      console.error((await current.shell('logcat -d -b crash')).toString().slice(-6000) || '(no crash log)');
+      const log = (await current.shell('logcat -d -t 400')).toString().split('\n');
+      console.error(log.filter((l) => /AndroidRuntime|chromium|Capacitor|glimmerdeep|ActivityManager|libc|DEBUG/.test(l)).slice(-120).join('\n'));
+    } catch (err) {
+      console.error(`could not read the device log: ${err.message}`);
+    }
+  }
   process.exit(1);
 });
