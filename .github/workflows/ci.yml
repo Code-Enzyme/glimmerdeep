@@ -109,7 +109,10 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: google_apis
+          # the plain Android image, without Google Play services: on the Google APIs image, Play services
+          # restarts itself about a minute after boot, and Android then kills every app holding its fonts
+          # provider (the WebView does), which took the app down in the middle of the restart check
+          target: default
           arch: x86_64
           disable-animations: true
           script: node dev/device-check.cjs apk/app-debug.apk
