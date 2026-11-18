@@ -52,7 +52,7 @@ export class BoardView {
     this.celebration = null;
     this.effects = [];
     this.shake = null;
-    this.hint = null;      // { dir } | { ring: true } | null
+    this.hint = null;      // { dir } | { ring: true } (round Wren) | { at: { x, y } } (round a tile) | null
     this.path = null;      // [{ x, y }] tiles still ahead on a tap-to-walk, the last one is the target
     this.press = null;     // { x, y, t0 } while a finger rests on something that has a rule card
     this.coach = null;     // { kind: 'wren' | 'creature' | 'tile', id?, x, y, gesture } a tutorial's pointer
@@ -872,8 +872,10 @@ export class BoardView {
         ctx.stroke();
         ctx.restore();
       } else {
+        const rx = hint.at ? hint.at.x : wx;
+        const ry = hint.at ? hint.at.y : wy;
         ctx.beginPath();
-        ctx.arc(cx(wx), cy(wy), size * (0.5 + 0.08 * beat), 0, TAU);
+        ctx.arc(cx(rx), cy(ry), size * (0.5 + 0.08 * beat), 0, TAU);
         ctx.lineWidth = line * 2.4;
         ctx.strokeStyle = PALETTE.ink;
         ctx.stroke();

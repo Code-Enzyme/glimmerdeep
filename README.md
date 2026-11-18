@@ -11,6 +11,10 @@ First visits are guided: the opening levels teach the controls by pointing at th
 creature is met through its rule card, and a stuck player is nudged toward Hint and Undo. The
 Tutorials setting on the map turns all of that off.
 
+A hint helps a step at a time: the first press names the key creature, the next shows the first move,
+and the third lays out the whole way from where Wren stands, following along as it is played. One hint
+pays for all three (SPEC section 18).
+
 Between chapters Wren's journal tells the story: why the Heartroot is dimming, and what the Gloam
 really is. The Field Journal on the map keeps every story page and a page for each creature met.
 

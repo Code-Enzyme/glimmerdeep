@@ -328,3 +328,19 @@ export function pipSvg(on) {
     + '</svg>'
   );
 }
+
+// One move of a hint's way for the status row (SPEC section 18): an arrow, the lantern, or a pause for Wait.
+// `next`: the move to make now, drawn brighter.
+const WAY_TURN = { N: -90, E: 0, S: 90, W: 180 };
+export function wayMoveSvg(move, next) {
+  let body;
+  if (move === 'L') body = '<path d="M6.2 3.2h3.6M5.4 5.2h5.2l-.7 7.4H6.1z"/><circle class="glow" cx="8" cy="9" r="1.5"/>';
+  else if (move === 'Z') body = '<path d="M6 4.5v7M10 4.5v7"/>';
+  else body = `<path transform="rotate(${WAY_TURN[move] || 0} 8 8)" d="M3 8h9M8.5 4.2 12.3 8l-3.8 3.8"/>`;
+  return (
+    `<svg class="way-move${next ? ' next' : ''}" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">`
+    + body
+    + '</svg>'
+  );
+}
+

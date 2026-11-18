@@ -461,7 +461,7 @@ and never ask for a move the solution does not need.
 - **Undo** never takes a step back. **Restart** goes back to the first step that is not a card step.
 - **Stuck nudge:** on a level that has never been solved, with Tutorials on, once per visit: when the move
   count reaches par + 6 and the level is not solved, the Hint button pulses and the status row says
-  "Stuck? Hint shows the next move, and Undo steps back." It goes away after a hint, an undo, a restart
+  "Stuck? Hint helps a step at a time, and Undo steps back." It goes away after a hint, an undo, a restart
   or four more moves.
 - The **Tutorials** setting sits with the other settings on the map. Resetting progress brings every
   tutorial back, because the levels are no longer solved.
@@ -534,7 +534,8 @@ lives. Prices and amounts marked [PLACEHOLDER - PLAYTEST] are starting points, n
   `?level=<id>` (and the `loadLevel` check hook) opens any level.
 - **Hints:** a hint is **free** when no free hint was taken in the last 10 minutes [PLACEHOLDER - PLAYTEST]
   (so the first hint ever is free). Otherwise it spends one **Glimmer**. A new save starts with 3 Glimmer
-  [PLACEHOLDER - PLAYTEST]. A hint is paid for when it is asked for, whatever it finds. With no free hint
+  [PLACEHOLDER - PLAYTEST]. A hint is paid for when it is asked for, whatever it finds, and pays for all three of its steps
+  (section 18). With no free hint
   and no Glimmer, Hint opens the store instead, which says when the next free hint comes. The Hint button's
   second line shows what the next hint costs: "free", "3 left" (Glimmer), or "in 7 min" when there is
   neither.
@@ -653,3 +654,42 @@ run ahead in the dark, and get back to the light before the Hush gets there.
   order. A chapter's story page unlocks when its last level, now the encounter, is solved, and **a page
   that has been seen stays unlocked**, so saves from before the encounters keep their pages.
 - **Size:** every encounter keeps to the size limit (section 5), and its par is from 14 to 34.
+
+## 18. Hints in three steps (decided 18 Nov 2026)
+
+The design doc's three-tier hint: first the key piece, then the first move, then the whole way. A
+player who only needs a nudge gets a nudge, and nobody is ever left stuck.
+
+- **Asking:** Hint searches for a shortest solution from the position on the board (as before, within the
+  size limit) and pays for it as section 14 says. That solution is the hint's **way**: the moves, and the
+  positions it passes through (by `key`, section 7). It counts as one hint for the star moss, however many
+  of its steps are shown. A search that finds no way pays as before and says so as before.
+- **Steps:** each press of Hint while Wren stands **on the way** (the position is one of the way's
+  positions, not yet solved) is free and shows the next step, from that position:
+  1. **The key piece**, ringed on the board, and the status row names it:
+     - the level's featured creature: the first species in `feature` order that has a creature which
+       does something (any engine event with its id) along the rest of the way; of that species, the
+       creature that does something first. "Hint: think about the Fluffmoth." (the species' card name)
+     - else, for `L` in `feature`: the tile where the lantern is next planted on the way. "Hint: think
+       about where the lantern stands."
+     - else, for `A`: the lantern's tile when it is next aimed. "Hint: think about which way the lantern
+       shines."
+     - else the first creature that does something on the way, as above; else the tile of the next
+       planting; else the first Glowbud not in bloom: "Hint: think about the way to the Glowbud."
+     `H` is passed over: the Hush is never the key piece.
+  2. **The first move**, as hints have always shown it: an arrow from Wren, or the lantern or Wait
+     button pulsing, and "Hint: step east." and so on.
+  3. **The whole way**: the status row shows the moves still to make, the next one first (at most 10
+     shown, then "…"), and how far along the way Wren is: "Move 3 of 16". The board shows the next
+     move as in step 2. It follows the player: every move along the way moves it on, a move off the way
+     hides it and says "Off the way. Undo to get back on it.", and an undo back onto the way brings it
+     back. Hint again only shows it again.
+  Steps 1 and 2 clear with the next move, as before; the next press goes on from the step reached.
+- **Off the way**, Hint asks for a new hint (a new search, paid for), which starts again at step 1.
+  A restart, or leaving the level, ends the hint: a restart is a fresh attempt with no hints used, so it
+  must not keep a hint from before.
+- **The Hint button's second line** reads "more" while the next press shows a further step for free
+  ("Hint, next step free"), and "shown" once the whole way is up ("Hint, the way is shown"); otherwise
+  the price, as section 14 says.
+- `src/ui/hints.js` holds these rules (no DOM): `keyPiece(state, moves, feature)` and the `HintLadder`
+  class, so they can be tested in Node.

@@ -84,6 +84,16 @@ async function main() {
   const { STORY, NOTES } = await import(pathToFileURL(path.join(ROOT, 'src/ui/story.js')).href);
   const { DAILY } = await import(pathToFileURL(path.join(ROOT, 'src/levels/daily.js')).href);
   const { dailyLevel } = await import(pathToFileURL(path.join(ROOT, 'src/ui/daily.js')).href);
+  const hints = await import(pathToFileURL(path.join(ROOT, 'src/ui/hints.js')).href);
+  // A legal move from `state` that leaves the hint's way (SPEC section 18) and from which the level still solves.
+  const offTheWay = (def, state) => {
+    const ladder = new hints.HintLadder(engine.parseLevel(def), solutionOf(def), def.feature);
+    for (const m of ['Z', 'W', 'N', 'S', 'E', 'L']) {
+      const next = engine.step(state, m);
+      if (next && !next.solved && ladder.at(next) < 0 && solver.solve(next, { maxStates: 150000 }).solved) return m;
+    }
+    throw new Error(`ui-check: no move off the way in ${def.id}`);
+  };
   const CARDS = ruleCards();
   const first = LEVELS[0];
   const solutionOf = (def) => {
@@ -275,6 +285,12 @@ async function main() {
     await h.page.waitForFunction(() => window.__gd.hint() !== null);
     await h.page.waitForTimeout(200);
     await h.shot(name('07-hint'));
+    for (let i = 0; i < 2; i++) {
+      await h.page.locator('#btn-hint').tap();
+      await h.page.waitForTimeout(120);
+    }
+    await h.page.waitForFunction(() => window.__gd.way() !== null);
+    await h.shot(name('07b-hint-way'));
 
     // all three species, Hush, a planted lantern, two buds
     await h.gd('loadLevelDef', ADHOC.trio);
@@ -574,23 +590,72 @@ async function main() {
       eq('hold on a wall: no card', await h.gd('panel'), null);
     }
 
-    // ---------------------------------------------------------------- 7. hint
+    // ---------------------------------------------------------------- 7. hint, in three steps (SPEC section 18)
     await h.gd('loadLevel', first.id);
-    await h.page.locator('#btn-hint').tap();
-    await h.page.waitForFunction(() => window.__gd.hint() !== null, null, { timeout: 8000 }).catch(() => {});
-    eq('hint: points along the shortest solution', await h.gd('hint'), DIRV[sol[0]] ? sol[0] : 'ring');
-    if (first.id === '1-1') eq('hint: level 1-1 starts east', await h.gd('hint'), 'E');
-    eq('hint: counted', await h.gd('hints'), 1);
-    ok('hint: status line says so', (await h.page.locator('#status').textContent()).startsWith('Hint:'));
-    await h.page.keyboard.press(KEY_OF[sol[0]]);
-    await h.idle();
-    eq('hint: cleared by the next move', await h.gd('hint'), null);
-    await playByKeys(h, sol.slice(1));
-    await waitResult(h);
-    eq('result after a hint: two star moss', await earned(h), 2);
-    eq('result after a hint: saved', (await h.gd('save')).levels[first.id], { moves: sol.length, stars: 2 });
-    await h.page.locator('#result-replay').tap();
-    eq('replay: fresh attempt', [await h.gd('moves'), await h.gd('hints'), await h.gd('panel')], [0, 0, null]);
+    {
+      const status = async () => ((await h.page.locator('#status').textContent()) || '').trim();
+      const val = async () => ((await h.page.locator('#hint-val').textContent()) || '').trim();
+      const aria = () => h.page.locator('#btn-hint').getAttribute('aria-label');
+      const pressHint = async () => {
+        await h.page.locator('#btn-hint').tap();
+        await h.page.waitForFunction(() => !document.querySelector('#btn-hint').classList.contains('thinking'), null, { timeout: 8000 }).catch(() => {});
+        await h.page.waitForTimeout(80);
+      };
+      const glimmer = (await h.gd('shop')).glimmer;
+      const piece = hints.keyPiece(engine.parseLevel(first), sol, first.feature);
+      await pressHint();
+      eq('hint step 1: rings the key piece', [await h.gd('hint'), await h.gd('hintAt')], ['key', { x: piece.x, y: piece.y }]);
+      eq('hint step 1: names it', await status(), hints.pieceText(piece));
+      if (first.id === '1-1') eq('hint step 1: in level 1-1 it is the Fluffmoth', await status(), 'Hint: think about the Fluffmoth.');
+      eq('hint: counted', await h.gd('hints'), 1);
+      eq('hint step 1: the next step is free', [await val(), await aria()], ['more', 'Hint, next step free']);
+      const spent = glimmer - (await h.gd('shop')).glimmer;
+      await pressHint();
+      eq('hint step 2: points along the shortest solution', await h.gd('hint'), DIRV[sol[0]] ? sol[0] : 'ring');
+      if (first.id === '1-1') eq('hint step 2: level 1-1 starts east', await h.gd('hint'), 'E');
+      ok('hint step 2: status line says so', (await status()).startsWith('Hint:'));
+      eq('hint step 2: free, and still one hint', [(await h.gd('shop')).glimmer, await h.gd('hints')], [glimmer - spent, 1]);
+      await pressHint();
+      eq('hint step 3: the whole way is up', await h.gd('way'), { index: 0, total: sol.length });
+      ok('hint step 3: the status row counts the moves', (await status()).startsWith(`Move 1 of ${sol.length}`), await status());
+      eq('hint step 3: and shows the moves still to make', await h.page.locator('#status .way-move').count(), Math.min(sol.length, 10));
+      eq('hint step 3: the next one first', await h.page.locator('#status .way-move.next').count(), 1);
+      eq('hint step 3: the board points at the next move', await h.gd('hint'), DIRV[sol[0]] ? sol[0] : 'ring');
+      eq('hint step 3: the Hint button says it is shown', [await val(), await aria()], ['shown', 'Hint, the way is shown']);
+      eq('hint step 3: free, and still one hint', [(await h.gd('shop')).glimmer, await h.gd('hints')], [glimmer - spent, 1]);
+      await pressHint();
+      eq('hint again: the way stays up, nothing spent', [await h.gd('way'), (await h.gd('shop')).glimmer], [{ index: 0, total: sol.length }, glimmer - spent]);
+      await h.page.keyboard.press(KEY_OF[sol[0]]);
+      await h.idle();
+      eq('the way follows the player', await h.gd('way'), { index: 1, total: sol.length });
+      eq('the way: the board points at the move after', await h.gd('hint'), DIRV[sol[1]] ? sol[1] : 'ring');
+      ok('the way: the count moves on', (await status()).startsWith(`Move 2 of ${sol.length}`), await status());
+      const off = offTheWay(first, await h.gd('state'));
+      await h.page.keyboard.press(KEY_OF[off]);
+      await h.idle();
+      eq('off the way: the way hides', [await h.gd('way'), await h.gd('hint')], [null, null]);
+      eq('off the way: says so', await status(), 'Off the way. Undo to get back on it.');
+      ok('off the way: Hint has its price again', !['more', 'shown'].includes(await val()), await val());
+      await h.page.locator('#btn-undo').tap();
+      await h.idle();
+      eq('undo back onto the way: it comes back', await h.gd('way'), { index: 1, total: sol.length });
+      await playByKeys(h, sol.slice(1));
+      await waitResult(h);
+      eq('result after a hint: two star moss', await earned(h), 2);
+      eq('result after a hint: saved', (await h.gd('save')).levels[first.id], { moves: sol.length, stars: 2 });
+      await h.page.locator('#result-replay').tap();
+      eq('replay: fresh attempt', [await h.gd('moves'), await h.gd('hints'), await h.gd('panel')], [0, 0, null]);
+      eq('replay: the old hint is gone', [await h.gd('way'), await h.gd('hintStep')], [null, 0]);
+      ok('replay: Hint has its price again', !['more', 'shown'].includes(await val()), await val());
+      // a restart ends a hint too, even at the position it was asked at
+      await pressHint();
+      await h.page.keyboard.press(KEY_OF[sol[0]]);
+      await h.idle();
+      await h.page.locator('#btn-restart').tap();
+      await h.idle();
+      eq('restart: the hint is gone', [await h.gd('hint'), await h.gd('hintStep'), await h.gd('hints')], [null, 0, 0]);
+      ok('restart: Hint has its price again', !['more', 'shown'].includes(await val()), await val());
+    }
 
     // a dead end: hint says so and points at Undo
     await h.gd('loadLevelDef', { id: 'T-0', name: 'Dead End', map: ['######', '#WM~G#', '######'] });
@@ -963,7 +1028,7 @@ async function main() {
       const t = await phone({ tag: 'tutorials' });
       const status = () => t.page.locator('#status').textContent();
       const hasClass = (id, cls) => t.page.evaluate(([i, c]) => document.getElementById(i).classList.contains(c), [id, cls]);
-      const STUCK = 'Stuck? Hint shows the next move, and Undo steps back.';
+      const STUCK = 'Stuck? Hint helps a step at a time, and Undo steps back.';
       // pixels of the coach colour in the 3 x 3 tiles around (x, y): the pointer is really drawn
       const coachPixels = (x, y) => t.page.evaluate(([tx, ty]) => {
         const L = window.__gd.layout();
@@ -1642,11 +1707,17 @@ async function main() {
       await askHint();
       ok('hint price: the free hint shows a hint', (await hp.gd('hint')) !== null);
       ok('hint price: the free hint is timed', (await hp.gd('shop')).freeAt > 0);
-      eq('hint price: then Glimmer', [await txt('#hint-val'), await hp.page.locator('#btn-hint').getAttribute('aria-label')], ['3 left', 'Hint, 3 Glimmer left']);
+      eq('hint price: its next step is free', [await txt('#hint-val'), (await hp.gd('shop')).glimmer], ['more', 3]);
       await hp.gd('act', solutionOf(first)[0]);
       await hp.idle();
+      eq('hint price: so is every position along its way', await txt('#hint-val'), 'more');
       await askHint();
-      eq('hint price: a paid hint spends one Glimmer', [(await hp.gd('shop')).glimmer, await txt('#hint-val')], [2, '2 left']);
+      eq('hint price: a step along the way spends nothing', [(await hp.gd('shop')).glimmer, await hp.gd('hints')], [3, 1]);
+      await hp.gd('act', offTheWay(first, await hp.gd('state')));
+      await hp.idle();
+      eq('hint price: off the way, then Glimmer', [await txt('#hint-val'), await hp.page.locator('#btn-hint').getAttribute('aria-label')], ['3 left', 'Hint, 3 Glimmer left']);
+      await askHint();
+      eq('hint price: a new hint spends one Glimmer', [(await hp.gd('shop')).glimmer, await txt('#hint-val')], [2, 'more']);
       ok('hint price: and shows a hint', (await hp.gd('hint')) !== null);
       await hp.close();
     }
@@ -1679,7 +1750,7 @@ async function main() {
       eq('no Glimmer: a jar refills the Hint button', await txt('#hint-val'), '10 left');
       await np.page.locator('#btn-hint').tap();
       await np.page.waitForFunction(() => window.__gd.hint() !== null, null, { timeout: 8000 }).catch(() => {});
-      eq('no Glimmer: then a hint costs one', [(await np.gd('hint')) !== null, (await np.gd('shop')).glimmer, await txt('#hint-val')], [true, 9, '9 left']);
+      eq('no Glimmer: then a hint costs one', [(await np.gd('hint')) !== null, (await np.gd('shop')).glimmer, await txt('#hint-val')], [true, 9, 'more']);
       await np.close();
     }
 

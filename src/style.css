@@ -660,6 +660,15 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   text-align: center;
 }
 .pips { display: inline-flex; gap: 3px; flex: none; }
+/* a hint's whole way (SPEC section 18): the count, then the moves still to make, the next one first */
+.way-count { flex: none; font-style: italic; }
+.way { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; min-width: 0; }
+.way-move { flex: none; fill: none; stroke: #BFAF93; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.way-move .glow { fill: #BFAF93; stroke: none; }
+.way-move.next { stroke: var(--amber); width: 20px; height: 20px; }
+.way-move.next .glow { fill: var(--amber); }
+.way-more { color: #BFAF93; font-style: normal; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .pip circle { fill: none; stroke: #BFAF93; stroke-width: 1.6; stroke-dasharray: 2 2; }
 .pip.on circle { fill: var(--amber); stroke: var(--paper); stroke-dasharray: none; }
 .pip.on path { stroke: var(--amber); stroke-width: 1.6; stroke-linecap: round; fill: none; }
@@ -836,6 +845,10 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .hc .tool[aria-pressed="true"] { background: #000000; border-color: var(--amber); border-width: 3px; }
 .hc .tool[aria-disabled="true"] > * { opacity: 0.6; }
 .hc .status, .hc .subtitle { color: #FFFFFF; }
+.hc .way-move { stroke: #FFFFFF; }
+.hc .way-move .glow, .hc .way-more { fill: #FFFFFF; color: #FFFFFF; }
+.hc .way-move.next { stroke: #FFD27A; }
+.hc .way-move.next .glow { fill: #FFD27A; }
 .hc .kicker { color: #FFD27A; }
 .hc .kicker.ink { color: #3D2410; }
 .hc .paper { background-image: none; background-color: #FFFAEC; border-width: 3px; }

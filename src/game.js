@@ -6,7 +6,7 @@
 // Every legal action goes through Session.act (one engine.step), then BoardView animates the events.
 
 import { key, DIRS } from './engine.js';
-import { nextMove } from './solver.js';
+import { solve } from './solver.js';
 import { CHAPTERS, LEVELS } from './levels/index.js';
 import { DAILY } from './levels/daily.js';
 import { initAudio, setMuted, play, setAppHidden } from './audio.js';
@@ -15,8 +15,9 @@ import {
   loadSave, writeSave, recordResult, clearProgress, parseSave, newerSave, setSaveMirror, saveWrites, savedDurably,
 } from './ui/store.js';
 import { BoardView } from './ui/board.js';
-import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg } from './ui/art.js';
+import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg, wayMoveSvg } from './ui/art.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
+import { HintLadder, pieceText } from './ui/hints.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
   onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror,
@@ -32,7 +33,10 @@ const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hol
 const HOLD_MS = 450;       // long-press for a rule card
 const QUEUE_MAX = 2;       // inputs remembered while an animation runs
 const HINT_BUDGET = 150000;
-const STUCK_TEXT = 'Stuck? Hint shows the next move, and Undo steps back.';
+const STUCK_TEXT = 'Stuck? Hint helps a step at a time, and Undo steps back.';
+const OFF_WAY_TEXT = 'Off the way. Undo to get back on it.';
+const WAY_SHOWN = 10;      // moves of the hint's way the status row shows at once (SPEC section 18)
+const MOVE_WORD = { N: 'north', E: 'east', S: 'south', W: 'west', L: 'lantern', Z: 'wait' };
 const STUCK_FOR = 4;       // moves the stuck nudge stays up
 const CAUGHT_TEXT = 'The Hush caught you. Three steps back.';
 const CATCH_BACK = 3;      // moves a catch takes back (SPEC section 17)
@@ -105,6 +109,7 @@ let message = '';          // passing line for the status row (hints)
 let moved = false;         // the first move of this visit was made (the tip goes away)
 let thinking = false;
 let hintToken = 0;
+let ladder = null;         // the hint paid for this visit (SPEC section 18): its way and the step reached, or null
 let celebrating = false;
 let lastBloom = -1;
 let raf = 0;
@@ -510,6 +515,7 @@ function openLevel(def, adhoc, day) {
   stuck = guided && typeof def.par === 'number' ? 0 : -1;
   catches = 0;
   catchNudge = false;
+  ladder = null;
   window.clearTimeout(rewindTimer);
   moved = false;
   message = '';
@@ -595,8 +601,12 @@ function refreshStatus() {
   const step = coachStep();
   let text;
   let pips = '';
+  const way = ladder && !session.solved ? ladder.following(session.state) : null;
   if (message) {
     text = message;
+  } else if (way) {
+    showWayStatus(way);
+    return;
   } else if (stuck > 0) {
     text = STUCK_TEXT;
   } else if (step && typeof step.say === 'string' && step.say) {
@@ -689,6 +699,10 @@ function doAction(action) {
   moved = true;
   tutorialAfter(next);
   view.playTurn(prev, next, { facing: session.facing, speed: queue.length ? 1.5 : 1 });
+  if (ladder && ladder.tier === 3) {
+    if (ladder.following(next)) showWay();
+    else if (!next.solved && ladder.at(prev) >= 0) message = OFF_WAY_TEXT;
+  }
   buzz('tick');
   if (next.caught) caughtNow();
   refreshHud();
@@ -714,6 +728,7 @@ function rewindAfterCatch() {
     const before = s.state;
     s.rewind(CATCH_BACK);
     view.playTween(before, s.state, { facing: s.facing });
+    showWay();
     refreshHud();
   }, CATCH_PAUSE);
 }
@@ -760,6 +775,7 @@ function undo() {
   stopHintSearch();
   dismissStuck();
   clearHint();
+  showWay();
   if (panel === 'result' || panel === 'card') closePanel();
   celebrating = false;
   view.endCelebration();
@@ -780,6 +796,7 @@ function restart() {
   if (!session.restart()) return false;
   stopHintSearch();
   dismissStuck();
+  ladder = null;   // a restart is a fresh attempt with no hints used (SPEC section 18)
   if (tutorial) tutorial.restart();
   clearHint();
   if (panel === 'result' || panel === 'card') closePanel();
@@ -850,19 +867,33 @@ function cancelWalk() {
 // ---------------------------------------------------------------- hint
 
 // The Hint button's second line says what the next hint costs (SPEC section 14).
+// While Wren is on the way of a hint already paid for, it says what that hint does next (SPEC section 18).
 function refreshHintLabel() {
   const val = $('hint-val');
-  const text = hintLabel(save.shop, Date.now());
-  if (val.textContent !== text) val.textContent = text;
+  const step = ladder && session ? ladder.label(session.state) : null;
   const cost = hintCost(save.shop, Date.now());
-  const aria = cost.kind === 'free' ? 'Hint, free'
-    : cost.kind === 'glimmer' ? `Hint, ${cost.glimmer} Glimmer left`
-      : `Hint, next free hint in ${minutesWord(cost.waitMs)}`;
+  const text = step || hintLabel(save.shop, Date.now());
+  if (val.textContent !== text) val.textContent = text;
+  const aria = step === 'more' ? 'Hint, next step free'
+    : step === 'shown' ? 'Hint, the way is shown'
+      : cost.kind === 'free' ? 'Hint, free'
+        : cost.kind === 'glimmer' ? `Hint, ${cost.glimmer} Glimmer left`
+          : `Hint, next free hint in ${minutesWord(cost.waitMs)}`;
   if (btn.hint.getAttribute('aria-label') !== aria) btn.hint.setAttribute('aria-label', aria);
 }
 
 function requestHint() {
   if (!session || session.solved || session.caught || celebrating || thinking || panel) return;
+  // on the way of a hint already paid for, the next of its three steps is free (SPEC section 18)
+  if (ladder && ladder.at(session.state) >= 0) {
+    cancelWalk();
+    queue.length = 0;
+    dismissStuck();
+    play('hint');
+    showStep(ladder.climb(session.state));
+    refreshHintLabel();
+    return;
+  }
   // paid for when asked, whatever it finds; with nothing to pay with, the store says when the next free one comes
   if (!payHint(save.shop, Date.now())) {
     play('ui');
@@ -884,17 +915,23 @@ function requestHint() {
   const run = () => {
     if (token !== hintToken) return;
     const asked = session ? session.state : null;
-    let move = null;
+    let found = null;
     if (asked) {
       try {
-        move = nextMove(asked, { maxStates: HINT_BUDGET });
+        found = solve(asked, { maxStates: HINT_BUDGET });
       } catch (e) {
-        move = null;
+        found = null;
       }
     }
     stopHintSearch();
     if (!session || session.state !== asked) return;
-    showHint(move);
+    if (found && found.solved && found.moves.length) {
+      ladder = new HintLadder(asked, found.moves, current.def.feature);
+      showStep(ladder.climb(asked));
+    } else {
+      showHint(null);
+    }
+    refreshHintLabel();
   };
   window.requestAnimationFrame(() => window.setTimeout(run, 0));
 }
@@ -938,6 +975,52 @@ function clearHint() {
   pulse(btn.lantern, false);
   pulse(btn.wait, false);
   refreshStatus();
+}
+
+// One step of a hint (SPEC section 18): 1 the key piece, 2 the first move, 3 the whole way.
+function showStep(shown) {
+  if (!shown) return;
+  if (shown.tier === 1) {
+    clearHint();
+    view.hint = { at: { x: shown.piece.x, y: shown.piece.y } };
+    message = pieceText(shown.piece);
+    refreshStatus();
+  } else if (shown.tier === 2) {
+    showHint(shown.move);
+  } else {
+    showWay();
+  }
+}
+
+// The whole way, while Wren is on it: the board points at the next move as step 2 does, and the status row
+// shows the moves still to make.
+function showWay() {
+  const way = ladder && session && !session.solved ? ladder.following(session.state) : null;
+  if (!way) return;
+  showHint(way.move);
+  message = '';
+  refreshStatus();
+}
+
+function showWayStatus(way) {
+  const shown = way.rest.slice(0, WAY_SHOWN);
+  const sig = `way|${way.index}|${way.total}|${way.rest.join('')}`;
+  if (statusEl.dataset.sig === sig) return;
+  statusEl.dataset.sig = sig;
+  statusEl.textContent = '';
+  const count = document.createElement('span');
+  count.className = 'way-count';
+  count.textContent = `Move ${way.index + 1} of ${way.total}`;
+  statusEl.appendChild(count);
+  const row = document.createElement('span');
+  row.className = 'way';
+  row.setAttribute('aria-hidden', 'true');
+  row.innerHTML = shown.map((m, i) => wayMoveSvg(m, i === 0)).join('') + (way.rest.length > WAY_SHOWN ? '<span class="way-more">…</span>' : '');
+  statusEl.appendChild(row);
+  const words = document.createElement('span');
+  words.className = 'sr-only';
+  words.textContent = `: ${shown.map((m) => MOVE_WORD[m]).join(', ')}${way.rest.length > WAY_SHOWN ? ', and more' : ''}.`;
+  statusEl.appendChild(words);
 }
 
 // ---------------------------------------------------------------- solved
@@ -1610,7 +1693,13 @@ window.__gd = {
   catches: () => catches,
   panel: () => panel,
   busy: () => view.busy || celebrating && panel !== 'result',
-  hint: () => (view.hint ? (view.hint.dir || 'ring') : null),
+  hint: () => (view.hint ? (view.hint.dir || (view.hint.at ? 'key' : 'ring')) : null),
+  hintAt: () => (view.hint && view.hint.at ? { ...view.hint.at } : null),
+  hintStep: () => (ladder ? ladder.tier : 0),
+  way: () => {
+    const way = ladder && session && !session.solved ? ladder.following(session.state) : null;
+    return way ? { index: way.index, total: way.total } : null;
+  },
   layout: () => (view.layout ? { ...view.layout, left: view.rect.left, top: view.rect.top, dpr: view.dpr, frames: view.frames } : null),
   save: () => JSON.parse(JSON.stringify(save)),
   contrast: () => view.highContrast,
