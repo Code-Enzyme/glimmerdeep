@@ -18,3 +18,10 @@ test("cards: in a Gloam encounter a Hush tile opens the Gloam's card, elsewhere 
   assert.equal(RULE_CARDS.H.title, "The Gloam's Hush");
   assert.equal(RULE_CARDS.H.text, "The Gloam's Hush creeps onto every dark floor tile beside it, one step each turn. Light holds it back. If it reaches Wren, you step back three turns.");
 });
+
+test('cards: a crystal wall opens the Crystal card (SPEC section 19)', () => {
+  const s = parseLevel({ id: 't', map: ['#####', '#W*G#', '#####'] });
+  assert.equal(cardKindAt(s, 2, 1), '*');
+  assert.equal(RULE_CARDS['*'].title, 'Crystal');
+  assert.equal(RULE_CARDS['*'].text, 'Light shines straight through crystal, but nothing can walk through it. A carried lantern only lights the near side; plant it to shine through.');
+});

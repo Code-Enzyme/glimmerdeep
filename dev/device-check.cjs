@@ -63,8 +63,10 @@ async function killApp(device, webview) {
   const shots = path.join(root, 'dev/device-shots');
   fs.mkdirSync(shots, { recursive: true });
   const { LEVELS, CHAPTERS } = await import(pathToFileURL(path.join(root, 'src/levels/index.js')).href);
-  // level 1-1 and the last level of every chapter
-  const LEVEL_IDS = [LEVELS[0].id, ...CHAPTERS.filter((c) => c.levels.length).map((c) => c.levels[c.levels.length - 1].id)];
+  const { NIGHT } = await import(pathToFileURL(path.join(root, 'src/levels/night.js')).href);
+  // level 1-1, the last level of every chapter, and the Night Garden's last deep puzzle
+  const LEVEL_IDS = [LEVELS[0].id, ...CHAPTERS.filter((c) => c.levels.length).map((c) => c.levels[c.levels.length - 1].id),
+    ...NIGHT.slice(-1).map((l) => l.id)];
   const { parseLevel } = await import(pathToFileURL(path.join(root, 'src/engine.js')).href);
   const { solve } = await import(pathToFileURL(path.join(root, 'src/solver.js')).href);
 
@@ -94,7 +96,7 @@ async function killApp(device, webview) {
   console.log('Play shows the prologue, then the map');
 
   for (const id of LEVEL_IDS) {
-    const level = LEVELS.find((l) => l.id === id);
+    const level = [...LEVELS, ...NIGHT].find((l) => l.id === id);
     const sol = solve(parseLevel(level));
     await page.evaluate((x) => window.__gd.loadLevel(x), id);
     await page.waitForTimeout(400);

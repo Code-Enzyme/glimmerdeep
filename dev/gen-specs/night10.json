@@ -1,0 +1,1 @@
+{ "w": 9, "h": 7, "feature": "MH*", "pieces": { "M": [1, 2] }, "puddles": [0, 2], "crystal": [2, 6], "buds": [1, 2], "gloam": true, "hushEdge": true, "creepThreat": true, "par": [18, 38], "floor": 26 }

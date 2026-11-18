@@ -15,7 +15,7 @@ const RADIUS_CARRIED = 1;   // lightMap() caches on the assumption that these tw
 const RADIUS_PLANTED = 2;   // are at most 1 and 2; see the comment there before changing them
 const CHANNELS = 'ABC';
 
-// Terrain codes. Roots are ROOT + channel (5..7), gates are GATE + channel (8..10).
+// Terrain codes. Roots are ROOT + channel (5..7), gates are GATE + channel (8..10), then crystal (section 19).
 const WALL = 0;
 const FLOOR = 1;
 const PUDDLE = 2;
@@ -23,8 +23,10 @@ const BUD = 3;
 const HUSH = 4;
 const ROOT = 5;
 const GATE = 8;
+const CRYSTAL = 11;
+const isGate = (t) => t >= GATE && t < CRYSTAL;
 
-const TERRAIN_CODE = { '#': WALL, '.': FLOOR, '~': PUDDLE, G: BUD, H: HUSH, a: 5, b: 6, c: 7, A: 8, B: 9, C: 10 };
+const TERRAIN_CODE = { '#': WALL, '.': FLOOR, '~': PUDDLE, G: BUD, H: HUSH, a: 5, b: 6, c: 7, A: 8, B: 9, C: 10, '*': CRYSTAL };
 const FACING = { '^': 'N', '>': 'E', v: 'S', '<': 'W' };           // Stumpcaps
 const NEWT_FACING = { n: 'N', e: 'E', s: 'S', w: 'W' };            // Dozer newts
 const CLOCKWISE = { N: 'E', E: 'S', S: 'W', W: 'N' };
@@ -72,8 +74,8 @@ function buildMeta(tiles, w, h, base) {
       const t = TERRAIN_CODE[tiles[y][x]];
       terr[i] = t;
       if (t === BUD) buds.push(i);
-      else if (t >= GATE) present[t - GATE] = true;
-      else if (t >= ROOT) { present[t - ROOT] = true; roots[t - ROOT].push(i); }
+      else if (isGate(t)) present[t - GATE] = true;
+      else if (t >= ROOT && t < GATE) { present[t - ROOT] = true; roots[t - ROOT].push(i); }
     }
   }
   const channels = [0, 1, 2].filter((c) => present[c]);
@@ -192,8 +194,8 @@ export function parseLevel(levelDef) {
   for (const [what, x, y, base] of standing) {
     const t = TERRAIN_CODE[base];
     let ok = t === FLOOR || (t >= ROOT && t < GATE);
-    if (what === 'Wren') ok = ok || t >= GATE || (t === HUSH && planted === null);
-    else if (what !== 'lantern') ok = ok || t >= GATE;
+    if (what === 'Wren') ok = ok || isGate(t) || (t === HUSH && planted === null);
+    else if (what !== 'lantern') ok = ok || isGate(t);
     if (!ok) {
       const why = what === 'Wren' && t === HUSH ? ' without the lantern in hand' : '';
       fail(`${what === 'lantern' ? 'the planted lantern' : what} cannot start on '${base}' at ${x},${y}${why}`);
@@ -521,12 +523,12 @@ function enterable(meta, state, who, x, y) {
   const t = meta.terr[y * state.w + x];
   const isWren = who === 'wren';
   if (t !== FLOOR) {
-    if (t === WALL || t === BUD) return false;
+    if (t === WALL || t === BUD || t === CRYSTAL) return false;
     if (t === PUDDLE) {
       if (who !== 'M' && !hasBridge(state, x, y)) return false;
     } else if (t === HUSH) {
       if (!isWren || !state.lantern.carried) return false;
-    } else if (t >= GATE && state.gates[CHANNELS[t - GATE]] !== true) {
+    } else if (isGate(t) && state.gates[CHANNELS[t - GATE]] !== true) {
       return false;
     }
   }

@@ -312,11 +312,26 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   border: 1.5px dashed rgba(36, 22, 46, 0.5);
   border-radius: 12px 9px 13px 10px;
 }
-.empty {
+.empty, .waits {
   font: italic 15px/1.4 var(--serif);
   color: #5A4660;
   padding: 10px 2px 8px 40px;
 }
+.waits { padding-bottom: 2px; }
+
+/* The Night Garden (SPEC section 20): its page is washed in night blue, with a few pale specks of starlight */
+.chapter.night {
+  background-color: #DDE4F5;
+  background-image:
+    radial-gradient(2px 2px at 18% 22%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 100%),
+    radial-gradient(2px 2px at 71% 14%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 100%),
+    radial-gradient(1.5px 1.5px at 86% 61%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 100%),
+    radial-gradient(1.5px 1.5px at 39% 83%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 100%),
+    radial-gradient(130% 90% at 50% 0%, rgba(127, 168, 255, 0.42), rgba(127, 168, 255, 0) 70%),
+    radial-gradient(90% 80% at 100% 100%, rgba(40, 52, 110, 0.18), rgba(40, 52, 110, 0) 60%);
+}
+.chapter.night .kicker.ink { color: #2E3C78; }
+.chapter.night .tally, .chapter.night .waits { color: #34406A; }
 
 .trail { position: relative; margin-top: 6px; }
 .trail > svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
@@ -852,7 +867,9 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .hc .kicker { color: #FFD27A; }
 .hc .kicker.ink { color: #3D2410; }
 .hc .paper { background-image: none; background-color: #FFFAEC; border-width: 3px; }
-.hc .tally, .hc .empty, .hc .result-moves, .hc .result-best { color: var(--ink); }
+.hc .tally, .hc .empty, .hc .waits, .hc .result-moves, .hc .result-best { color: var(--ink); }
+.hc .chapter.night { background-image: none; background-color: #EEF2FF; }
+.hc .chapter.night .kicker.ink { color: #1E2A5E; }
 .hc .trail > svg path { stroke-opacity: 0.95; }
 .hc .node.locked .dot { color: var(--ink); }
 .hc .moss path { stroke: var(--ink); }

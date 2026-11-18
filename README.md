@@ -18,7 +18,7 @@ pays for all three (SPEC section 18).
 Between chapters Wren's journal tells the story: why the Heartroot is dimming, and what the Gloam
 really is. The Field Journal on the map keeps every story page and a page for each creature met.
 
-Chapter 1 is free. One payment, the Full Expedition, opens chapters 2 to 7, and Glimmer jars buy
+Chapter 1 is free. One payment, the Full Expedition, opens chapters 2 to 7 and the Night Garden, and Glimmer jars buy
 instant hints; a free hint comes every ten minutes anyway. No ads, no energy, no lives. Release builds
 sell through Google Play Billing (`android/.../BillingPlugin.java`); debug builds and browsers use a
 free test store, so every purchase can be tried without a Play account (SPEC section 14).
@@ -29,6 +29,10 @@ the last six days too, so a missed day can be mended (SPEC section 15).
 
 Each chapter ends with a Gloam encounter: the Gloam's Hush creeps a tile a turn over every dark floor tile
 beside it, and only light holds it back. If it reaches Wren, three moves go back (SPEC section 17).
+
+After the story comes the Night Garden: deep puzzles that mix every creature, all built round crystal
+walls, which let light through but nothing that walks. It is part of the Full Expedition and opens once
+the last chapter is lit and the chapters have earned 100 star moss (SPEC sections 19 and 20).
 
 The save lives in `localStorage`. In the Android app every save is also written to a file
 (`android/.../SaveFilePlugin.java`), on disk before a purchase is confirmed, so an app swiped away right

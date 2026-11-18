@@ -8,7 +8,7 @@ import { drawTile, drawWren, drawLantern, drawCreature, drawGlow } from '../char
 
 const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',
-  a: 'root', b: 'root', c: 'root', A: 'gate', B: 'gate', C: 'gate',
+  a: 'root', b: 'root', c: 'root', A: 'gate', B: 'gate', C: 'gate', '*': 'crystal',
 };
 const SOUND_OF_MOVE = {
   M: 'moth', S: 'whelkMove', T: 'stumpStep', D: 'newtStep', K: 'emberStep', O: 'gloamDrift', R: 'beetleCrawl',
@@ -97,7 +97,7 @@ export class BoardView {
         const ch = state.tiles[y][x];
         const kind = KIND[ch] || 'floor';
         const opts = { t: 0, seed: x * 7 + y * 13 + 1 };
-        if (kind === 'wall' || kind === 'puddle' || kind === 'hush') {
+        if (kind === 'wall' || kind === 'puddle' || kind === 'hush' || kind === 'crystal') {
           const same = (dx, dy) => kindAt(x + dx, y + dy) === kind;
           opts.neighbors = { n: same(0, -1), e: same(1, 0), s: same(0, 1), w: same(-1, 0) };
         }
@@ -630,6 +630,8 @@ export class BoardView {
         o.lit = bloom;
       } else if (kind === 'gate') {
         o.open = gates[tile.channel] === true;
+      } else if (kind === 'crystal') {
+        o.lit = s.lit[tile.y * s.w + tile.x] === 1;
       } else if (kind === 'root') {
         o.pressed = false;
         for (let k = 0; k < things.length; k++) {

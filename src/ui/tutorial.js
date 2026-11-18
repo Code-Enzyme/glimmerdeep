@@ -2,7 +2,8 @@
 // game asks which step to show and feeds every turn's events in, and BoardView draws the pointer.
 
 const SPECIES = ['M', 'S', 'T', 'D', 'K', 'O', 'R'];
-const CARDS = [...SPECIES, 'A', 'H'];   // the species, 'A' for the Shutter and 'H' for the Gloam's Hush (an encounter)
+// the species, 'A' for the Shutter, 'H' for the Gloam's Hush (an encounter) and '*' for crystal walls
+const CARDS = [...SPECIES, 'A', 'H', '*'];
 const BUTTONS = ['plant', 'wait', 'undo', 'hint'];
 const PLACES = ['wren', 'lantern', 'bud', 'root', 'gate'];
 const GESTURES = ['swipe-N', 'swipe-E', 'swipe-S', 'swipe-W', 'tap', 'hold'];
@@ -132,7 +133,7 @@ export function checkTutorial(def) {
   const text = map.join('');
   const has = {
     M: /M/.test(text), S: /S/.test(text), T: /[\^>v<]/.test(text), D: /[nesw]/.test(text), K: /K/.test(text), O: /O/.test(text),
-    R: /[/\\]/.test(text), A: def.shutter === true, H: def.gloam === true,
+    R: /[/\\]/.test(text), A: def.shutter === true, H: def.gloam === true, '*': text.includes('*'),
   };
   const problems = [];
   steps.forEach((s, i) => {
@@ -147,6 +148,7 @@ export function checkTutorial(def) {
       else if (!has[s.card]) {
         if (s.card === 'A') problems.push(`${at}: the Shutter card but the level has no shutter`);
         else if (s.card === 'H') problems.push(`${at}: the Gloam's Hush card but the level is not a Gloam encounter`);
+        else if (s.card === '*') problems.push(`${at}: the Crystal card but the level has no crystal walls`);
         else problems.push(`${at}: card '${s.card}' but the level has no such creature`);
       }
       if (s.until !== 'card') problems.push(`${at}: a card step must end with 'card'`);

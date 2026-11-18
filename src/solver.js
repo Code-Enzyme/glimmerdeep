@@ -65,7 +65,7 @@ const SPECIES = {
   O: { chars: 'O', name: 'Gloamling' },
   R: { chars: '/\\', name: 'Mirrorbeetle' },
 };
-const FEATURES = 'M, S, T, D, K, O, R, L, A, H';
+const FEATURES = 'M, S, T, D, K, O, R, L, A, H, *';
 
 // The level with every creature of one species taken out. Whatever terrain was under a creature stays.
 function withoutSpecies(levelDef, species) {
@@ -79,6 +79,13 @@ function withoutSpecies(levelDef, species) {
     return terrain;
   }).join(''));
   return { ...levelDef, map, under };
+}
+
+// The level with every crystal wall turned into a plain wall (SPEC section 19), in the map and under things.
+function withoutCrystal(levelDef) {
+  const under = { ...(levelDef.under || {}) };
+  for (const at of Object.keys(under)) if (under[at] === '*') under[at] = '#';
+  return { ...levelDef, map: levelDef.map.map((row) => row.replace(/\*/g, '#')), under };
 }
 
 // Checks one level definition (SPEC.md sections 5 and 6).
@@ -170,6 +177,13 @@ export function checkLevel(levelDef, opts) {
         result.featureOk[f] = true;
       }
       continue;
+    } else if (f === '*') {
+      what = 'crystal walls letting light through';
+      if (!levelDef.map.some((row) => row.includes('*'))) {
+        problems.push("feature '*': the level has no crystal walls");
+        continue;
+      }
+      without = solve(parseLevel(withoutCrystal(levelDef)), options);
     } else if (Object.prototype.hasOwnProperty.call(SPECIES, f)) {
       what = `any ${SPECIES[f].name}`;
       if (!start.creatures.some((c) => c.type === f)) {

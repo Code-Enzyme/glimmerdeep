@@ -83,6 +83,7 @@ async function main() {
   const { CHAPTERS, LEVELS } = await import(pathToFileURL(path.join(ROOT, 'src/levels/index.js')).href);
   const { STORY, NOTES } = await import(pathToFileURL(path.join(ROOT, 'src/ui/story.js')).href);
   const { DAILY } = await import(pathToFileURL(path.join(ROOT, 'src/levels/daily.js')).href);
+  const { NIGHT } = await import(pathToFileURL(path.join(ROOT, 'src/levels/night.js')).href);
   const { dailyLevel } = await import(pathToFileURL(path.join(ROOT, 'src/ui/daily.js')).href);
   const hints = await import(pathToFileURL(path.join(ROOT, 'src/ui/hints.js')).href);
   // A legal move from `state` that leaves the hint's way (SPEC section 18) and from which the level still solves.
@@ -391,16 +392,16 @@ async function main() {
     console.log('map');
     await h.toMap();
     eq('map: title', await h.page.locator('#screen-map h1').textContent(), 'Glimmerdeep');
-    eq('map: one section per chapter', await h.page.locator('.chapter').count(), CHAPTERS.length);
-    eq('map: one node per level', await h.page.locator('.node').count(), LEVELS.length);
+    eq('map: one section per chapter, and the Night Garden last', await h.page.locator('.chapter').count(), CHAPTERS.length + 1);
+    eq('map: one node per level', await h.page.locator('.node').count(), LEVELS.length + NIGHT.length);
     for (const ch of CHAPTERS) {
       ok(`map: chapter name "${ch.name}" shown`, (await h.page.locator('.chapter h2').allTextContents()).includes(ch.name));
     }
     eq('map: empty chapters carry a note', await h.page.locator('.chapter .empty').count(), CHAPTERS.filter((c) => !c.levels.length).length);
     ok('map: first level is open', !(await h.page.locator(`.node[data-level="${first.id}"]`).getAttribute('class')).includes('locked'));
-    eq('map: locked levels', await h.page.locator('.node.locked').count(), Math.max(0, LEVELS.length - 1));
+    eq('map: locked levels', await h.page.locator('.node.locked').count(), LEVELS.length + NIGHT.length - 1);
     eq('map: no star moss earned yet', await h.page.locator('.node .moss.on').count(), 0);
-    eq('map: every node has three marks', await h.page.locator('.node .moss').count(), LEVELS.length * 3);
+    eq('map: every node has three marks', await h.page.locator('.node .moss').count(), (LEVELS.length + NIGHT.length) * 3);
     ok('map: no designer note on screen', !(await h.page.evaluate(() => document.body.innerText)).includes(first.note || '\u0000'));
 
     // every button has an aria-label; nothing but paper is in the top 12 percent
@@ -762,7 +763,7 @@ async function main() {
     eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true });
 
     // Unlock all skips the level order, never the purchase (SPEC section 14)
-    const paidCount = LEVELS.filter((def) => !CHAPTERS.find((c) => c.id === 1).levels.includes(def)).length;
+    const paidCount = LEVELS.filter((def) => !CHAPTERS.find((c) => c.id === 1).levels.includes(def)).length + NIGHT.length;
     await h.page.locator('#set-unlock').tap();
     eq('unlock all: only the Full Expedition\'s levels stay locked', await h.page.locator('.node.locked').count(), paidCount);
     eq('unlock all: every free level is open', await h.page.locator('.chapter:not(.paid) .node.locked').count(), 0);
@@ -1217,7 +1218,7 @@ async function main() {
       });
       await g.open();
       await g.toMap();
-      eq('no storage: map renders', await g.page.locator('.node').count(), LEVELS.length);
+      eq('no storage: map renders', await g.page.locator('.node').count(), LEVELS.length + NIGHT.length);
       await g.page.locator(`.node[data-level="${first.id}"]`).tap();
       await playByTouch(g, sol);
       await waitResult(g);
@@ -1498,8 +1499,10 @@ async function main() {
       await st.toMap();
       eq('store: debug and browser builds use the test store', (await st.gd('shop')).kind, 'test');
       eq('store: a fresh save owns nothing and has 3 Glimmer', [(await st.gd('shop')).full, (await st.gd('shop')).glimmer], [false, 3]);
-      eq('store: later chapters are marked as the Full Expedition', await st.page.locator('.chapter.paid').count(), paid.length);
-      eq('store: each locked chapter has an Unlock button', await st.page.locator('.chapter-unlock').count(), paid.length);
+      // the later chapters and the Night Garden (SPEC section 20)
+      eq('store: later chapters are marked as the Full Expedition', await st.page.locator('.chapter.paid').count(), paid.length + 1);
+      eq('store: each locked chapter has an Unlock button', await st.page.locator('.chapter-unlock').count(), paid.length + 1);
+      ok('store: the Night Garden is part of it', (await st.page.locator('#garden').getAttribute('class')).includes('paid'));
       eq('store: chapter 1 is free', await st.page.locator(`.chapter.paid .node[data-level="${first.id}"]`).count(), 0);
       const ch2first = ch(2).levels[0];
       eq('store: a locked level says why', await st.page.locator(`.node[data-level="${ch2first.id}"]`).getAttribute('aria-label'),
@@ -1517,7 +1520,7 @@ async function main() {
       ok('store: no reason line from the Store button', !(await st.page.locator('#shop-why').isVisible()));
       eq('store: test prices', [await txt('#shop-full'), await txt('#shop-jar')], ['$4.99', '$0.99']);
       eq('store: the Full Expedition offer', await txt('#shop-full-text'),
-        `Chapters 2 to ${paid[paid.length - 1].id}: ${paidLevels.length} more caverns and the rest of Wren's story. One payment, no ads.`);
+        `Chapters 2 to ${paid[paid.length - 1].id} and the Night Garden: ${paidLevels.length + NIGHT.length} more caverns and the rest of Wren's story. One payment, no ads.`);
       eq('store: the jar offer counts the Glimmer left', await txt('#shop-jar-text'), '10 instant hints. You have 3 Glimmer, and a free hint is ready now.');
       ok('store: says purchases are free in a test build', await st.page.locator('#shop-test').isVisible());
       eq('store: Close has the focus', await st.page.evaluate(() => document.activeElement && document.activeElement.id), 'shop-close');
@@ -1804,9 +1807,119 @@ async function main() {
       await ge.toMap();
       const enc = CHAPTERS.map((c) => c.levels[c.levels.length - 1]);
       ok('gloam: every chapter ends with an encounter', enc.every((d) => d.gloam === true), enc.map((d) => d.id).join(' '));
-      eq('gloam: their nodes are marked', await ge.page.locator('.node.gloam').count(), CHAPTERS.length);
+      eq('gloam: their nodes are marked, the Night Garden\'s too', await ge.page.locator('.node.gloam').count(), CHAPTERS.length + NIGHT.filter((d) => d.gloam).length);
       ok('gloam: and say so', (await ge.page.locator(`.node[data-level="${enc[0].id}"]`).getAttribute('aria-label')).includes('Gloam encounter'));
       await ge.close();
+    }
+
+    // ---------------------------------------------------------------- the Night Garden (SPEC sections 19 and 20)
+    console.log('night garden');
+    {
+      const KEY = 'glimmerdeep.v1';
+      ok('garden: ten deep puzzles at least', NIGHT.length >= 10, NIGHT.length);
+      const [n1, n2] = NIGHT;
+      const allLit = (stars) => Object.fromEntries(LEVELS.map((d) => [d.id, { moves: d.par, stars }]));
+      // a save where the story is done (every chapter level lit), with every story page read
+      const seeded = (levels, full, tutorials) => `if (!localStorage.getItem('${KEY}')) localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify({
+        levels, seen: STORY.map((p) => p.id),
+        shop: { full, glimmer: 3, freeAt: 0, paid: [] },
+        settings: { sound: true, contrast: false, unlockAll: false, tutorials },
+      }))});`;
+      const at = (ph) => async (sel) => ((await ph.page.locator(sel).textContent()) || '').trim();
+      const note = (moss) => `Opens when the story is done and you have 100 star moss. You have ${moss}.`;
+      // the map back at its top, so the thumb-reach audit sees what a player sees there
+      const toTop = (ph) => ph.page.evaluate(() => {
+        window.scrollTo(0, 0);
+        for (const e of document.querySelectorAll('*')) if (e.scrollTop) e.scrollTop = 0;
+      });
+
+      // bought, the story done, but one star moss a cavern: not enough
+      const poor = await phone({ tag: 'garden-closed', init: seeded(allLit(1), true, true) });
+      let txt = at(poor);
+      await poor.open();
+      eq('garden: deep puzzles do not count toward the caverns lit', await txt('#title-progress'), `${LEVELS.length} of ${LEVELS.length} caverns lit`);
+      await poor.toMap();
+      eq('garden: the last section of the map', await poor.page.evaluate(() => {
+        const all = document.querySelectorAll('.chapter');
+        return all[all.length - 1].id;
+      }), 'garden');
+      eq('garden: "Deep puzzles" over "The Night Garden"', [await txt('#garden .kicker'), await txt('#garden h2')], ['Deep puzzles', 'The Night Garden']);
+      eq('garden: says what it waits for', await txt('#garden-note'), note(LEVELS.length));
+      eq('garden: no tally while closed', await poor.page.locator('#garden .tally').count(), 0);
+      eq('garden: a node for each puzzle', await poor.page.locator('#garden .node').count(), NIGHT.length);
+      eq('garden: its first puzzle is locked, and says why', await poor.page.locator(`.node[data-level="${n1.id}"]`).getAttribute('aria-label'),
+        `Night Garden 1, locked. ${note(LEVELS.length)}`);
+      await poor.page.locator(`.node[data-level="${n1.id}"]`).tap({ force: true });   // aria-disabled, but a finger can still tap it
+      eq('garden: a closed puzzle does not open', [await poor.gd('screen'), await poor.gd('panel')], ['map', null]);
+      await toTop(poor);
+      await auditPage(poor, 'garden closed');
+      await poor.close();
+
+      // not bought: the garden is part of the Full Expedition
+      const unpaid = await phone({ tag: 'garden-unpaid', init: seeded(allLit(3), false, true) });
+      txt = at(unpaid);
+      await unpaid.open();
+      await unpaid.toMap();
+      eq('garden: not bought, an Unlock button', await unpaid.page.locator('#garden .chapter-unlock').getAttribute('aria-label'),
+        'Unlock The Night Garden with the Full Expedition');
+      eq('garden: its puzzles say so', await unpaid.page.locator(`.node[data-level="${n1.id}"]`).getAttribute('aria-label'),
+        'Night Garden 1, locked. Part of the Full Expedition.');
+      await unpaid.page.locator('#garden .chapter-unlock').tap();
+      await unpaid.page.waitForFunction(() => window.__gd.panel() === 'shop');
+      eq('garden: Unlock opens the store, and says why', await txt('#shop-why'), 'The Night Garden is part of the Full Expedition.');
+      await unpaid.close();
+
+      // bought, the story done, two star moss a cavern: open
+      const gd = await phone({ tag: 'garden', init: seeded(allLit(2), true, true) });
+      txt = at(gd);
+      await gd.open();
+      await gd.toMap();
+      eq('garden: open, the note goes', await gd.page.locator('#garden-note').count(), 0);
+      eq('garden: and the tally counts its puzzles', await txt('#garden .tally'), `0 of ${NIGHT.length} lit`);
+      ok('garden: its first puzzle is next', (await gd.page.locator(`.node[data-level="${n1.id}"]`).getAttribute('class')).includes('next'));
+      eq('garden: and labelled', await gd.page.locator(`.node[data-level="${n1.id}"]`).getAttribute('aria-label'), `Night Garden 1, ${n1.name}, not solved yet`);
+      ok('garden: the second still waits', (await gd.page.locator(`.node[data-level="${n2.id}"]`).getAttribute('class')).includes('locked'));
+      await toTop(gd);
+      await auditPage(gd, 'garden open');
+      await gd.page.locator('#garden').scrollIntoViewIfNeeded();
+      await gd.shot('garden-map');
+      await gd.page.locator(`.node[data-level="${n1.id}"]`).tap();
+      await gd.page.waitForFunction(() => window.__gd.screen() === 'level');
+      eq('garden: the level screen says "Night Garden 1"', await txt('#level-id'), 'Night Garden 1');
+      await gd.page.waitForFunction(() => window.__gd.panel() === 'card', null, { timeout: 3000 }).catch(() => {});
+      eq('garden: the first puzzle opens with the Crystal card', [await txt('#card-title'), await txt('#card-text')], ['Crystal', CARDS.Crystal]);
+      await gd.page.keyboard.press('Escape');
+      await gd.page.waitForFunction(() => window.__gd.panel() === null);
+      // holding a crystal wall shows its card too
+      const start = engine.parseLevel(n1);
+      let crystal = null;
+      n1.map.forEach((row, y) => Array.from(row).forEach((ch, x) => { if (ch === '*' && !crystal) crystal = [x, y]; }));
+      await gd.hold(await gd.tile(crystal[0], crystal[1]), 620);
+      await gd.page.waitForFunction(() => window.__gd.panel() === 'card', null, { timeout: 2000 }).catch(() => {});
+      eq('garden: holding a crystal wall opens its card', await txt('#card-title'), 'Crystal');
+      await gd.page.keyboard.press('Escape');
+      await gd.page.waitForFunction(() => window.__gd.panel() === null);
+      eq('garden: nothing moved', (await gd.gd('state')).turn, start.turn);
+      await auditPage(gd, 'garden level');
+      const sol = solutionOf(n1);
+      await playByKeys(gd, sol.slice(0, Math.ceil(sol.length / 2)));
+      await gd.shot('garden-level');
+      await playByKeys(gd, sol.slice(Math.ceil(sol.length / 2)));
+      await waitResult(gd);
+      eq('garden: the result says "Night Garden 1 lit"', await txt('#result-id'), 'Night Garden 1 lit');
+      eq('garden: its record is kept', (await gd.gd('save')).levels[n1.id], { moves: sol.length, stars: 3 });
+      ok('garden: Next level goes on through the garden', await gd.page.locator('#result-next').isVisible());
+      await gd.page.locator('#result-next').tap();
+      await gd.page.waitForFunction(() => window.__gd.screen() === 'level' && window.__gd.panel() !== 'result');
+      eq('garden: to Night Garden 2', await txt('#level-id'), 'Night Garden 2');
+      await gd.gd('loadLevel', NIGHT[NIGHT.length - 1].id);
+      eq('garden: __gd.loadLevel finds deep puzzles', await txt('#level-id'), `Night Garden ${NIGHT.length}`);
+      await gd.open();
+      eq('garden: still every chapter cavern lit, no more', await txt('#title-progress'), `${LEVELS.length} of ${LEVELS.length} caverns lit`);
+      await gd.toMap();
+      eq('garden: the tally counts the lit puzzle', await txt('#garden .tally'), `1 of ${NIGHT.length} lit`);
+      ok('garden: and the second opened', !(await gd.page.locator(`.node[data-level="${n2.id}"]`).getAttribute('class')).includes('locked'));
+      await gd.close();
     }
   }
 

@@ -83,36 +83,47 @@ function dailyCard(d) {
 }
 
 // opts: { chapters, levels, records: { [id]: { moves, stars } }, isUnlocked(def), onOpen(def), onLocked(def, node),
-//         chapterLocked(chapter) (part of the Full Expedition, not bought), onShop(chapter), daily (see dailyCard) }
+//         chapterLocked(chapter) (part of the Full Expedition, not bought), onShop(chapter), daily (see dailyCard),
+//         label(def) (what a level is called, default "Level <id>"), note(chapter) (what a closed section waits
+//         for, or '') }
+// A chapter may carry a kicker (the line over its name, default "Chapter <id>") and a night flag.
 export function renderMap(root, opts) {
   root.textContent = '';
   if (opts.daily) root.appendChild(dailyCard(opts.daily));
   const firstOpen = opts.levels.find((def) => !opts.records[def.id] && opts.isUnlocked(def));
   for (const chapter of opts.chapters) {
     const levels = chapter.levels || [];
-    const section = el('section', 'chapter paper');
+    const section = el('section', 'chapter paper' + (chapter.night ? ' night' : ''));
     section.style.setProperty('--accent', chapter.accent || '#5FBFA8');
-    section.setAttribute('aria-label', `Chapter ${chapter.id}: ${chapter.name}`);
+    const kicker = chapter.kicker || `Chapter ${chapter.id}`;
+    section.setAttribute('aria-label', `${kicker}: ${chapter.name}`);
+    if (chapter.night) section.id = 'garden';
 
     const head = el('div', 'chapter-head');
     head.appendChild(el('span', 'blot'));
     const names = el('div', 'chapter-names');
-    names.appendChild(el('span', 'kicker ink', `Chapter ${chapter.id}`));
+    names.appendChild(el('span', 'kicker ink', kicker));
     names.appendChild(el('h2', '', chapter.name));
     head.appendChild(names);
     const solved = levels.filter((def) => opts.records[def.id]).length;
     const paid = !!(opts.chapterLocked && opts.chapterLocked(chapter));
+    const note = opts.note ? opts.note(chapter) : '';
     if (paid) {
       section.classList.add('paid');
       const unlock = el('button', 'btn chapter-unlock', 'Unlock');
       unlock.type = 'button';
-      unlock.setAttribute('aria-label', `Unlock chapter ${chapter.id} with the Full Expedition`);
+      unlock.setAttribute('aria-label', `Unlock ${chapter.kicker ? chapter.name : `chapter ${chapter.id}`} with the Full Expedition`);
       unlock.addEventListener('click', () => opts.onShop(chapter));
       head.appendChild(unlock);
-    } else if (levels.length) {
+    } else if (levels.length && !note) {
       head.appendChild(el('span', 'tally', `${solved} of ${levels.length} lit`));
     }
     section.appendChild(head);
+    if (note) {
+      const waits = el('p', 'waits', note);
+      if (chapter.night) waits.id = 'garden-note';
+      section.appendChild(waits);
+    }
 
     if (!levels.length) {
       section.appendChild(el('p', 'empty', 'Still dark down here. These caverns are being charted.'));
@@ -134,9 +145,11 @@ export function renderMap(root, opts) {
         if (def.gloam) node.classList.add('gloam');   // a Gloam encounter (SPEC section 17): ringed with Hush
         const stars = record ? record.stars : 0;
         const what = def.gloam ? ', Gloam encounter' : '';
+        const title = opts.label ? opts.label(def) : `Level ${def.id}`;
+        const why = paid ? 'Part of the Full Expedition.' : i === 0 && note ? note : 'Solve the level before it first.';
         node.setAttribute('aria-label', open
-          ? `Level ${def.id}, ${def.name}${what}` + (record ? `, ${stars} of 3 star moss, best ${record.moves} moves` : ', not solved yet')
-          : paid ? `Level ${def.id}${what}, locked. Part of the Full Expedition.` : `Level ${def.id}${what}, locked. Solve the level before it first.`);
+          ? `${title}, ${def.name}${what}` + (record ? `, ${stars} of 3 star moss, best ${record.moves} moves` : ', not solved yet')
+          : `${title}${what}, locked. ${why}`);
         if (!open && !paid) node.setAttribute('aria-disabled', 'true');   // a paid level still acts: it opens the store
         const dot = el('span', 'dot', levelNumber(def, i));
         if (!open) dot.appendChild(el('span', 'lock ico'));

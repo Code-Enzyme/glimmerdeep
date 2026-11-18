@@ -552,6 +552,7 @@ function blit(ctx, s, px, py, size) {
 // Sprite kinds (low five bits of a cache key).
 const K_FLOOR = 1, K_WALL = 2, K_PUDDLE = 3, K_BRIDGE = 4, K_BUD = 5, K_HUSH = 6, K_HUSH_SHIM = 7, K_ROOT = 8, K_GATE = 9;
 const K_WREN = 10, K_LANTERN = 11, K_MOTH = 12, K_WHELK = 13, K_STUMP = 14, K_ZED = 15, K_GLOW = 16, K_ICON = 17, K_BUDGLOW = 18;
+const K_CRYSTAL = 19, K_CRYSTAL_GLINT = 20;
 
 // ---------------------------------------------------------------------------
 // Tile painters
@@ -893,6 +894,67 @@ function paintHush(g, nb, v) {
   spiral(g, 0.5, 0.5, 0.02, 0.1, 1.3, rnd() * TAU);
   K(g, rgba('#3a2960', 0.8), 0.03);
   g.restore();
+}
+
+// A crystal wall (SPEC section 19): a block of pale blue glass on the floor, joined to its neighbours like
+// rock, with facets and a cool highlight. Light passes through it, so it is drawn see-through.
+const CRYSTAL_EDGE = '#2E5873';
+function paintCrystal(g, nb, v) {
+  paintFloor(g, (v + 3) & 7);
+  const rnd = rng(9100 + nb * 17 + v * 31);
+  const block = slabPts(0.07, 0.06, 0.93, 0.95, nb, 0.13, rnd, 0.012);
+  // a soft shadow where it meets the floor
+  closed(g, block);
+  K(g, rgba('#1b2a3a', 0.35), 0.09);
+  closed(g, block);
+  F(g, rgba('#8FD8EC', 0.42));
+  g.save();
+  closed(g, block);
+  g.clip();
+  // facets: a few planes meeting at an off-centre point, alternately lighter and darker
+  const cx = 0.42 + rnd() * 0.16;
+  const cy = 0.38 + rnd() * 0.16;
+  const corners = [[-0.2, -0.2], [0.55 + (rnd() - 0.5) * 0.2, -0.2], [1.2, -0.2], [1.2, 0.5 + (rnd() - 0.5) * 0.2], [1.2, 1.2],
+    [0.45 + (rnd() - 0.5) * 0.2, 1.2], [-0.2, 1.2], [-0.2, 0.5 + (rnd() - 0.5) * 0.2]];
+  for (let i = 0; i < corners.length; i++) {
+    const a = corners[i];
+    const b = corners[(i + 1) % corners.length];
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(a[0], a[1]);
+    g.lineTo(b[0], b[1]);
+    g.closePath();
+    F(g, i % 2 ? rgba('#E6FBFF', 0.16) : rgba('#3B7C9B', 0.14));
+  }
+  for (const a of corners) {
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(a[0], a[1]);
+    K(g, rgba('#E6FBFF', 0.42), 0.014);
+  }
+  // a cool highlight streak toward the top left
+  g.beginPath();
+  g.moveTo(0.16, 0.42);
+  g.lineTo(0.38, 0.16);
+  K(g, rgba('#FFFFFF', 0.55), 0.035);
+  g.beginPath();
+  g.moveTo(0.2, 0.56);
+  g.lineTo(0.27, 0.47);
+  K(g, rgba('#FFFFFF', 0.4), 0.025);
+  g.restore();
+  closed(g, block);
+  K(g, CRYSTAL_EDGE, 0.03);
+}
+
+// The glint a lit crystal wall shows, added over it with a soft pulse.
+function paintCrystalGlint(g, v) {
+  const rnd = rng(9300 + v * 13);
+  ell(g, 0.5, 0.48, 0.4, 0.4);
+  F(g, radial(g, 0.5, 0.48, 0.42, [0, rgba('#DFF8FF', 0.55), 1, rgba('#8FD8EC', 0)]));
+  for (let i = 0; i < 2; i++) {
+    sparkle(g, 0.3 + rnd() * 0.4, 0.25 + rnd() * 0.4, 0.07 + rnd() * 0.04);
+    F(g, rgba('#FFFFFF', 0.9));
+  }
 }
 
 // The Hush's shimmer: a broken pale-violet line just inside its edge plus a few motes. Two phases
@@ -2050,7 +2112,7 @@ function channelIndex(c) {
   return i >= 0 && i <= 2 ? i : 0;
 }
 
-// Tiles are opaque and fill their square. Kinds: floor, wall, puddle, bridge, bud, hush, root, gate.
+// Tiles are opaque and fill their square. Kinds: floor, wall, puddle, bridge, bud, hush, root, gate, crystal.
 // opts: { t, seed, lit, open, pressed, channel, accent, neighbors: { n, e, s, w } }
 export function drawTile(ctx, kind, px, py, size, opts) {
   const o = opts || NONE;
@@ -2122,6 +2184,31 @@ export function drawTile(ctx, kind, px, py, size, opts) {
           const op = ctx.globalCompositeOperation;
           ctx.globalCompositeOperation = 'lighter';
           ctx.globalAlpha = al * (0.3 + 0.22 * Math.sin(t * 2.6 + (v & 7)));
+          blit(ctx, gl, px, py, size);
+          ctx.globalAlpha = al;
+          ctx.globalCompositeOperation = op;
+        }
+      }
+      return;
+    }
+    case 'crystal': {
+      const nb = nbMask(o.neighbors);
+      const cv = v & 3;
+      key = K_CRYSTAL + 32 * (cv + 4 * nb);
+      s = b.map.get(key);
+      if (s === undefined) s = make(b, key, 0, 0.3, (g) => paintCrystal(g, nb, cv), true);
+      if (!s) return;
+      blit(ctx, s, px, py, size);
+      if (o.lit) {
+        const k2 = K_CRYSTAL_GLINT + 32 * cv;
+        let gl = b.map.get(k2);
+        if (gl === undefined) gl = make(b, k2, 0, 0, (g) => paintCrystalGlint(g, cv));
+        if (gl) {
+          const t = o.t || 0;
+          const al = ctx.globalAlpha;
+          const op = ctx.globalCompositeOperation;
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = al * (0.35 + 0.25 * Math.sin(t * 2.1 + v));
           blit(ctx, gl, px, py, size);
           ctx.globalAlpha = al;
           ctx.globalCompositeOperation = op;

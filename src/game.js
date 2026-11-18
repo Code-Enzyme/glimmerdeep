@@ -9,6 +9,7 @@ import { key, DIRS } from './engine.js';
 import { solve } from './solver.js';
 import { CHAPTERS, LEVELS } from './levels/index.js';
 import { DAILY } from './levels/daily.js';
+import { NIGHT, GARDEN } from './levels/night.js';
 import { initAudio, setMuted, play, setAppHidden } from './audio.js';
 import { Session } from './ui/session.js';
 import {
@@ -26,6 +27,7 @@ import { PRODUCTS, CATALOG, FREE_CHAPTER, chapterOpen, hintCost, payHint, hintLa
 import { TitleArt } from './ui/title.js';
 import { Tutorial, resolvePoint, STUCK_AFTER } from './ui/tutorial.js';
 import { NOTES, storyDue, journal, pageById, speciesOf } from './ui/story.js';
+import { gardenState, gardenNote, puzzleOpen, levelTitle } from './ui/garden.js';
 import { dateKey, dayLabel, dateLabel, dailyLevel, streakOf, weekOf, dayOpen, finishDaily } from './ui/daily.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
@@ -147,6 +149,7 @@ const view = new BoardView(canvas, {
 // ---------------------------------------------------------------- small helpers
 
 function chapterOf(def) {
+  if (NIGHT.includes(def) || /^N-/.test(String(def && def.id))) return GARDEN;
   for (const chapter of CHAPTERS) if (chapter.levels && chapter.levels.includes(def)) return chapter;
   const m = /^(\d+)-/.exec(String(def && def.id));
   if (m) {
@@ -164,6 +167,7 @@ function chapterLocked(chapter) {
 function isUnlocked(def) {
   if (forceUnlock) return true;
   if (chapterLocked(chapterOf(def))) return false;   // Unlock all skips the level order, never the purchase
+  if (NIGHT.includes(def)) return puzzleOpen(def, save, NIGHT, LEVELS, save.settings.unlockAll);
   const i = LEVELS.indexOf(def);
   if (i <= 0 || save.settings.unlockAll) return true;
   return !!save.levels[def.id] || !!save.levels[LEVELS[i - 1].id];
@@ -223,6 +227,8 @@ function openDailyCard() {
 }
 
 function nextLevelAfter(def) {
+  const n = NIGHT.indexOf(def);
+  if (n >= 0) return NIGHT[n + 1] || null;   // on through the garden; the last deep puzzle has no next
   const i = LEVELS.indexOf(def);
   return i >= 0 && i + 1 < LEVELS.length ? LEVELS[i + 1] : null;
 }
@@ -310,8 +316,12 @@ function showMap() {
 
 function drawMap() {
   renderMap(chaptersEl, {
-    chapters: CHAPTERS,
-    levels: LEVELS,
+    chapters: NIGHT.length ? [...CHAPTERS, GARDEN] : CHAPTERS,
+    levels: [...LEVELS, ...NIGHT],
+    label: levelTitle,
+    // what a closed section waits for: the garden before its first puzzle opens (SPEC section 20)
+    note: (chapter) => (chapter === GARDEN && !forceUnlock && !puzzleOpen(NIGHT[0], save, NIGHT, LEVELS, save.settings.unlockAll)
+      ? gardenNote(gardenState(save, LEVELS)) : ''),
     records: save.levels,
     isUnlocked,
     onOpen: (def) => {
@@ -508,7 +518,7 @@ function openLevel(def, adhoc, day) {
   cancelWalk();
   queue.length = 0;
   session = fresh;
-  current = { def, chapter: day ? DAILY_CHAPTER : chapterOf(def), adhoc: !!adhoc || !LEVELS.includes(def), day: day || null, result: null };
+  current = { def, chapter: day ? DAILY_CHAPTER : chapterOf(def), adhoc: !!adhoc || !(LEVELS.includes(def) || NIGHT.includes(def)), day: day || null, result: null };
   // Tutorials and the stuck nudge are for a level's first visits: never solved, and the setting on.
   const guided = save.settings.tutorials && (day ? !save.daily[day] : !current.adhoc && !save.levels[def.id]);
   tutorial = guided && Array.isArray(def.tutorial) && def.tutorial.length ? new Tutorial(def.tutorial) : null;
@@ -523,7 +533,7 @@ function openLevel(def, adhoc, day) {
   lastBloom = -1;
   view.highContrast = save.settings.contrast;
   view.setLevel(session.state, { accent: current.chapter.accent, facing: session.facing });
-  $('level-id').textContent = day ? `Daily Glimmer, ${dateLabel(day)}` : def.id !== undefined ? `Level ${def.id}` : 'Test cavern';
+  $('level-id').textContent = day ? `Daily Glimmer, ${dateLabel(day)}` : levelTitle(def);
   $('level-name').textContent = def.name || 'Unnamed cavern';
   clearHint();
   showScreen('level');
@@ -1065,7 +1075,7 @@ function showResult() {
   const def = current.def;
   const r = current.result;
   $('result-id').textContent = current.day ? `Daily Glimmer, ${dateLabel(current.day)}`
-    : def.id !== undefined ? `Level ${def.id} lit` : 'Cavern lit';
+    : def.id !== undefined ? `${levelTitle(def)} lit` : 'Cavern lit';
   $('result-name').textContent = def.name || 'Unnamed cavern';
   const hasPar = typeof def.par === 'number';
   $('result-moves').textContent = `${r.moves} move${r.moves === 1 ? '' : 's'}` + (hasPar ? `  ·  par ${def.par}` : '');
@@ -1159,7 +1169,7 @@ function openCard(kind) {
 
 // ---------------------------------------------------------------- store (SPEC section 14)
 
-const NEXT_PAID = LEVELS.filter((def) => chapterOf(def).id !== FREE_CHAPTER).length;
+const NEXT_PAID = LEVELS.filter((def) => chapterOf(def).id !== FREE_CHAPTER).length + NIGHT.length;
 
 // reason: 'chapter' (a locked chapter, or Next after chapter 1), 'hint' (nothing left to pay with), 'archive' (a
 // locked Daily Glimmer day), or none
@@ -1168,7 +1178,8 @@ function openShop(reason, chapter) {
   cancelWalk();
   queue.length = 0;
   shopNote = '';
-  if (reason === 'chapter' && chapter) shopWhy = `Chapter ${chapter.id}, ${chapter.name}, is part of the Full Expedition.`;
+  if (reason === 'chapter' && chapter === GARDEN) shopWhy = 'The Night Garden is part of the Full Expedition.';
+  else if (reason === 'chapter' && chapter) shopWhy = `Chapter ${chapter.id}, ${chapter.name}, is part of the Full Expedition.`;
   else if (reason === 'archive') shopWhy = 'The Daily Glimmer archive is part of the Full Expedition.';
   else if (reason === 'hint') shopWhy = `No Glimmer left. The next free hint comes in ${minutesWord(hintCost(save.shop, Date.now()).waitMs)}.`;
   else shopWhy = '';
@@ -1181,7 +1192,8 @@ function renderShop() {
   why.textContent = shopWhy;
   why.hidden = !shopWhy;
   const later = CHAPTERS.filter((c) => c.id !== FREE_CHAPTER);
-  const span = later.length ? `Chapters ${later[0].id} to ${later[later.length - 1].id}` : 'Every chapter';
+  const span = (later.length ? `Chapters ${later[0].id} to ${later[later.length - 1].id}` : 'Every chapter')
+    + (NIGHT.length ? ' and the Night Garden' : '');
   $('shop-full-text').textContent = `${span}: ${NEXT_PAID} more caverns and the rest of Wren's story. One payment, no ads.`;
   const cost = hintCost(save.shop, Date.now());
   const jar = CATALOG.find((p) => p.id === PRODUCTS.jar);
@@ -1679,7 +1691,7 @@ window.__gd = {
     return session.state === session.start;
   },
   loadLevel: (id) => {
-    const def = LEVELS.find((level) => String(level.id) === String(id));
+    const def = [...LEVELS, ...NIGHT].find((level) => String(level.id) === String(id));
     return def ? openLevel(def) : false;
   },
   loadLevelDef: (def) => openLevel(def, true),

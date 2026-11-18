@@ -7,6 +7,7 @@ const { pathToFileURL } = require('url');
   const root = path.resolve(__dirname, '..');
   const { LEVELS } = await import(pathToFileURL(path.join(root, 'src/levels/index.js')).href);
   const { DAILY } = await import(pathToFileURL(path.join(root, 'src/levels/daily.js')).href);
+  const { NIGHT } = await import(pathToFileURL(path.join(root, 'src/levels/night.js')).href);
   const { parseLevel } = await import(pathToFileURL(path.join(root, 'src/engine.js')).href);
   const { solve } = await import(pathToFileURL(path.join(root, 'src/solver.js')).href);
   const shots = path.join(root, 'dev/play-shots');
@@ -20,7 +21,7 @@ const { pathToFileURL } = require('url');
   await page.goto(pathToFileURL(path.join(root, 'dist/glimmerdeep.html')).href + '?unlock=1');
   await page.waitForFunction(() => window.__gd);
   let bad = 0;
-  for (const level of [...LEVELS, ...DAILY]) {
+  for (const level of [...LEVELS, ...DAILY, ...NIGHT]) {
     const sol = solve(parseLevel(level));
     if (DAILY.includes(level)) await page.evaluate((def) => window.__gd.loadLevelDef(def), level);
     else await page.evaluate((id) => window.__gd.loadLevel(id), level.id);

@@ -2052,6 +2052,57 @@ test('worked example: without the bridge Wren cannot pass the puddle', () => {
   assert.equal(step(s, 'E'), null);
 });
 
+// ---------------------------------------------------------------- crystal walls (SPEC section 19)
+
+test('crystal: terrainAt reads it, and neither Wren nor any creature may enter it', () => {
+  const s = parse(['W*.G']);
+  assert.equal(terrainAt(s, 1, 0), '*');
+  assert.equal(step(s, 'E'), null, 'Wren cannot walk into crystal');
+  for (const who of ['wren', 'M', 'S', 'T', 'D', 'K', 'O', 'R']) assert.equal(canEnter(s, who, 1, 0), false, who);
+});
+
+test('crystal: a carried lantern lights the crystal beside Wren, and nothing behind it', () => {
+  const s = parse(['.....', 'W*..G', '.....']);
+  assert.deepEqual(light(s), ['10000', '11000', '10000']);
+});
+
+test('crystal: a planted lantern shines through it, two steps as through floor', () => {
+  const s = run(parse(['.....', 'W*..G', '.....']), ['L']);
+  assert.deepEqual(light(s), ['11000', '11100', '11000']);
+  // a wall in its place stops it
+  const walled = run(parse(['.....', 'W#..G', '.....']), ['L']);
+  assert.deepEqual(light(walled), ['11000', '11000', '11000']);
+});
+
+test('crystal: a beam goes straight through crystal', () => {
+  const s = run(parse(['.WL**.G'], { shutter: true }), ['L']);
+  assert.equal(s.lantern.beam, 'E');
+  assert.deepEqual(light(s), ['0011111']);
+  assert.ok(s.solved, 'the bud four tiles off, behind two crystal walls, is lit');
+});
+
+test('crystal: creatures behind crystal react to light that comes through it', () => {
+  // the whelk behind the crystal hides in the planted lantern's light; behind a wall it creeps away
+  const s = run(parse(['W*S.G']), ['L']);
+  assert.deepEqual(where(s), ['S@2,0']);
+  assert.ok(isHidden(s, s.creatures[0]));
+  const walled = run(parse(['W#S..G']), ['L']);
+  assert.deepEqual(where(walled), ['S@3,0']);
+});
+
+test('crystal: nothing may start on it', () => {
+  assert.throws(() => parse(['W.M.G'], { under: { '2,0': '*' } }), /cannot start on '\*'/);
+  assert.throws(() => parse(['.W..G'], { under: { '1,0': '*' } }), /cannot start on '\*'/);
+});
+
+test('crystal: the Hush never creeps onto it', () => {
+  let s = parse(['H*....', 'H.....', 'H.....', '.....W', 'G.....'], { gloam: true });
+  s = run(s, ['Z', 'Z', 'Z']);
+  assert.equal(terrainAt(s, 1, 0), '*');
+  assert.ok(!s.hush.includes('1,0'));
+  assert.ok(s.hush.includes('2,0'), 'it creeps round the crystal instead');
+});
+
 // ---------------------------------------------------------------- cross-check against a naive reference
 
 // A second implementation of SPEC sections 1 to 4 and 17, written to be read next to the spec rather than to be
@@ -2074,6 +2125,7 @@ function referenceStep(s, action) {
     else if (ch === '.' || 'abc'.includes(ch)) terrainOk = true;
     else if (ch === '~') terrainOk = who === 'M' || bridges.includes(at(x, y));
     else if (ch === 'H') terrainOk = who === 'wren' && lantern.carried;
+    else if (ch === '*') terrainOk = false;   // crystal (section 19)
     else terrainOk = s.gates[ch] === true;   // a gate: the state stored at the end of the previous turn
     if (!terrainOk || creatureOn(x, y)) return false;
     if (who === 'wren') return true;
@@ -2274,6 +2326,9 @@ test('step agrees with a naive reference implementation on every move of thousan
     'an encounter with a planted lantern, whelks and a Stumpcap': { gloam: true, map: ['H.S......', '..#.L.v..', 'W...~.S..', 'H.b.B..G.'] },
     'an encounter with Gloamlings, newts and an ember': { gloam: true, map: ['W..O.e...', '.K.a.A...', 'H.H..~M..', 'G...H..O.'] },
     'an encounter with a shutter and beetles': { gloam: true, shutter: true, map: ['W..L.\\...', 'H......~.', '/.#..G...', 'HH...\\...'] },
+    'crystal walls with every species': ['W.*O.v...', '.K*a.A.S.', '*.e.*~M..', 'G...H*.\\G'],
+    'crystal walls, a shutter and beetles': { shutter: true, map: ['W.L*.\\...', '.*.....~.', '/..*..G..', '..*..\\..*'] },
+    'an encounter with crystal walls': { gloam: true, map: ['H..M.*...', 'H.#..~...', 'HW..*..a.', 'H.#....A.', 'H.*...G..'] },
   };
   const byId = (a, b) => (a.id < b.id ? -1 : 1);
   for (const [name, board] of Object.entries(boards)) {

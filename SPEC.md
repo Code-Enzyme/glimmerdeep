@@ -38,6 +38,7 @@ Terrain (static, one per tile):
 | `H` | Hush (living darkness) | only while carrying the lantern | no | no, and it is never lit |
 | `a` `b` `c` | Pressure root, channel A, B, C | yes | yes | yes |
 | `A` `B` `C` | Gate, channel A, B, C | only if open | only if open | yes (it is a lattice) |
+| `*` | Crystal wall (section 19) | no | no | yes |
 
 Things on the board: Wren (the player), the lantern (carried by Wren, or planted on a tile), creatures.
 At most one creature per tile. A creature can never share a tile with Wren or with a planted lantern.
@@ -230,10 +231,11 @@ in a JavaScript string), and optionally `L` a lantern that starts planted (then 
 `L`). A planted lantern always starts round.
 
 `feature` is a string of one or more of: `M`, `S`, `T`, `D`, `K`, `O`, `R` (the species), `L` (planting the
-lantern), `A` (aiming it), `H` (the creeping Hush). Necessity check, run for each listed character: for a species, the level with every
+lantern), `A` (aiming it), `H` (the creeping Hush), `*` (crystal walls). Necessity check, run for each listed character: for a species, the level with every
 creature of that species removed must be unsolvable; for `L`, the level must be unsolvable without the `L`
 action; for `A`, the level with `shutter: false` must be unsolvable; for `H`, the level with `gloam: false`
-(the Hush stays put) must have no solution of exactly `par` moves (its shortest is shorter, or there is none).
+(the Hush stays put) must have no solution of exactly `par` moves (its shortest is shorter, or there is none);
+for `*`, the level with every crystal wall turned into a plain wall (`#`) must be unsolvable.
 
 Optional `shutter: true` lets the lantern be aimed (section 2). Only levels that teach or use aiming have it.
 
@@ -249,7 +251,7 @@ export function parseLevel(levelDef)        // -> state (turn 0, light, gates an
 export function step(state, action)         // -> NEW state, or null if illegal. Never mutates its input.
 export function key(state)                  // -> string that identifies the position (for the solver's visited set)
 export function isLit(state, x, y)          // -> boolean, from the stored light map
-export function terrainAt(state, x, y)      // -> one of '#', '.', '~', 'bridge', 'G', 'H', 'a'..'c', 'A'..'C'; '#' when out of bounds
+export function terrainAt(state, x, y)      // -> one of '#', '.', '~', 'bridge', 'G', 'H', 'a'..'c', 'A'..'C', '*'; '#' when out of bounds
                                             //    (crept Hush is 'H')
 export function creatureAt(state, x, y)     // -> creature object or null
 export function canEnter(state, who, x, y)  // who: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R'. Terrain and occupancy check used by the rules.
@@ -385,6 +387,7 @@ inlines `src/style.css` at `/*__CSS__*/` and the bundle at `/*__JS__*/` inside `
 - **Pressure root and gate:** "A gate opens while something heavy rests on its root."
 - **Puddle:** "Too deep for Wren. A Fluffmoth can bridge it."
 - **Hush:** "Darkness that eats light. Wren can only cross it with the lantern in hand, and the lantern goes dark inside."
+- **Crystal:** "Light shines straight through crystal, but nothing can walk through it. A carried lantern only lights the near side; plant it to shine through."
 - **The Gloam's Hush** (in a Gloam encounter, section 17): "The Gloam's Hush creeps onto every dark floor tile beside it, one step each turn. Light holds it back. If it reaches Wren, you step back three turns."
 
 ## 9. Details settled during implementation
@@ -446,7 +449,8 @@ and never ask for a move the solution does not need.
     when: 'planted',           // optional: the step only shows while this holds: 'planted' | 'carried'
     card: 'S',                 // optional: opens that creature's rule card when the step comes up ("meet" card);
                                //   'A' opens the Shutter card, in a level with a shutter; 'H' the Gloam's Hush
-                               //   card, in a Gloam encounter (section 17)
+                               //   card, in a Gloam encounter (section 17); '*' the Crystal card, in a level with
+                               //   crystal walls (section 19)
     until: 'step' }            // what finishes the step, see below
   ```
 - **point:** `'wren'`; `'lantern'` (the planted lantern); a species letter `M` `S` `T` `D` `K` `O` `R` (the first such
@@ -552,7 +556,8 @@ lives. Prices and amounts marked [PLACEHOLDER - PLAYTEST] are starting points, n
 - **Store panel:** opens from the map's Store button, from a locked chapter (its Unlock button or any of
   its levels), from Hint when nothing is left, and from Next level on the last level of chapter 1 while
   chapter 2 is locked (after the chapter's story page, the first time). It offers the Full Expedition
-  ("Chapters 2 to 7: 60 more caverns and the rest of Wren's story. One payment, no ads."), the Glimmer jar
+  ("Chapters 2 to 7 and the Night Garden: 76 more caverns and the rest of Wren's story. One payment, no
+  ads."; the Night Garden's part only while it has puzzles, section 20), the Glimmer jar
   (with the Glimmer left and when the next free hint comes), and Restore purchases. Owned products say
   "Owned". Back, Escape or Close shuts it. A finished purchase plays `'solve'`.
 - **The app shell:** release builds sell through Google Play Billing (`BillingPlugin` in the Android
@@ -693,3 +698,50 @@ player who only needs a nudge gets a nudge, and nobody is ever left stuck.
   the price, as section 14 says.
 - `src/ui/hints.js` holds these rules (no DOM): `keyPiece(state, moves, feature)` and the `HintLadder`
   class, so they can be tested in Node.
+
+## 19. Crystal walls (decided 18 Nov 2026)
+
+The last puzzle element in the design doc: crystal walls let light through but block bodies. Wren can see
+and light what lies beyond, and has to find another way round to get there.
+
+- **Terrain** `*` (section 1): neither Wren nor any creature may enter it; light passes through it.
+- **Light** (section 4): a crystal tile is transparent, like floor. Light that reaches it lights it and goes
+  on: round light floods through it, a beam goes straight through it, and a glowing Emberwick lights it. A
+  Gloamling's shadow still stops light there. A carried lantern reaches one step, so it lights the crystal
+  next to Wren but nothing behind it; a planted lantern (two steps) or a beam shines through. Creatures
+  beyond react to that light as to any other: a whelk behind crystal hides, a Stumpcap wakes and marches.
+- **Not floor:** nothing can be planted on crystal, nothing stands on it at the start (`parseLevel` throws),
+  and the Hush never creeps onto it.
+- **Feature** `*` (section 6): necessary when the level with every crystal wall turned into a plain wall
+  is unsolvable.
+- **Rule card** (Crystal), by holding a crystal tile, and as a meet card (tutorial `card: '*'`, in a level
+  with crystal walls): section 8.
+- **Drawing:** pale blue glass blocks that join their neighbours like walls, with a glint that brightens
+  while the tile is lit. The floor behind a crystal wall stays readable through the darkness like any tile.
+- Crystal walls appear in the Night Garden (section 20).
+
+## 20. The Night Garden (decided 18 Nov 2026)
+
+Deep puzzles for after the story (design doc sections 3 and 6): longer caverns that mix the creatures of
+every chapter, all of them built round crystal walls. Numbers marked [PLACEHOLDER - PLAYTEST] are starting
+points; the design aims at 30 deep puzzles.
+
+- **Levels:** `src/levels/night.js` exports `NIGHT`, levels in the section 6 format with ids `N-1`, `N-2`, …
+  Like every level, each solves at exactly its par, needs its featured elements and keeps to the size limit
+  (`npm run verify`). Every deep puzzle has `*` in its feature, its par is from 16 to 40, and `N-1` opens
+  with the Crystal card (tutorial `card: '*'`).
+- **Opening:** the Night Garden is part of the Full Expedition. Its first puzzle opens once level `7-11`, the
+  end of the story, is lit and the chapters have earned at least 100 star moss [PLACEHOLDER - PLAYTEST]
+  between them; after that the usual order holds (a puzzle opens when it or the one before it is lit). The
+  **Unlock all** setting skips the order and the star moss, never the purchase; the developer links work as
+  for the chapters (section 14).
+- **Map:** the last section, after chapter 7: "Deep puzzles" over "The Night Garden", in the garden's own
+  night blue, its puzzles as nodes on a trail like a chapter's. Before it opens, the section says what it
+  waits for: "Opens when the story is done and you have 100 star moss. You have 64." (or "…star moss. You
+  have it." once there is enough). Once open, its tally reads "3 of 10 lit".
+- **Playing:** the level screen and the result panel say "Night Garden 3" in place of "Level N-3". Results
+  are saved and earn star moss like any level's; Next level goes on through the garden, and the last
+  puzzle has none.
+- **Not counted elsewhere:** deep puzzles do not count toward the title screen's caverns lit, the 100 star
+  moss, the story (section 13) or which chapter a creature was met in.
+

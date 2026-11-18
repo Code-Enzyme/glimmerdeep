@@ -447,3 +447,20 @@ test("checkLevel: feature 'H' needs a Gloam encounter, and a creep that matters"
   assert.deepEqual(idle.problems, ["feature 'H' is not necessary: solvable in 1 move with the Hush staying put (E)"]);
   assert.deepEqual(idle.featureOk, { H: false });
 });
+
+// ---------------------------------------------------------------- crystal walls (SPEC section 19)
+
+test("checkLevel: feature '*' is necessary when the level with plain walls for crystal cannot be solved", () => {
+  const r = checkLevel(def(['W.*G'], { feature: '*', par: 2 }));
+  assert.deepEqual(r.problems, []);
+  assert.deepEqual(r.featureOk, { '*': true });
+  assert.ok(r.searched > r.explored, 'the search with plain walls is counted');
+});
+
+test("checkLevel: feature '*' needs crystal walls, and light through them that matters", () => {
+  const round = checkLevel(def(['W.*G', '....'], { feature: '*', par: 2 }));
+  assert.deepEqual(round.featureOk, { '*': false });
+  assert.match(round.problems.join('; '), /^feature '\*' is not necessary: solvable in 4 moves without crystal walls letting light through \(/);
+  const none = checkLevel(def(['W.~G'], { feature: '*L', par: 2 }));
+  assert.deepEqual(none.problems, ["feature '*': the level has no crystal walls"]);
+});

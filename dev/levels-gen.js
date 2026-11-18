@@ -13,7 +13,8 @@
 //     "floor": 30,                    // at most this many open tiles, so length comes from the puzzle
 //     "gloam": true,                  // a Gloam encounter (SPEC section 17): the Hush creeps; list H in feature
 //     "hushEdge": true,               // the Hush fills the west column and stays there (with gloam)
-//     "creepThreat": true }           // the creep must force a detour, not open a way (with gloam)
+//     "creepThreat": true,            // the creep must force a detour, not open a way (with gloam)
+//     "crystal": [2, 6] }             // crystal walls (SPEC section 19), min and max; list * in feature
 //
 // Each restart builds a random cave, then mutates it (walls, pieces, puddles, facings) and keeps a change
 // when the level still passes the checks and scores no worse: score = par + creature moves / 6 - 1.5 x idle
@@ -90,7 +91,7 @@ function inner(lv) {
 const isFree = (lv, x, y) => lv.grid[y][x] === '.' && !lv.things.some((t) => t.x === x && t.y === y);
 const freeCells = (lv) => inner(lv).filter(([x, y]) => isFree(lv, x, y));
 const floorCount = (lv) => inner(lv).filter(([x, y]) => lv.grid[y][x] !== '#').length;
-const SPECIAL = 'G~HabcABC';
+const SPECIAL = 'G~HabcABC*';
 const GATES = 'ABC';
 
 // A shipped level as a starting point (--from=chN): its terrain, Wren and its creatures.
@@ -138,6 +139,7 @@ function randomLevel() {
   for (let i = between(spec.buds || [1, 1]); i > 0; i--) put('G');
   for (let i = between(spec.puddles || [0, 0]); i > 0; i--) put('~');
   for (let i = between(spec.hush || [0, 0]); i > 0; i--) put('H');
+  for (let i = between(spec.crystal || [0, 0]); i > 0; i--) put('*');
   for (let i = between(spec.roots || [0, 0]); i > 0; i--) {
     put('a');
     put('A');
@@ -170,13 +172,18 @@ function mutate(lv0) {
     const [x, y] = pick(inner(lv));
     if (lv.things.some((t) => t.x === x && t.y === y)) return lv;
     if (spec.hushEdge && x === 1) return lv;   // the Hush's own column stays as it is
-    if (lv.grid[y][x] === '#') lv.grid[y][x] = '.';
-    else if (lv.grid[y][x] === '.') lv.grid[y][x] = '#';
+    const ter = lv.grid[y][x];
+    if (spec.crystal && rand() < 0.35) {
+      // crystal comes and goes, from wall or floor and back
+      if (ter === '*') lv.grid[y][x] = rand() < 0.5 ? '#' : '.';
+      else if (ter === '#' || ter === '.') lv.grid[y][x] = '*';
+    } else if (ter === '#') lv.grid[y][x] = '.';
+    else if (ter === '.') lv.grid[y][x] = '#';
   } else if (r < 0.65) {
     // move a thing
     if (!lv.things.length) return lv;
     const t = pick(lv.things);
-    const cells = inner(lv).filter(([x, y]) => lv.grid[y][x] !== '#' && lv.grid[y][x] !== 'G' && !GATES.includes(lv.grid[y][x])
+    const cells = inner(lv).filter(([x, y]) => lv.grid[y][x] !== '#' && lv.grid[y][x] !== '*' && lv.grid[y][x] !== 'G' && !GATES.includes(lv.grid[y][x])
       && (lv.grid[y][x] !== '~' || t.ch === 'M') && lv.grid[y][x] !== 'H'
       && !lv.things.some((o) => o.x === x && o.y === y));
     if (!cells.length) return lv;
@@ -262,8 +269,10 @@ function evaluate(lv) {
   memo.set(key, ev);
   return ev;
 }
+const crystalCount = (lv) => inner(lv).filter(([x, y]) => lv.grid[y][x] === '*').length;
 function evaluateNow(lv) {
-  if (floorCount(lv) > maxFloor) return null;
+  if (floorCount(lv) - crystalCount(lv) > maxFloor) return null;
+  if (spec.crystal && (crystalCount(lv) < spec.crystal[0] || crystalCount(lv) > spec.crystal[1])) return null;
   const def = toDef(lv);
   let start;
   try {
@@ -283,6 +292,7 @@ function evaluateNow(lv) {
     let without;
     if (f === 'L') without = solve(start, { maxStates: STATES, actions: ACTIONS.filter((a) => a !== 'L') });
     else if (f === 'A') without = solve(parseLevel({ ...def, shutter: false }), { maxStates: STATES });
+    else if (f === '*') without = solve(parseLevel({ ...def, map: def.map.map((row) => row.replace(/\*/g, '#')) }), { maxStates: STATES });
     else if (f === 'H') {
       // the creep must change the answer: with the Hush staying put, no solution of exactly par
       const still = solve(parseLevel({ ...def, gloam: false }), { maxStates: STATES });

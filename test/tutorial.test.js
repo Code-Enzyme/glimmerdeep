@@ -312,3 +312,9 @@ test('levels: following the par solution finishes every tutorial, so it never as
     assert.equal(t.done, true, `level ${level.id}: the tutorial is still on step ${t.index} after the par solution`);
   }
 });
+
+test("checkTutorial: the Crystal card belongs to a level with crystal walls (SPEC section 19)", () => {
+  const steps = [{ card: '*', until: 'card' }];
+  assert.deepEqual(checkTutorial(def(['W.*G'], steps)), []);
+  assert.deepEqual(checkTutorial(def(['W..G'], steps)), ['step 1: the Crystal card but the level has no crystal walls']);
+});

@@ -59,6 +59,11 @@ export const RULE_CARDS = {
     title: 'Hush',
     text: 'Darkness that eats light. Wren can only cross it with the lantern in hand, and the lantern goes dark inside.',
   },
+  // crystal walls (SPEC section 19); '*' is also the tutorial's card for them
+  '*': {
+    title: 'Crystal',
+    text: 'Light shines straight through crystal, but nothing can walk through it. A carried lantern only lights the near side; plant it to shine through.',
+  },
   // the Hush in a Gloam encounter (SPEC section 17); 'H' is also the tutorial's card for it
   H: {
     title: "The Gloam's Hush",
@@ -80,5 +85,6 @@ export function cardKindAt(state, x, y) {
   if (terrain === 'H') return state.creep ? 'H' : 'hush';
   if (terrain === 'a' || terrain === 'b' || terrain === 'c') return 'root';
   if (terrain === 'A' || terrain === 'B' || terrain === 'C') return 'gate';
+  if (terrain === '*') return '*';
   return null;
 }
