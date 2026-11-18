@@ -115,9 +115,10 @@ jobs:
           target: default
           arch: x86_64
           disable-animations: true
-          # the action's defaults, plus the device's kernel log: the emulator has been going away without a
-          # word right after Play, and a guest kernel fault would show here
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
+          # SwiftShader through ANGLE instead of the action's default swiftshader_indirect: with the old
+          # renderer the emulator's host RenderThread segfaulted (host dmesg) right after Play, taking the
+          # emulator down with it
+          emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim
           script: node dev/device-check.cjs apk/app-debug.apk
       - name: Why the emulator stopped, if it did
         if: failure()
