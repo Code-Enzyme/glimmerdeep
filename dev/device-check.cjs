@@ -137,7 +137,10 @@ async function killApp(device, webview) {
   if (!(await page.evaluate(() => window.__gd.shop().full))) fail('the Full Expedition from the test store was not granted');
   else console.log('store: the Full Expedition bought in the test store');
 
-  // kill the app and open it again: the bests must still be there
+  // kill the app and open it again: the bests must still be there. The WebView writes localStorage to disk a
+  // few seconds after a change, so a force-stop a second after the purchase lost it (CI, 18 Nov). Give the
+  // write the time it gets on a phone; a Play purchase also comes back from Play at the next start.
+  await page.waitForTimeout(6000);
   const oldPid = webview.pid();
   await killApp(device, webview);
   ({ webview, page } = await openApp(device, oldPid));
