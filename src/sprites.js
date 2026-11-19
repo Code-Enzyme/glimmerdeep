@@ -13,7 +13,7 @@
 // - `neighbors` is used by 'wall', 'puddle', 'bridge' and 'hush'. For walls, count off-board as wall.
 // - `seed` (any number or string, for example y * w + x) picks one of a few floor / rock variants.
 // - `accent` (any CSS colour) tints a Glowbud, or a root / gate channel. Channels default to amber
-//   (A), teal (B), rose (C); the circle / triangle / square mark is what really tells them apart.
+//   (A), teal (B), lilac (C); the circle / triangle / square mark is what really tells them apart.
 // - drawCreature: `hidden` (whelk) and `awake` (stumpcap) fall back to `lit` when left out.
 // - drawWren accepts one extra opt, `smothered: true`, to show the carried lantern gone dark.
 // - Sprites may reach a little outside their tile (shadows, glows, sleepy z's): up to a quarter tile.
@@ -38,7 +38,10 @@ export const PALETTE = Object.freeze({
   water: '#2B3454',
   bark: '#7B5850',
   flame: '#FFE08A',
-  channels: Object.freeze({ A: '#F2B04C', B: '#5FBFA8', C: '#C97A8A' }),
+  // gate channels: amber, teal and lilac, apart for every type of colour vision (SPEC section 25)
+  channels: Object.freeze({ A: '#F2B04C', B: '#5FBFA8', C: '#9877D9' }),
+  hint: '#FFC872', // the hint's way
+  coach: '#9CF5E3', // a tutorial's pointer: mint, so it never reads as a hint
 });
 
 const INK = PALETTE.ink;
@@ -46,7 +49,7 @@ const CREAM = PALETTE.cream;
 const AMBER = PALETTE.amber;
 const TEAL = PALETTE.teal;
 const ROSE = PALETTE.rose;
-const CHANNEL_TINT = [AMBER, TEAL, ROSE];
+const CHANNEL_TINT = [PALETTE.channels.A, PALETTE.channels.B, PALETTE.channels.C];
 
 // ---------------------------------------------------------------------------
 // Small utilities

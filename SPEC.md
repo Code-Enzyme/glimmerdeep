@@ -905,3 +905,22 @@ the same tiles in every style.
   style uses it at once (it plays `'plant'`) and the sheet stays open; a locked one plays `'blocked'` and
   nothing changes.
   Done, Escape, Back or a tap outside closes it.
+
+## 25. Colour vision (decided 19 Nov 2026)
+
+The design doc asks for a game that is colourblind-safe by design. Every state already shows by shape,
+brightness or animation (section 10, the rule cards); colour only ever adds to that. Lit and dark tiles keep
+about a 3 to 1 brightness contrast for every type of colour vision. Where colour does tell two things apart,
+it must keep doing so for players with protanopia, deuteranopia or tritanopia:
+
+- **The pairs:** the three gate channels, each against the others (A amber, B teal, C lilac), and the hint's
+  way against a tutorial's pointer (amber against mint). Their colours live in `PALETTE` (`src/sprites.js`:
+  `channels`, `hint`, `coach`), and `COLOUR_PAIRS` (`src/ui/vision.js`) names them.
+- **The measure** (`src/ui/vision.js`, no DOM): each colour goes through the Machado, Oliveira and Fernandes
+  (2009) simulation at full severity, in linear RGB, and two colours are compared by their distance in CIE
+  Lab (delta E 1976). Every pair stays **at least 30 apart** for normal vision and for each of the three
+  types. `checkColourPairs()` lists any pair that does not; a test runs it.
+- Channel C was mushroom rose, which looked like teal with red-green colourblindness (11 apart) and like
+  amber with blue-yellow (17 apart). It is now lilac, `#9877D9`. The marks on roots and gates (circle,
+  triangle, square) still tell the channels apart without any colour.
+- There are no colour presets: one palette that works for everyone needs no setting to find.

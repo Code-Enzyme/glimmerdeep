@@ -24,7 +24,7 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const easeOut = (p) => 1 - (1 - p) * (1 - p) * (1 - p);
 const lerp = (a, b, p) => a + (b - a) * p;
 const TAU = Math.PI * 2;
-const COACH = '#9CF5E3';   // a tutorial's pointer: mint, so it never reads as a hint (amber)
+const COACH = PALETTE.coach;   // a tutorial's pointer: mint, so it never reads as a hint (amber)
 
 // The lantern's own tile is lit unless it is smothered or in a Gloamling's shadow.
 function lanternLit(s) {
@@ -379,7 +379,7 @@ export class BoardView {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.globalAlpha = 0.16 * k * shimmer;
-    ctx.strokeStyle = '#FFC872';
+    ctx.strokeStyle = PALETTE.hint;
     ctx.lineWidth = size * 0.5;
     ctx.stroke(path);
     ctx.globalAlpha = 0.22 * k * shimmer;

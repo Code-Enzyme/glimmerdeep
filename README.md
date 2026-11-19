@@ -13,6 +13,9 @@ Tutorials setting on the map turns all of that off. Holding anything on the boar
 and holding a creature also shows what it will do next turn if Wren waits (SPEC section 21).
 The Comfort setting makes the reading text up to twice as big, swaps in a plain readable font, and
 lets motion follow the phone, stay still, or stay on (SPEC section 22).
+Every state shows by shape, brightness or motion, and where colour does tell two things apart (the gate
+channels, the hint against a tutorial's pointer) a test checks it stays clear for protanopia,
+deuteranopia and tritanopia (SPEC section 25).
 
 A hint helps a step at a time: the first press names the key creature, the next shows the first move,
 and the third lays out the whole way from where Wren stands, following along as it is played. One hint
