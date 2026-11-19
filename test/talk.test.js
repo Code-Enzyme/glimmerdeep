@@ -86,6 +86,21 @@ test('talk: buds in bloom, gates and their roots', () => {
   ]);
 });
 
+test('talk: a bridge a moth made is listed after the puddles', () => {
+  const s = step(board(['#########', '#W..~..G#', '####M####', '#########']), 'E');
+  assert.deepEqual(describeBoard(s, { par: 5 }), [
+    'Move 1, par 5.',
+    'Wren carries the lantern.',
+    'Wall to the north and south, open to the east and west.',
+    'One bud to light: five tiles east.',
+    'A bridge: two tiles east.',
+  ]);
+  const two = play(board(['#########', '#W.~.~.G#', '###M#M###', '#########']), 'Z');
+  const words = describeBoard(two);
+  assert.ok(words.includes('Bridges: two tiles east; four tiles east.'), words.join('\n'));
+  assert.ok(!words.some((line) => line.startsWith('A puddle') || line.startsWith('Puddles')), words.join('\n'));
+});
+
 test('talk: several buds and puddles are listed nearest first', () => {
   const s = board(['#########', '#G.~W.~G#', '#...~...#', '#G......#', '#########']);
   const words = describeBoard(s);

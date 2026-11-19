@@ -140,6 +140,8 @@ export function describeBoard(state, { par } = {}) {
   }
   const puddles = tilesOf(state, (t) => t === '~');
   if (puddles.length) out.push(`${puddles.length === 1 ? 'A puddle' : 'Puddles'}: ${placeList(state, puddles)}.`);
+  const bridges = tilesOf(state, (t) => t === 'bridge');
+  if (bridges.length) out.push(`${bridges.length === 1 ? 'A bridge' : 'Bridges'}: ${placeList(state, bridges)}.`);
   for (const ch of ['A', 'B', 'C']) {
     if (!(ch in state.gates)) continue;
     const gates = tilesOf(state, (t) => t === ch);

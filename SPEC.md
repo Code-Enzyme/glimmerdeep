@@ -1053,7 +1053,8 @@ two tiles north')". The board is a picture, so a player who cannot see it well n
      "cold", "warm" or "glowing"; Gloamling nothing more; Mirrorbeetle "mirror leaning right" (`/`) or
      "mirror leaning left" (`\`), then "in the light" or "in the dark". "Stumpcap, one tile east, facing
      south, asleep."
-  6. Each puddle (not yet a bridge): "A puddle: two tiles east." or "Puddles: ...; ...".
+  6. Each puddle (not yet a bridge): "A puddle: two tiles east." or "Puddles: ...; ...". Then each bridge a
+     moth made: "A bridge: two tiles east." or "Bridges: ...; ...".
   7. Each channel A, B, C that has gates: "Gate A, shut: four tiles east." ("open"), then its roots: "Root
      A: two tiles south." (several places joined by "; ").
   8. In a Gloam encounter (section 17): "The Hush is closest three tiles south."
