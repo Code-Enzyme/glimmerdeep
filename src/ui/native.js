@@ -43,6 +43,29 @@ export function haptic(kind) {
   }
 }
 
+// ---------------------------------------------------------------- Board talk's voice (SPEC section 28)
+//
+// speak(text) says text aloud, cutting off whatever was being said; an empty text only stops. The app speaks
+// through its Speech plugin (Android TextToSpeech); a browser through speechSynthesis; with neither, nothing.
+
+const Speech = registerPlugin('Speech');
+
+export function speak(text) {
+  const words = typeof text === 'string' ? text : '';
+  try {
+    if (isNative()) {
+      if (Capacitor.isPluginAvailable('Speech')) Speech.speak({ text: words }).catch(() => {});
+      return;
+    }
+    const synth = window.speechSynthesis;
+    if (!synth || typeof window.SpeechSynthesisUtterance !== 'function') return;
+    synth.cancel();
+    if (words) synth.speak(new window.SpeechSynthesisUtterance(words));
+  } catch (e) {
+    // the voice is a nicety: the words are on the page too
+  }
+}
+
 // ---------------------------------------------------------------- the store (SPEC section 14)
 //
 // openStore(catalog) -> Promise of the store that sells (its shape is in src/ui/billing.js). Release apps

@@ -23,8 +23,23 @@ test('store: a fresh save has no levels, no seen story pages and the default set
   assert.deepEqual(save.seen, []);
   assert.deepEqual(save.settings, {
     sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow',
-    arrows: false, hand: 'right', swipe: 'normal',
+    arrows: false, hand: 'right', swipe: 'normal', talk: false,
   });
+});
+
+test('store: Board talk round-trips, junk reads as off, and a reset keeps it (SPEC section 28)', () => {
+  const data = withStorage();
+  const save = loadSave();
+  save.settings.talk = true;
+  writeSave(save);
+  const again = loadSave();
+  assert.equal(again.settings.talk, true);
+  for (const junk of ['yes', 1, null, {}]) {
+    data.set(SAVE_KEY, JSON.stringify({ settings: { talk: junk } }));
+    assert.equal(loadSave().settings.talk, false, `talk: ${JSON.stringify(junk)}`);
+  }
+  clearProgress(again);
+  assert.equal(again.settings.talk, true, 'Reset progress keeps it');
 });
 
 test('store: the control settings round-trip, and junk in them falls back to the defaults (SPEC section 27)', () => {

@@ -6,14 +6,14 @@
 
 import { freshShop, readShop } from './shop.js';
 import { readDaily } from './daily.js';
-import { COMFORT_DEFAULTS, readComfort, CONTROL_DEFAULTS, readControls } from './comfort.js';
+import { COMFORT_DEFAULTS, readComfort, CONTROL_DEFAULTS, readControls, readTalk } from './comfort.js';
 import { DEFAULT_LANTERN, readLantern } from './lanterns.js';
 import { readWorkshop } from './workshop.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
 const SETTING_DEFAULTS = {
-  sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS, lantern: DEFAULT_LANTERN, ...CONTROL_DEFAULTS,
+  sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS, lantern: DEFAULT_LANTERN, ...CONTROL_DEFAULTS, talk: false,
 };
 
 function freshSave() {
@@ -71,6 +71,7 @@ export function parseSave(raw) {
       Object.assign(data.settings, readComfort(parsed.settings));   // SPEC section 22
       data.settings.lantern = readLantern(parsed.settings.lantern);  // SPEC section 24
       Object.assign(data.settings, readControls(parsed.settings));  // SPEC section 27
+      data.settings.talk = readTalk(parsed.settings);                // SPEC section 28
     }
     const rev = Number(parsed.rev);
     if (Number.isFinite(rev) && rev > 0) data.rev = Math.floor(rev);

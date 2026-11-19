@@ -1901,7 +1901,7 @@ function paintGlow(g) {
 // Icons
 // ---------------------------------------------------------------------------
 
-const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort', 'glow', 'grid', 'share', 'brush', 'arrow'];
+const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort', 'glow', 'grid', 'share', 'brush', 'arrow', 'speech'];
 export const ICON_NAMES = ICONS.slice();
 
 function arrowHead(g, x, y, ang, len) {
@@ -2139,6 +2139,25 @@ function iconPath(g, name) {
       g.moveTo(0.18, 0.5);
       g.lineTo(0.8, 0.5);
       arrowHead(g, 0.82, 0.5, 0, 0.26);
+      break;
+    case 'speech':
+      // a speech bubble with two lines of words in it, for Board talk's Describe (SPEC section 28)
+      g.moveTo(0.26, 0.18);
+      g.lineTo(0.74, 0.18);
+      g.quadraticCurveTo(0.88, 0.18, 0.88, 0.32);
+      g.lineTo(0.88, 0.54);
+      g.quadraticCurveTo(0.88, 0.68, 0.74, 0.68);
+      g.lineTo(0.44, 0.68);
+      g.lineTo(0.24, 0.86);
+      g.lineTo(0.28, 0.68);
+      g.quadraticCurveTo(0.12, 0.68, 0.12, 0.54);
+      g.lineTo(0.12, 0.32);
+      g.quadraticCurveTo(0.12, 0.18, 0.26, 0.18);
+      g.closePath();
+      g.moveTo(0.28, 0.37);
+      g.lineTo(0.72, 0.37);
+      g.moveTo(0.28, 0.5);
+      g.lineTo(0.58, 0.5);
       break;
     default:
       g.arc(0.5, 0.5, 0.08, 0, TAU);

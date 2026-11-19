@@ -180,9 +180,12 @@
           <span id="level-id" class="kicker"></span>
           <h2 id="level-name"></h2>
         </div>
+        <button id="btn-describe" class="round describe" type="button" aria-label="Describe the board" hidden><span class="ico" data-icon="speech"></span></button>
         <div id="counter" class="counter" role="status" aria-label="Moves"></div>
       </header>
       <p id="status" class="status" role="status" aria-live="polite"></p>
+      <!-- Board talk (SPEC section 28): each move in words, for TalkBack; never shown -->
+      <p id="board-talk" class="sr-only" aria-live="polite"></p>
     </div>
 
     <div id="stage" class="stage">
@@ -355,6 +358,18 @@
   </aside>
 
   <!-- Comfort settings: text size, a readable font, motion (SPEC section 22) -->
+  <!-- The board in words (SPEC section 28) -->
+  <aside id="talk-sheet" class="sheet paper talk" role="dialog" aria-modal="true" aria-labelledby="talk-title" hidden>
+    <span class="kicker ink">Board talk</span>
+    <h3 id="talk-title">The board</h3>
+    <div class="sheet-scroll">
+      <ul id="talk-lines" class="talk-lines"></ul>
+    </div>
+    <div class="buttons">
+      <button id="talk-close" class="btn primary" type="button" aria-label="Close the board description">Done</button>
+    </div>
+  </aside>
+
   <aside id="comfort" class="sheet paper comfort" role="dialog" aria-modal="true" aria-labelledby="comfort-title" hidden>
     <span class="kicker ink">Settings</span>
     <h3 id="comfort-title">Comfort</h3>
@@ -408,6 +423,14 @@
           <button class="choice" type="button" data-swipe="short" aria-pressed="false" aria-label="Short swipe">Short</button>
           <button class="choice" type="button" data-swipe="normal" aria-pressed="true" aria-label="Normal swipe">Normal</button>
           <button class="choice" type="button" data-swipe="long" aria-pressed="false" aria-label="Long swipe">Long</button>
+        </div>
+      </section>
+      <section class="opt">
+        <h4 id="opt-talk">Board talk</h4>
+        <p class="opt-note">Says each move aloud, and adds Describe to every cavern.</p>
+        <div class="choices" role="group" aria-labelledby="opt-talk">
+          <button class="choice" type="button" data-talk="false" aria-pressed="true" aria-label="Board talk off">Off</button>
+          <button class="choice" type="button" data-talk="true" aria-pressed="false" aria-label="Board talk on">On</button>
         </div>
       </section>
     </div>

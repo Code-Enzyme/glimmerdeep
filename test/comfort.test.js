@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TEXT_SIZES, MOTIONS, COMFORT_DEFAULTS, readComfort, reducedMotion, HANDS, SWIPES, SWIPE_PX, CONTROL_DEFAULTS, readControls, swipeNeed,
+  TEXT_SIZES, MOTIONS, COMFORT_DEFAULTS, readComfort, reducedMotion, HANDS, SWIPES, SWIPE_PX, CONTROL_DEFAULTS, readControls, swipeNeed, readTalk,
 } from '../src/ui/comfort.js';
 
 test('comfort: three text sizes, three motion choices, and the defaults', () => {
@@ -52,4 +52,13 @@ test('controls: how far a swipe goes before it is a step', () => {
   assert.equal(swipeNeed('long'), 40);
   assert.equal(swipeNeed('anything'), 24);
   assert.equal(swipeNeed(undefined), 24);
+});
+
+test('board talk: on or off, off by default and for anything else (SPEC section 28)', () => {
+  assert.equal(readTalk({ talk: true }), true);
+  assert.equal(readTalk({ talk: false }), false);
+  assert.equal(readTalk({}), false);
+  assert.equal(readTalk(undefined), false);
+  assert.equal(readTalk({ talk: 'on' }), false);
+  assert.equal(readTalk('junk'), false);
 });

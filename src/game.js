@@ -24,10 +24,11 @@ import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { HintLadder, pieceText } from './ui/hints.js';
 import { previewOf } from './ui/preview.js';
 import { reducedMotion, swipeNeed } from './ui/comfort.js';
+import { describeBoard, describeTurn, describeRefusal, describeBack } from './ui/talk.js';
 import { CRITTERS, critterKind, dailyCritterKind, isFound, markFound, critterJournal } from './ui/critters.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
-  onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror,
+  onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror, speak,
 } from './ui/native.js';
 import { PRODUCTS, CATALOG, FREE_CHAPTER, chapterOpen, hintCost, payHint, hintLabel, minutesWord, settle } from './ui/shop.js';
 import { TitleArt } from './ui/title.js';
@@ -126,6 +127,7 @@ let panel = null;          // 'card' | 'result' | 'confirm' | null
 let walk = null;           // { path, tiles, i } while Wren follows a tapped path
 let message = '';          // passing line for the status row (hints)
 let critterNote = '';      // "Wren sketched a Dewmite for the Journal." until the next move (SPEC section 23)
+let spoken = '';           // Board talk: the last words given to the voice, '' once it was stopped
 let moved = false;         // the first move of this visit was made (the tip goes away)
 let thinking = false;
 let hintToken = 0;
@@ -308,6 +310,7 @@ function showScreen(name) {
     startLoop();
   } else {
     stopLoop();
+    if (spoken) hush();
   }
   if (name === 'title' && !document.hidden) titleArt.start();
   else titleArt.stop();
@@ -620,6 +623,7 @@ function openLevel(def, adhoc, day, from) {
   clearHint();
   showScreen('level');
   refreshHud();
+  say(`${$('level-id').textContent}: ${$('level-name').textContent}. ${boardWords().join(' ')}`);
   openTutorialCard();
   openDailyCard();
   return true;
@@ -678,6 +682,7 @@ function refreshHud() {
 
   refreshCoach();
   refreshStatus();
+  labelBoard();
 
   const bloom = session.bloomCount();
   if (bloom !== lastBloom) {
@@ -813,9 +818,11 @@ function doAction(action) {
     view.facing = session.facing;
     view.nudge(DIRS[action] ? action : null);
     play('blocked');
+    say(describeRefusal(prev, action));
     return false;
   }
   clearHint();
+  say(describeTurn(next));
   moved = true;
   critterNote = '';
   tutorialAfter(next);
@@ -907,6 +914,7 @@ function undo() {
   if (lost > 0) for (let i = 0; i < lost; i++) play('budOff');
   else play('undo');
   refreshHud();
+  say(describeBack(session.state, 'undo'));
   return true;
 }
 
@@ -928,6 +936,7 @@ function restart() {
   view.playTween(before, session.state, { facing: session.facing });
   play('restart');
   refreshHud();
+  say(describeBack(session.state, 'restart'));
   return true;
 }
 
@@ -954,6 +963,7 @@ function tapTile(tile) {
     } else {
       view.addEffect({ type: 'cross', x: tile.x, y: tile.y });
       play('blocked');
+      say(CANT_REACH);
     }
     return;
   }
@@ -1308,8 +1318,8 @@ function chooseLantern(style) {
 }
 
 // the Workshop's sheets go by short names
-const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet' };
-const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code'];   // sheets over a screen, on the store's scrim
+const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet', talk: 'talk-sheet' };
+const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code', 'talk'];   // sheets over a screen, on the store's scrim
 const panelEl = (name) => $(PANEL_EL[name] || name);
 
 function openPanel(name) {
@@ -1325,7 +1335,7 @@ function openPanel(name) {
     ? ($('result-next').hidden ? $('result-replay') : $('result-next'))
     : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : name === 'comfort' ? $('comfort-close')
       : name === 'lanterns' ? $('lanterns-close') : name === 'cavern' ? $('cavern-close') : name === 'share' ? $('share-copy')
-        : name === 'code' ? $('code-input') : $('confirm-no');
+        : name === 'code' ? $('code-input') : name === 'talk' ? $('talk-close') : $('confirm-no');
   try {
     focus.focus({ preventScroll: true });
   } catch (e) {
@@ -1341,6 +1351,7 @@ function closePanel() {
   shopScrim.hidden = true;
   panel = null;
   if (was === 'card') view.preview = null;
+  if (was === 'talk') hush();
   // closing a tutorial's meet card finishes that step
   const step = was === 'card' ? coachStep() : null;
   if (step && step.card) {
@@ -1520,6 +1531,65 @@ function startStore() {
   }).catch(() => {});
 }
 
+// ---------------------------------------------------------------- Board talk (SPEC section 28)
+
+const CANT_REACH = "Wren can't get there.";
+const TALK_ON = 'Board talk is on.';
+
+// A line for TalkBack (the hidden live region), and for the voice when Board talk is on.
+function say(line) {
+  if (!line) return;
+  const el = $('board-talk');
+  // the same words twice in a row would not be read again: a trailing no-break space makes them new
+  el.textContent = el.textContent === line ? `${line}\u00A0` : line;
+  if (save.settings.talk) talk(line);
+}
+
+function talk(words) {
+  spoken = words;
+  speak(words);
+}
+
+function hush() {
+  spoken = '';
+  speak('');
+}
+
+function boardWords() {
+  return session ? describeBoard(session.state, { par: current.def.par }) : [];
+}
+
+// The board's label is the whole board in words, kept up to date.
+function labelBoard() {
+  const label = `The cave board. ${boardWords().join(' ')}`;
+  if (canvas.getAttribute('aria-label') !== label) canvas.setAttribute('aria-label', label);
+}
+
+// Describe: the whole board in a sheet, one sentence a line, and spoken.
+function openDescribe() {
+  if (!session || celebrating) return;
+  cancelWalk();
+  queue.length = 0;
+  if (panel) closePanel();
+  const words = boardWords();
+  const list = $('talk-lines');
+  list.textContent = '';
+  for (const w of words) {
+    const li = document.createElement('li');
+    li.textContent = w;
+    list.appendChild(li);
+  }
+  openPanel('talk');
+  $('talk-sheet').querySelector('.sheet-scroll').scrollTop = 0;
+  talk(words.join(' '));
+}
+
+function setTalk(on) {
+  setComfort({ talk: on });
+  if (on) talk(TALK_ON);
+  else hush();
+}
+
 // ---------------------------------------------------------------- settings
 
 function syncSettings() {
@@ -1538,7 +1608,7 @@ function syncSettings() {
   view.highContrast = s.contrast;
   setMuted(!s.sound);
   // Comfort (SPEC section 22)
-  const controlled = s.arrows || s.hand !== 'right' || s.swipe !== 'normal';   // SPEC section 27
+  const controlled = s.arrows || s.hand !== 'right' || s.swipe !== 'normal' || s.talk;   // SPEC sections 27, 28
   set('set-comfort', s.textSize !== 1 || s.readable || s.motion !== 'system' || controlled, `${Math.round(s.textSize * 100)}%`);
   app.style.setProperty('--ts', String(s.textSize));
   app.classList.toggle('readable', s.readable);
@@ -1546,6 +1616,7 @@ function syncSettings() {
   app.classList.toggle('motion-full', s.motion === 'full');
   app.classList.toggle('left-hand', s.hand === 'left');
   $('arrows').hidden = !s.arrows;
+  $('btn-describe').hidden = !s.talk;
   for (const b of $('comfort').querySelectorAll('.choice')) {
     const d = b.dataset;
     const on = d.size !== undefined ? Number(d.size) === s.textSize
@@ -1553,7 +1624,8 @@ function syncSettings() {
         : d.motion !== undefined ? d.motion === s.motion
           : d.arrows !== undefined ? (d.arrows === 'true') === s.arrows
             : d.hand !== undefined ? d.hand === s.hand
-              : d.swipe === s.swipe;
+              : d.talk !== undefined ? (d.talk === 'true') === s.talk
+                : d.swipe === s.swipe;
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   syncMotion();
@@ -1758,9 +1830,18 @@ for (const b of $('comfort').querySelectorAll('.choice')) {
     else if (d.motion !== undefined) setComfort({ motion: d.motion });
     else if (d.arrows !== undefined) setComfort({ arrows: d.arrows === 'true' });   // the controls (SPEC section 27)
     else if (d.hand !== undefined) setComfort({ hand: d.hand });
+    else if (d.talk !== undefined) setTalk(d.talk === 'true');   // Board talk (SPEC section 28)
     else setComfort({ swipe: d.swipe });
   });
 }
+onClick($('btn-describe'), () => {
+  play('ui');
+  openDescribe();
+});
+onClick($('talk-close'), () => {
+  play('ui');
+  closePanel();
+});
 // the arrows step Wren exactly as a swipe that way (SPEC section 27)
 for (const b of $('arrows').querySelectorAll('.arrow')) onClick(b, () => userAction(b.dataset.dir));
 onClick($('btn-journal'), () => {
@@ -2415,6 +2496,9 @@ function settleNow() {
 
 window.__gd = {
   state: () => (session ? session.state : null),
+  spoken: () => spoken,                         // Board talk (SPEC section 28)
+  boardTalk: () => $('board-talk').textContent,
+  boardLabel: () => canvas.getAttribute('aria-label'),
   act: (action) => {
     if (!session) return false;
     settleNow();

@@ -91,6 +91,7 @@ async function main() {
   const { dailyLevel } = await import(pathToFileURL(path.join(ROOT, 'src/ui/daily.js')).href);
   const hints = await import(pathToFileURL(path.join(ROOT, 'src/ui/hints.js')).href);
   const { previewOf } = await import(pathToFileURL(path.join(ROOT, 'src/ui/preview.js')).href);
+  const talkWords = await import(pathToFileURL(path.join(ROOT, 'src/ui/talk.js')).href);
   // A legal move from `state` that leaves the hint's way (SPEC section 18) and from which the level still solves.
   const offTheWay = (def, state) => {
     const ladder = new hints.HintLadder(engine.parseLevel(def), solutionOf(def), def.feature);
@@ -279,7 +280,8 @@ async function main() {
       for (const b of document.querySelectorAll('button')) {
         if (!seen(b)) continue;
         if (!(b.getAttribute('aria-label') || '').trim()) out.unlabeled.push(b.id || b.className);
-        if (b.getBoundingClientRect().top < H * 0.12 && !['back', 'journal-back', 'workshop-back', 'editor-back'].includes(b.id)) out.high.push(b.id || b.className);
+        // Describe (SPEC section 28) is rare, and TalkBack finds it by focus, not by reach
+        if (b.getBoundingClientRect().top < H * 0.12 && !['back', 'journal-back', 'workshop-back', 'editor-back', 'btn-describe'].includes(b.id)) out.high.push(b.id || b.className);
       }
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
@@ -323,7 +325,7 @@ async function main() {
     await c.toMap();
     await openSheet();
     eq('controls: the Comfort sheet has Arrows, Hand and Swipe', await c.page.evaluate(() => [...document.querySelectorAll('#comfort h4')].map((h) => h.textContent)),
-      ['Text size', 'Readable font', 'Motion', 'Arrows', 'Hand', 'Swipe']);
+      ['Text size', 'Readable font', 'Motion', 'Arrows', 'Hand', 'Swipe', 'Board talk']);   // Board talk: SPEC section 28
     eq('controls: the defaults are pressed', await c.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[aria-pressed="true"]')].map((b) => b.dataset.arrows || b.dataset.hand || b.dataset.swipe).filter(Boolean)),
       ['false', 'right', 'normal']);
     eq('controls: the choices', await c.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[data-arrows], #comfort .choice[data-hand], #comfort .choice[data-swipe]')].map((b) => b.textContent)),
@@ -456,7 +458,8 @@ async function main() {
     };
     eq('controls: on a small phone the heading and Done are on screen', [await within('#comfort-title'), await within('#comfort-close')], [true, true]);
     await sm.page.locator('#comfort .sheet-scroll').evaluate((el) => { el.scrollTop = el.scrollHeight; });
-    eq('controls: the last choice scrolls into view, Done still there', [await within('#comfort .choice[data-swipe="long"]'), await within('#comfort-close')], [true, true]);
+    // the last choice is Board talk's since SPEC section 28
+    eq('controls: the last choice scrolls into view, Done still there', [await within('#comfort .choice[data-talk="true"]'), await within('#comfort-close')], [true, true]);
     await sm.shot('controls-small-sheet');
     // with the arrows on, a small phone's board keeps tiles of 30 px or more
     await sm.page.locator('#comfort .choice[data-arrows="true"]').scrollIntoViewIfNeeded();
@@ -1432,7 +1435,7 @@ async function main() {
     await h.page.locator('#set-contrast').tap();
     await h.page.locator('#set-sound').tap();
     eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow',
-      arrows: false, hand: 'right', swipe: 'normal' });
+      arrows: false, hand: 'right', swipe: 'normal', talk: false });   // talk: SPEC section 28
 
     // Unlock all skips the level order, never the purchase (SPEC section 14)
     const paidCount = LEVELS.filter((def) => !CHAPTERS.find((c) => c.id === 1).levels.includes(def)).length + NIGHT.length;
@@ -2629,7 +2632,7 @@ async function main() {
       ok('comfort: the sheet opens', await cf.page.locator('#comfort').isVisible());
       eq('comfort: Done has the focus', await cf.page.evaluate(() => document.activeElement && document.activeElement.id), 'comfort-close');
       eq('comfort: the defaults are pressed', await cf.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[aria-pressed="true"]')].map((b) => b.textContent)),
-        ['100%', 'Off', 'As phone', 'Off', 'Right', 'Normal']);   // the last three are the controls (SPEC section 27)
+        ['100%', 'Off', 'As phone', 'Off', 'Right', 'Normal', 'Off']);   // then the controls (SPEC section 27) and Board talk (28)
       await auditPage(cf, 'comfort sheet');
       await cf.shot('comfort-sheet');
       await cf.page.locator('#comfort .choice[data-size="2"]').tap();
@@ -2891,8 +2894,188 @@ async function main() {
     }
   }
 
+
+  // ------------------------------------------------------------------ Board talk (SPEC section 28)
+  async function talkChecks() {
+    console.log('talk');
+    const seen = ['prologue', ...CHAPTERS.map((c) => 'ch' + c.id)];
+    const t = await phone({ tag: 'talk', seed: { levels: {}, seen, critters: [], settings: { tutorials: false } } });
+    const pressed = (sel) => t.page.locator(sel).getAttribute('aria-pressed');
+    const live = () => t.gd('boardTalk');
+    const spoken = () => t.gd('spoken');
+    const openSheet = async () => {
+      await t.page.locator('#set-comfort').tap();
+      await t.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+    };
+    const toMap = async () => {
+      await t.page.locator('#back').tap();
+      await t.page.waitForFunction(() => window.__gd.screen() === 'map');
+    };
+    const openFirst = async () => {
+      await t.gd('loadLevel', first.id);
+      if ((await t.gd('panel')) === 'card') await t.page.keyboard.press('Escape');
+      await t.idle();
+    };
+    const words = async () => talkWords.describeBoard(await t.gd('state'), { par: first.par });
+    const sol = solutionOf(first);
+    const press = async (m) => {
+      if (DIRV[m]) await t.page.keyboard.press({ N: 'ArrowUp', E: 'ArrowRight', S: 'ArrowDown', W: 'ArrowLeft' }[m]);
+      else if (m === 'L') await t.page.locator('#btn-lantern').tap();
+      else await t.page.locator('#btn-wait').tap();
+      await t.idle();
+    };
+    const wall = (() => {
+      const s0 = engine.parseLevel(first);
+      return ['N', 'S', 'W', 'E'].find((d) => engine.step(s0, d) === null && talkWords.describeRefusal(s0, d).startsWith("Can't go"));
+    })();
+
+    await t.open();
+    await t.toMap();
+    await openSheet();
+    eq('talk: Board talk is the last choice on the Comfort sheet', await t.page.evaluate(() => [...document.querySelectorAll('#comfort h4')].map((h) => h.textContent).pop()), 'Board talk');
+    eq('talk: Off and On, Off pressed', await t.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[data-talk]')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])),
+      [['Off', 'true'], ['On', 'false']]);
+    await t.page.keyboard.press('Escape');
+
+    // off: TalkBack still gets the words, the voice says nothing, no Describe
+    await openFirst();
+    eq('talk: off, no Describe button', await t.page.locator('#btn-describe').isVisible(), false);
+    const label0 = await t.gd('boardLabel');
+    eq('talk: the board label is the whole board in words', label0, `The cave board. ${(await words()).join(' ')}`);
+    ok('talk: opening a level tells TalkBack its name and the board', (await live()).includes(first.name) && (await live()).includes('Move 0'), await live());
+    eq('talk: off, the voice is quiet', await spoken(), '');
+    await press(sol[0]);
+    eq('talk: a move goes to the live region in words', await live(), talkWords.describeTurn(await t.gd('state')));
+    ok('talk: the board label follows the move', (await t.gd('boardLabel')).includes(`Move 1, par ${first.par}.`), await t.gd('boardLabel'));
+    await t.page.keyboard.press('r');
+    await t.idle();
+    ok('talk: a restart says so', (await live()).startsWith('Back to the start.'), await live());
+    if (wall) {
+      const s0 = await t.gd('state');
+      await press(wall);
+      eq('talk: a refused move says why', await live(), talkWords.describeRefusal(s0, wall));
+      await press(wall);
+      eq('talk: the same refusal twice is still new words for TalkBack', (await live()).trim(), talkWords.describeRefusal(s0, wall));
+      ok('talk: ... with a different text', (await live()) !== talkWords.describeRefusal(s0, wall));
+    } else {
+      ok('talk: the first level has a wall beside Wren at the start', false);
+    }
+    eq('talk: off, still no voice', await spoken(), '');
+
+    // on
+    await toMap();
+    await openSheet();
+    await t.page.locator('#comfort .choice[data-talk="true"]').scrollIntoViewIfNeeded();
+    await t.page.locator('#comfort .choice[data-talk="true"]').tap();
+    eq('talk: on, saved and pressed', [(await t.gd('save')).settings.talk, await pressed('#comfort .choice[data-talk="true"]'), await pressed('#comfort .choice[data-talk="false"]')], [true, 'true', 'false']);
+    eq('talk: turning it on says so', await spoken(), 'Board talk is on.');
+    eq('talk: the Comfort setting shows a change', await pressed('#set-comfort'), 'true');
+    await t.page.keyboard.press('Escape');
+    await openFirst();
+    ok('talk: on, opening a level speaks its name and the whole board', (await spoken()).includes(first.name) && (await spoken()).endsWith((await words()).join(' ')), await spoken());
+    ok('talk: on, Describe shows in the top bar', await t.page.locator('#btn-describe').isVisible());
+    eq('talk: Describe is labelled', await t.page.locator('#btn-describe').getAttribute('aria-label'), 'Describe the board');
+    {
+      const r = await t.page.evaluate(() => {
+        const box = (id) => document.getElementById(id).getBoundingClientRect();
+        const bar = document.querySelector('#screen-level .topbar').getBoundingClientRect();
+        const d = box('btn-describe');
+        return { inBar: d.top >= bar.top - 1 && d.bottom <= bar.bottom + 1, order: box('back').left < box('btn-describe').left && d.right <= box('counter').left + 1, size: [d.width, d.height] };
+      });
+      eq('talk: Describe sits in the top bar, before the counter', [r.inBar, r.order], [true, true]);
+      ok('talk: Describe is a good size', r.size[0] >= 44 && r.size[1] >= 44, JSON.stringify(r.size));
+    }
+    await press(sol[0]);
+    eq('talk: on, a move is spoken', await spoken(), talkWords.describeTurn(await t.gd('state')));
+    eq('talk: ... and still goes to the live region', await live(), await spoken());
+    await t.page.locator('#btn-describe').tap();
+    await t.page.waitForFunction(() => window.__gd.panel() === 'talk');
+    eq('talk: Describe opens the board in words, one sentence a line', await t.page.locator('#talk-lines li').allTextContents(), await words());
+    eq('talk: ... and speaks it', await spoken(), (await words()).join(' '));
+    eq('talk: Done has the focus', await t.page.evaluate(() => document.activeElement && document.activeElement.id), 'talk-close');
+    await auditPage(t, 'talk sheet');
+    await t.shot('talk-sheet');
+    await t.page.keyboard.press('Escape');
+    eq('talk: Back closes the sheet and stops the voice', [await t.gd('panel'), await spoken()], [null, '']);
+    await t.page.locator('#btn-describe').tap();
+    await t.page.waitForFunction(() => window.__gd.panel() === 'talk');
+    await t.page.locator('#talk-close').tap();
+    eq('talk: Done closes it too', [await t.gd('panel'), await spoken()], [null, '']);
+    await t.page.locator('#btn-describe').tap();
+    await t.page.waitForFunction(() => window.__gd.panel() === 'talk');
+    await t.page.mouse.click(195, 30);
+    eq('talk: a tap outside closes it too', await t.gd('panel'), null);
+    await t.gd('undo');
+    ok('talk: an undo is spoken', (await spoken()).startsWith('Back one move. '), await spoken());
+    await auditPage(t, 'level with Describe');
+    await t.shot('talk-level');
+    {
+      for (const m of sol) await press(m);
+      await waitResult(t);
+      eq('talk: the last move says every bud is in bloom', (await spoken()).endsWith('Every bud is in bloom.'), true);
+      await t.page.locator('#result-replay').tap();
+      await t.idle();
+    }
+    await toMap();
+    eq('talk: leaving the level stops the voice', await spoken(), '');
+
+    // the left hand mirrors the top bar, Describe included
+    await openSheet();
+    await t.page.locator('#comfort .choice[data-hand="left"]').scrollIntoViewIfNeeded();
+    await t.page.locator('#comfort .choice[data-hand="left"]').tap();
+    await t.page.keyboard.press('Escape');
+    await openFirst();
+    {
+      const r = await t.page.evaluate(() => ['back', 'btn-describe', 'counter'].map((id) => document.getElementById(id).getBoundingClientRect().left));
+      ok('talk: left hand, Describe sits between the counter and Back', r[2] < r[1] && r[1] < r[0], JSON.stringify(r));
+    }
+
+    // kept over a reload and by Reset progress; Off stops the voice
+    await t.page.reload();
+    await t.page.waitForFunction(() => window.__gd && window.__gd.screen());
+    await t.toMap();
+    eq('talk: kept over a reload', (await t.gd('save')).settings.talk, true);
+    await t.page.locator('#set-reset').tap();
+    await t.page.locator('#confirm-yes').tap();
+    eq('talk: Reset progress keeps it', (await t.gd('save')).settings.talk, true);
+    await openSheet();
+    await t.page.locator('#comfort .choice[data-talk="false"]').scrollIntoViewIfNeeded();
+    await t.page.locator('#comfort .choice[data-talk="false"]').tap();
+    eq('talk: off again, saved, and the voice stops', [(await t.gd('save')).settings.talk, await spoken()], [false, '']);
+    await t.close();
+
+    // a small phone: the top bar keeps room for the name, the sheet keeps Done in reach
+    const sm = await phone({ tag: 'talk-small', viewport: { width: 360, height: 640 }, seed: { levels: {}, seen, critters: [], settings: { tutorials: false, talk: true } } });
+    await sm.open();
+    await sm.toMap();
+    const longest = [...LEVELS].sort((a, b) => b.name.length - a.name.length)[0];
+    await sm.gd('loadLevel', longest.id);
+    if ((await sm.gd('panel')) === 'card') await sm.page.keyboard.press('Escape');
+    await sm.idle();
+    {
+      const r = await sm.page.evaluate(() => {
+        const box = (sel) => document.querySelector(sel).getBoundingClientRect();
+        return { right: box('#counter').right, left: box('#back').left, name: box('#level-name').width, d: box('#btn-describe').width };
+      });
+      ok('talk: on a small phone the top bar fits, with room for the name', r.left >= 0 && r.right <= 360 && r.name >= 90 && r.d >= 44, JSON.stringify(r));
+    }
+    await sm.shot('talk-small-level');
+    await sm.page.locator('#btn-describe').tap();
+    await sm.page.waitForFunction(() => window.__gd.panel() === 'talk');
+    const within = async (sel) => {
+      const b = await sm.page.locator(sel).boundingBox();
+      return !!b && b.y >= 0 && b.y + b.height <= 640 ? true : `${sel} ${JSON.stringify(b)}`;
+    };
+    eq('talk: on a small phone the sheet\'s heading and Done are on screen', [await within('#talk-title'), await within('#talk-close')], [true, true]);
+    await sm.page.locator('#talk-sheet .sheet-scroll').evaluate((el) => { el.scrollTop = el.scrollHeight; });
+    eq('talk: the last line scrolls into view', await within('#talk-lines li:last-child'), true);
+    await sm.shot('talk-small-sheet');
+    await sm.close();
+  }
+
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'workshop')) await workshopChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'controls')) await controlsChecks();
+  if (!SHOTS_ONLY && (!ONLY || ONLY === 'talk')) await talkChecks();
 
   // ------------------------------------------------------------------ screenshots
   if (!ONLY) {

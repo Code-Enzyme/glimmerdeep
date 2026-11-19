@@ -36,6 +36,13 @@
         </provider>
     </application>
 
+    <!-- Board talk (SPEC section 28): Android 11 and later only let the app see a text-to-speech engine it asks for -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

@@ -1015,3 +1015,70 @@ and adjustable swipe sensitivity. They join the Comfort sheet (section 22), unde
   progress keeps them.
 - `src/ui/comfort.js` (no DOM) adds `HANDS`, `SWIPES`, `SWIPE_PX`, `CONTROL_DEFAULTS`, `readControls(settings)`
   and `swipeNeed(swipe)` (the pixels for a choice, 24 for anything unknown).
+
+## 28. Board talk: the board in words (decided 19 Nov 2026)
+
+The design doc asks for TalkBack support and "an optional spoken board description in levels ('Fluffmoth
+two tiles north')". The board is a picture, so a player who cannot see it well needs it in words.
+
+- **For screen readers, always:** the board's label is the whole board in words (below), kept up to date
+  after every move, undo and restart, and a hidden live region gets each move's line, so TalkBack reads it as
+  it happens. Nothing changes on screen.
+- **Board talk** (Comfort sheet, after Swipe): Off or On, Off by default. On:
+  - Each move's line is spoken aloud in the phone's text-to-speech voice. A new line cuts off the one before.
+    Opening a level speaks its name and the whole board.
+  - A **Describe** button (icon: a speech bubble) sits in the level's top bar, before the move counter. It
+    opens a sheet, "The board", with the whole board in words, one sentence a line, and speaks it. Done,
+    Back or a tap outside closes it and stops the voice.
+  - Leave it off with TalkBack: TalkBack already reads the lines.
+  - A phone with no text-to-speech voice still shows the sheet; the lines still go to the live region.
+- **Words** (`src/ui/talk.js`, no DOM). Places are counted from Wren in tiles, the north/south part first:
+  "two tiles north", "one tile east", "three tiles south and one west", "here" (Wren's own tile). Numbers
+  one to ten are words. Lists go nearest first (fewest steps), then in reading order. Sides are listed
+  north, east, south, west, joined when alike: "Wall to the north and west, open to the east, a puddle to
+  the south.", or "Open all round." A side says what is there: a creature ("a Fluffmoth", "an Emberwick"), "the lantern", "wall",
+  "open" (floor or a bridge), "a puddle", "a bud" (any Glowbud), "the Hush", "crystal", "root A", "gate A,
+  open" or "gate A, shut" (out of bounds is wall).
+- **The whole board** (`describeBoard(state, { par })` -> a list of sentences):
+  1. "Move 3, par 5." ("Move 3." without a par.)
+  2. The lantern: "Wren carries the lantern.", "Wren carries the lantern in the Hush." and "It is smothered.",
+     "The lantern stands here." or "The lantern stands two tiles west."; then "It shines a beam north." when
+     aimed, and "Its light is out." when its own tile is dark for any other reason (a Gloamling).
+  3. The sides of Wren's tile.
+  4. The buds: "One bud to light: three tiles east." or "Two buds to light: one tile north; two tiles
+     south and four east.", then "One in bloom." when some are; "Every bud is in bloom." when all are.
+  5. Each creature, nearest first: name, place, then its state: Fluffmoth "in the light" or "in the dark";
+     Shellwhelk "hiding in its shell" (lit) or "in the dark"; Stumpcap "facing east, awake" (lit) or
+     "facing east, asleep"; Dozer newt "facing south, dozing" (lit) or "facing south, wandering"; Emberwick
+     "cold", "warm" or "glowing"; Gloamling nothing more; Mirrorbeetle "mirror leaning right" (`/`) or
+     "mirror leaning left" (`\`), then "in the light" or "in the dark". "Stumpcap, one tile east, facing
+     south, asleep."
+  6. Each puddle (not yet a bridge): "A puddle: two tiles east." or "Puddles: ...; ...".
+  7. Each channel A, B, C that has gates: "Gate A, shut: four tiles east." ("open"), then its roots: "Root
+     A: two tiles south." (several places joined by "; ").
+  8. In a Gloam encounter (section 17): "The Hush is closest three tiles south."
+- **A move's line** (`describeTurn(next)`, from its events, places from Wren's new tile): what Wren did
+  ("Wren steps east.", "Wren plants the lantern.", "Wren picks up the lantern.", "Wren aims the lantern
+  east.", "Wren opens the lantern's shutter.", "Wren waits."), then what the creatures did, in event order
+  (a creature's moves: "Fluffmoth flies, now one tile north." with the verbs flies, creeps, marches,
+  wanders, follows, drifts, crawls; a moth that settles: "Fluffmoth lands in the puddle two tiles east and
+  makes a bridge."; "Stumpcap is blocked."; "Shellwhelk hides in its shell." and "Shellwhelk comes out.";
+  "Stumpcap wakes." and "Stumpcap falls asleep."; "Dozer newt dozes off." and "Dozer newt wakes."; "Dozer
+  newt turns to face south."; "Emberwick warms.", "Emberwick cools." and "Emberwick catches and glows.";
+  "Mirrorbeetle catches the light."), then "Gate A opens." or "Gate A shuts.", "A bud blooms." (once per
+  bud), "The Hush creeps closer." and "The Hush catches Wren."; then, unless solved or caught, the buds
+  left ("Two buds to go.", when a bud bloomed this move) and the sides of Wren's new tile. When solved:
+  "Every bud is in bloom."
+- **A refused move** (`describeRefusal(state, action)`) says why and spends nothing: "Can't go north:
+  wall." (a puddle, a bud, crystal, "the Hush without the lantern", "gate A is shut", "a Fluffmoth is
+  there"); a refused lantern: "Can't plant the lantern here." when Wren carries it, else "The lantern is two
+  tiles west."
+- A tapped tile Wren can't walk to says "Wren can't get there." Turning Board talk on says "Board talk is on."
+  (so the voice can be heard at once); turning it off, closing the sheet or leaving the level stops the voice.
+- **Undo** says "Back one move." and **Restart** "Back to the start.", each with the sides of Wren's tile
+  (`describeBack(state, 'undo' | 'restart')`).
+- **Saved** with the settings: `talk` (default false); anything else falls back to false. Reset progress
+  keeps it. `src/ui/comfort.js` adds `readTalk(settings)`.
+- **The voice** is the one call in `src/ui/native.js`, `speak(text)` (an empty text stops it): the app's
+  `Speech` plugin (Android TextToSpeech, the phone's language, else English) and the browser's
+  speechSynthesis elsewhere; with neither it does nothing.

@@ -5,7 +5,9 @@
 //   3. the store (SPEC section 14): the Billing plugin is in the app, a debug build uses the free test store,
 //      and the Full Expedition bought there opens the later chapters,
 //   4. the save, purchases included, survives the app being killed and opened again,
-//   5. the Workshop (SPEC section 26) opens once Mossmouth is lit, and the solver checks a new cavern on the device.
+//   5. the Workshop (SPEC section 26) opens once Mossmouth is lit, and the solver checks a new cavern on the device,
+//   6. Board talk (SPEC section 28): the Speech plugin is in the app and answers, and a level opened with Board
+//      talk on gives its words to the voice without a script error (whether the emulator has a voice is only logged).
 // Screenshots of the real device screen go to dev/device-shots/. Needs adb on PATH and one device.
 const { _android: android } = require('playwright');
 const path = require('path');
@@ -195,6 +197,39 @@ async function killApp(device, webview) {
     const kept = await page.evaluate(() => window.__gd.save().workshop.length);
     if (kept !== 1) fail(`the save holds ${kept} Workshop caverns, not 1`);
   }
+
+  // Board talk: the Speech plugin answers; the emulator may have no text-to-speech voice, so ready is only logged
+  const speech = await page.evaluate(async () => {
+    const cap = window.Capacitor;
+    const available = !!(cap && cap.isPluginAvailable && cap.isPluginAvailable('Speech'));
+    const call = (method, args) => (cap.Plugins && cap.Plugins.Speech ? cap.Plugins.Speech[method](args) : cap.nativePromise('Speech', method, args));
+    let info = null;
+    let quiet = null;
+    try {
+      if (available) {
+        await new Promise((r) => setTimeout(r, 1500));   // the engine starts in the background
+        info = await call('info', {});
+        quiet = await call('speak', { text: '' });
+      }
+    } catch (e) {
+      info = { error: String(e) };
+    }
+    return { available, info, quiet };
+  });
+  if (!speech.available) fail('the Speech plugin is not registered in the app');
+  else if (!speech.info || typeof speech.info.ready !== 'boolean') fail(`Speech.info() said ${JSON.stringify(speech.info)}`);
+  else if (!speech.quiet || speech.quiet.spoken !== false) fail(`Speech.speak with no words said ${JSON.stringify(speech.quiet)}`);
+  else console.log(`talk: Speech plugin present, voice ready: ${speech.info.ready}`);
+  // Board talk turned on as a player would, then a level opened: its words go to the voice
+  await page.evaluate((id) => {
+    document.querySelector('#comfort .choice[data-talk="true"]').click();
+    window.__gd.loadLevel(id);
+  }, LEVELS[0].id);
+  await page.waitForTimeout(800);
+  const said = await page.evaluate(() => ({ spoken: window.__gd.spoken(), talk: window.__gd.save().settings.talk, describe: !document.getElementById('btn-describe').hidden }));
+  if (!said.talk || !said.describe || !/Move 0/.test(said.spoken)) fail(`Board talk on the device: ${JSON.stringify(said)}`);
+  else console.log(`talk: the voice was given "${said.spoken.slice(0, 80)}..."`);
+  await device.screenshot({ path: path.join(shots, 'talk-level.png') });
 
   const pid = (await device.shell(`pidof ${PKG}`)).toString().trim();
   if (!pid) fail('app is not running at the end');

@@ -59,6 +59,12 @@ The Comfort sheet also holds the controls: four arrow buttons under the board fo
 not swipe, a left-handed layout that mirrors a level's buttons, and a short, normal or long swipe
 (SPEC section 27).
 
+The board can be had in words. TalkBack reads the board's label, which is the whole board in words, and
+hears each move as it happens ("Wren steps east. Fluffmoth flies, now one tile north. Wall to the north
+and south, open to the east and west."). Board talk, on the Comfort sheet, speaks the same lines in the
+phone's own voice (`android/.../SpeechPlugin.java`) and adds Describe to every cavern, which shows and says
+the whole board. The words come from `src/ui/talk.js` (SPEC section 28).
+
 The save lives in `localStorage`. In the Android app every save is also written to a file
 (`android/.../SaveFilePlugin.java`), on disk before a purchase is confirmed, so an app swiped away right
 after a purchase still has it when it opens again (SPEC section 16).
@@ -101,7 +107,7 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |
-| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the Daily Glimmer's date rules (`ui/daily.js`), the Workshop's rules and share codes (`ui/workshop.js`, `ui/codes.js`), the app-shell bridge (`ui/native.js`) |
+| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the Daily Glimmer's date rules (`ui/daily.js`), the Workshop's rules and share codes (`ui/workshop.js`, `ui/codes.js`), the board in words (`ui/talk.js`), the app-shell bridge (`ui/native.js`) |
 | `tools/` | Build, level verifier, icon maker |
 | `dev/` | Browser and device checks, plus the level-design search scripts |
 | `android/` | The Capacitor Android project |

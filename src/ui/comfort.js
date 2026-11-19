@@ -43,3 +43,10 @@ export function readControls(settings) {
 export function swipeNeed(swipe) {
   return SWIPE_PX[swipe] || SWIPE_PX.normal;
 }
+
+// ---------------------------------------------------------------- Board talk (SPEC section 28)
+
+// Board talk out of a save's settings: true only when it was turned on.
+export function readTalk(settings) {
+  return !!(settings && typeof settings === 'object' && settings.talk === true);
+}
