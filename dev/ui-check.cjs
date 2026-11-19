@@ -2316,6 +2316,18 @@ async function main() {
       eq('lanterns: in one row, none overlapping',
         boxes.every((b, i) => i === 0 || (b.x >= boxes[i - 1].x + boxes[i - 1].width && Math.abs(b.y - boxes[0].y) < 20)) || JSON.stringify(boxes), true);
       eq('lanterns: and the page does not scroll sideways', await sm.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+      // the sheet's heading and Done stay put on a short screen; the styles scroll between them
+      await sm.page.locator('#btn-lanterns').tap();
+      await sm.page.waitForFunction(() => window.__gd.panel() === 'lanterns');
+      const within = async (sel) => {
+        const b = await sm.page.locator(sel).boundingBox();
+        return !!b && b.y >= 0 && b.y + b.height <= 640 ? true : JSON.stringify(b);
+      };
+      eq('lanterns: on a small phone the heading and Done are on screen', [await within('#lanterns-title'), await within('#lanterns-close')], [true, true]);
+      await sm.page.locator('#lantern-list').evaluate((el) => { el.scrollTop = el.scrollHeight; });
+      eq('lanterns: the last style scrolls into view, Done still on screen',
+        [await within('.style[data-style="gloamlight"]'), await within('#lanterns-title'), await within('#lanterns-close')], [true, true, true]);
+      await sm.shot('lanterns-small');
       await sm.close();
     }
   }
