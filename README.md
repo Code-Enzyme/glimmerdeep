@@ -49,6 +49,12 @@ Star moss also earns Wren's lantern new colours: Mossglow, Ember rose, Moonglass
 Gloamlight, chosen from the map's Lantern button. They only change how the light looks, never where it
 reaches (SPEC section 24).
 
+Once Mossmouth is lit, the map's Workshop opens: paint your own caverns tile by tile with the creatures
+you have met, check them with the solver (which finds each cavern's par), play them, and share them as a
+short code that anyone can type into Play a code. The code holds the whole cavern, so there is no server
+and nothing anyone types is ever shown to anyone else; a cavern's name comes from two fixed word lists.
+A code plays only when the solver lights it at exactly its par (SPEC section 26).
+
 The save lives in `localStorage`. In the Android app every save is also written to a file
 (`android/.../SaveFilePlugin.java`), on disk before a purchase is confirmed, so an app swiped away right
 after a purchase still has it when it opens again (SPEC section 16).
@@ -91,7 +97,7 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |
-| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the Daily Glimmer's date rules (`ui/daily.js`), the app-shell bridge (`ui/native.js`) |
+| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the Daily Glimmer's date rules (`ui/daily.js`), the Workshop's rules and share codes (`ui/workshop.js`, `ui/codes.js`), the app-shell bridge (`ui/native.js`) |
 | `tools/` | Build, level verifier, icon maker |
 | `dev/` | Browser and device checks, plus the level-design search scripts |
 | `android/` | The Capacitor Android project |

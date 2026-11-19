@@ -258,3 +258,30 @@ test('store: the chosen lantern style round-trips, junk reads as Tallow, and a r
   clearProgress(save);
   assert.equal(save.settings.lantern, 'moonglass');
 });
+
+// ---------------------------------------------------------------- SPEC section 26: the Workshop
+
+test('store: Workshop caverns round-trip, junk is dropped, an old save has none, a reset keeps them', () => {
+  const data = withStorage();
+  const save = loadSave();
+  assert.deepEqual(save.workshop, []);
+  const cavern = {
+    seed: 12, map: ['#####', '#W.G#', '#####'], gloam: false, shutter: false, par: 2, check: 'lit',
+  };
+  save.workshop.push(cavern);
+  writeSave(save);
+  assert.deepEqual(JSON.parse(data.get(SAVE_KEY)).workshop, [cavern]);
+  assert.deepEqual(loadSave().workshop, [cavern]);
+  withStorage(JSON.stringify({ levels: {} }));
+  assert.deepEqual(loadSave().workshop, []);
+  withStorage(JSON.stringify({ levels: {}, workshop: [cavern, { seed: 5, map: ['#?#'] }, 'x'] }));
+  assert.deepEqual(loadSave().workshop, [cavern]);
+  save.levels['1-1'] = { moves: 5, stars: 3 };
+  clearProgress(save);
+  assert.deepEqual(save.levels, {});
+  assert.deepEqual(save.workshop, [cavern], 'Reset progress keeps your caverns');
+  const other = { ...parseSave(JSON.stringify({ levels: {}, workshop: [cavern], rev: 9 })) };
+  const mine = { ...parseSave(null), rev: 1 };
+  adoptInto(mine, other);
+  assert.deepEqual(mine.workshop, [cavern], 'a newer copy brings its caverns');
+});

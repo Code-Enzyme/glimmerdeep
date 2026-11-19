@@ -70,4 +70,6 @@ test('garden: a deep puzzle is called "Night Garden 3", any other level "Level 1
   assert.equal(levelTitle({ id: '1-2' }), 'Level 1-2');
   assert.equal(levelTitle({ id: 7 }), 'Level 7');
   assert.equal(levelTitle({}), 'Test cavern');
+  assert.equal(levelTitle({ id: 'workshop' }), 'Your cavern', 'a Workshop cavern (SPEC section 26)');
+  assert.equal(levelTitle({ id: 'shared' }), 'Shared cavern', 'a cavern played from a code');
 });

@@ -3,6 +3,7 @@
 //   node dev/ui-check.cjs              build, run every check, write screenshots to dev/ui-shots/
 //   node dev/ui-check.cjs --no-build   reuse dist/glimmerdeep.html
 //   node dev/ui-check.cjs --shots      only take the screenshots (phone, small phone, tablet)
+//   node dev/ui-check.cjs --only=workshop   only the Workshop's checks (SPEC section 26), while working on it
 //
 // The page is opened from file://, in a 390 by 844 touch context. Any console error or page error fails
 // the run. Expectations about levels come from the real modules (levels, engine, solver) and the rule
@@ -20,6 +21,7 @@ const URL0 = pathToFileURL(DIST).href;
 const SHOTS = path.join(__dirname, 'ui-shots');
 const args = process.argv.slice(2);
 const SHOTS_ONLY = args.includes('--shots');
+const ONLY = (args.find((a) => a.startsWith('--only=')) || '').slice('--only='.length);
 
 const DIRV = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
 const KEY_OF = { N: 'ArrowUp', E: 'ArrowRight', S: 'ArrowDown', W: 'ArrowLeft', L: ' ', Z: '.' };
@@ -276,7 +278,7 @@ async function main() {
       for (const b of document.querySelectorAll('button')) {
         if (!seen(b)) continue;
         if (!(b.getAttribute('aria-label') || '').trim()) out.unlabeled.push(b.id || b.className);
-        if (b.getBoundingClientRect().top < H * 0.12 && b.id !== 'back' && b.id !== 'journal-back') out.high.push(b.id || b.className);
+        if (b.getBoundingClientRect().top < H * 0.12 && !['back', 'journal-back', 'workshop-back', 'editor-back'].includes(b.id)) out.high.push(b.id || b.className);
       }
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
@@ -294,6 +296,382 @@ async function main() {
     eq(`${label}: no text under 14 px`, a.small, []);
   };
   const earned = (h) => h.page.locator('#result-marks li.earned').count();
+
+  // ------------------------------------------------------------------ the Workshop (SPEC section 26)
+  async function workshopChecks() {
+    console.log('workshop');
+    const ws = await import(pathToFileURL(path.join(ROOT, 'src/ui/workshop.js')).href);
+    const codes = await import(pathToFileURL(path.join(ROOT, 'src/ui/codes.js')).href);
+    const seen = ['prologue', ...CHAPTERS.map((c) => 'ch' + c.id)];
+    const mossmouth = {};
+    CHAPTERS[0].levels.forEach((def) => { mossmouth[def.id] = { moves: def.par, stars: 3 }; });
+    const shop = { full: true, glimmer: 3, freeAt: 0, paid: [] };
+
+    // a phone with helpers for the editor's canvas
+    const studio = async (opts) => {
+      const h = await phone(opts);
+      // h.page changes when the app is started again (h.reopen), so every helper reads it when it runs
+      let cdp = null;
+      let cdpPage = null;
+      const touch = async (type, touchPoints) => {
+        if (cdpPage !== h.page) {
+          cdp = await h.context.newCDPSession(h.page);
+          cdpPage = h.page;
+        }
+        await cdp.send('Input.dispatchTouchEvent', { type, touchPoints });
+      };
+      const etile = async (x, y) => {
+        const L = await h.gd('editorLayout');
+        return { x: L.left + L.ox + (x + 0.5) * L.size, y: L.top + L.oy + (y + 0.5) * L.size, size: L.size };
+      };
+      return Object.assign(h, {
+        txt: async (sel) => ((await h.page.locator(sel).textContent()) || '').trim(),
+        etile,
+        drag: async (from, to) => {
+          const a = await etile(from[0], from[1]);
+          const b = await etile(to[0], to[1]);
+          await touch('touchStart', [{ x: a.x, y: a.y, id: 1 }]);
+          for (let i = 1; i <= 8; i++) await touch('touchMove', [{ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8, id: 1 }]);
+          await touch('touchEnd', []);
+        },
+        tapTile: async (x, y) => {
+          const p = await etile(x, y);
+          await touch('touchStart', [{ x: p.x, y: p.y, id: 1 }]);
+          await touch('touchEnd', []);
+        },
+        ed: () => h.gd('editor'),
+        tool: (id) => h.page.locator(`#editor-tools .paint-tool[data-tool="${id}"]`).tap(),
+        lastHeard: async () => (await h.gd('heard')).slice(-1)[0],
+        screenIs: (name) => h.page.waitForFunction((n) => window.__gd.screen() === n, name, { timeout: 4000 }),
+        panelIs: (name) => h.page.waitForFunction((n) => window.__gd.panel() === n, name, { timeout: 4000 }),
+        inView: async (sel, W, H) => {
+          const b = await h.page.locator(sel).boundingBox();
+          return !!b && b.x >= -1 && b.y >= -1 && b.x + b.width <= W + 1 && b.y + b.height <= H + 1 ? true : `${sel} ${JSON.stringify(b)}`;
+        },
+      });
+    };
+
+    // ---- closed until Mossmouth is lit
+    {
+      const w = await studio({ tag: 'workshop-closed', seed: { levels: {}, seen, critters: [], shop, settings: { tutorials: false } } });
+      await w.open();
+      await w.toMap();
+      ok('workshop: the map has a Workshop card', await w.page.locator('#workshop-card').isVisible());
+      eq('workshop: it comes after the Night Garden', await w.page.evaluate(() => {
+        const list = [...document.querySelectorAll('#chapters > section')];
+        return list.indexOf(document.getElementById('workshop-card')) === list.length - 1 && list.indexOf(document.getElementById('garden')) === list.length - 2;
+      }), true);
+      eq('workshop: closed, it says when it opens', await w.txt('#workshop-note'), 'Opens when Mossmouth is lit.');
+      eq('workshop: its button is disabled', await w.page.locator('#workshop-open').getAttribute('aria-disabled'), 'true');
+      await w.page.locator('#workshop-open').tap({ force: true });
+      eq('workshop: a tap on it is refused', [await w.gd('screen'), await w.lastHeard()], ['map', 'blocked']);
+      await w.page.locator('#set-unlock').tap();
+      eq('workshop: Unlock all opens it', await w.page.locator('#workshop-open').getAttribute('aria-disabled'), null);
+      await w.close();
+    }
+
+    // ---- Mossmouth lit: make a cavern
+    const w = await studio({ tag: 'workshop', seed: { levels: { ...mossmouth }, seen, critters: [], shop, settings: { tutorials: false } } });
+    await w.open();
+    await w.toMap();
+    eq('workshop: open, it says what it is', await w.txt('#workshop-note'), 'Make your own caverns and share them with a code.');
+    eq('workshop: no caverns yet', await w.txt('#workshop-tally'), 'No caverns yet');
+    await w.page.locator('#workshop-card').scrollIntoViewIfNeeded();
+    await w.shot('workshop-card');
+    await w.page.locator('#workshop-open').tap();
+    await w.screenIs('workshop');
+    eq('workshop: the screen opens empty', [await w.page.locator('#caverns .cavern').count(), await w.txt('#workshop-count')], [0, '0 of 12']);
+    eq('workshop: it says what to do', await w.txt('.workshop-intro'), 'Make your own caverns and share them with a code.');
+    await auditPage(w, 'workshop');
+    await w.page.keyboard.press('Escape');
+    eq('workshop: Escape (Back) goes to the map', await w.gd('screen'), 'map');
+    await w.page.locator('#workshop-open').tap();
+    await w.screenIs('workshop');
+
+    await w.page.locator('#workshop-new').tap();
+    await w.screenIs('editor');
+    let made = (await w.gd('save')).workshop;
+    eq('editor: New cavern makes one and saves it', made.length, 1);
+    const seed = made[0].seed;
+    eq('editor: a new cavern is the 7 by 7 starter', made[0].map, ws.newCavern(seed).map);
+    eq('editor: the top shows its name and size', [await w.txt('#editor-name'), await w.txt('#editor-size')], [ws.cavernName(seed), '7 by 7']);
+    const met = ws.metInWorkshop({ levels: mossmouth }, [...LEVELS, ...NIGHT], false);
+    eq('editor: the tools are the ones met in Mossmouth, in order',
+      await w.page.locator('#editor-tools .paint-tool').evaluateAll((els) => els.map((e) => e.dataset.tool)), met.tools);
+    eq('editor: every tool has a picture and a label',
+      await w.page.locator('#editor-tools .paint-tool').evaluateAll((els) => els.every((e) => /url\(/.test(e.querySelector('.tool-art').style.backgroundImage) && e.getAttribute('aria-label'))), true);
+    eq('editor: Wall is chosen to start', [(await w.ed()).tool, await w.page.locator('.paint-tool[aria-pressed="true"]').getAttribute('data-tool')], ['wall', 'wall']);
+    eq('editor: the status says how to paint', await w.txt('#editor-status'), 'Wall: tap or drag to paint.');
+    {
+      const px = await w.page.evaluate(() => {
+        const c = document.getElementById('editor-canvas');
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        const colours = new Set();
+        for (let i = 0; i < d.length; i += 4 * 97) colours.add(`${d[i] >> 4},${d[i + 1] >> 4},${d[i + 2] >> 4}`);
+        return { w: c.width, colours: colours.size };
+      });
+      ok('editor: the cavern is drawn', px.w > 100 && px.colours > 20, JSON.stringify(px));
+    }
+    await auditPage(w, 'editor');
+    await w.shot('editor');
+
+    // painting: a tap, a drag, undo by strokes
+    await w.tapTile(2, 1);
+    eq('editor: a tap paints a wall', (await w.ed()).map[1][2], '#');
+    eq('editor: and the cavern is saved', (await w.gd('save')).workshop[0].map[1][2], '#');
+    await w.tool('puddle');
+    eq('editor: picking a tool says so', [await w.txt('#editor-status'), await w.page.locator('.paint-tool[aria-pressed="true"]').getAttribute('data-tool')],
+      ['Puddle: tap or drag to paint.', 'puddle']);
+    await w.drag([1, 5], [5, 5]);
+    eq('editor: a drag paints every tile it passes', (await w.ed()).map[5], '#~~~~~#');
+    await w.page.locator('#editor-undo').tap();
+    eq('editor: Undo takes back the whole drag', [(await w.ed()).map[5], (await w.ed()).map[1][2]], ['#.....#', '#']);
+    await w.page.locator('#editor-undo').tap();
+    eq('editor: and then the tap', (await w.ed()).map[1][2], '.');
+    eq('editor: Undo is saved too', (await w.gd('save')).workshop[0].map, ws.newCavern(seed).map);
+    await w.page.locator('#editor-undo').tap();
+    eq('editor: nothing left to undo is refused', await w.lastHeard(), 'blocked');
+
+    // Wren moves, and is never painted over
+    await w.tool('wren');
+    await w.tapTile(3, 2);
+    eq('editor: Wren moves where you tap', [(await w.ed()).map[2][3], (await w.ed()).map[3][1]], ['W', '.']);
+    await w.tool('wall');
+    await w.tapTile(3, 2);
+    eq('editor: a wall is not painted over Wren', [(await w.ed()).map[2][3], await w.lastHeard()], ['W', 'blocked']);
+    await w.tool('wren');
+    await w.tapTile(1, 3);
+    eq('editor: Wren back home', (await w.ed()).map, ws.newCavern(seed).map);
+
+    // check, share, play
+    eq('editor: Share waits for a check', await w.page.locator('#editor-share').getAttribute('aria-disabled'), 'true');
+    await w.page.locator('#editor-share').tap({ force: true });
+    eq('editor: Share before a check says why', [await w.gd('panel'), await w.txt('#editor-status'), await w.lastHeard()],
+      [null, 'Check it first: a code carries its par.', 'blocked']);
+    await w.page.locator('#editor-check').tap();
+    const want = ws.checkCavern(ws.newCavern(seed));
+    await w.page.waitForFunction(() => window.__gd.editor().check !== null, null, { timeout: 8000 });
+    eq('editor: Check finds the par', [await w.txt('#editor-status'), (await w.ed()).check, (await w.ed()).par], [want.text, 'lit', want.par]);
+    eq('editor: the check is saved', [(await w.gd('save')).workshop[0].check, (await w.gd('save')).workshop[0].par], ['lit', want.par]);
+    eq('editor: Share is ready', await w.page.locator('#editor-share').getAttribute('aria-disabled'), 'false');
+    await w.page.locator('#editor-share').tap();
+    await w.panelIs('share');
+    const code = codes.encodeCavern({ ...ws.newCavern(seed), par: want.par });
+    eq('share: the code and the name', [await w.txt('#share-code'), await w.txt('#share-name')], [code, ws.cavernName(seed)]);
+    await w.page.evaluate(() => {
+      const writeText = (t) => { window.__copied = t; return Promise.resolve(); };
+      try { Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); } catch (e) { navigator.clipboard.writeText = writeText; }
+    });
+    await w.page.locator('#share-copy').tap();
+    await w.page.waitForFunction(() => document.getElementById('share-note').textContent === 'Copied.', null, { timeout: 2000 }).catch(() => {});
+    eq('share: Copy copies it', [await w.page.evaluate(() => window.__copied), await w.txt('#share-note')], [code, 'Copied.']);
+    eq('share: Done on screen', await w.inView('#share-close', 390, 844), true);
+    await auditPage(w, 'share');
+    await w.shot('workshop-share');
+    await w.page.locator('#share-close').tap();
+    eq('share: Done closes it', await w.gd('panel'), null);
+
+    const before = await w.gd('save');
+    await w.page.locator('#editor-play').tap();
+    await w.screenIs('level');
+    eq('play: it plays as your cavern', [await w.txt('#level-id'), await w.txt('#level-name')], ['Your cavern', ws.cavernName(seed)]);
+    eq('play: Back is labelled for the editor', await w.page.locator('#back').getAttribute('aria-label'), 'Back to the editor');
+    await w.page.locator('#back').tap();
+    await w.screenIs('editor');
+    eq('play: Back returns to the editor', (await w.ed()).map, ws.newCavern(seed).map);
+    await w.page.locator('#editor-play').tap();
+    await w.screenIs('level');
+    await playByKeys(w, solutionOf(ws.levelDef({ ...ws.newCavern(seed), par: want.par })));
+    await waitResult(w);
+    eq('play: lit', [await w.txt('#result-id'), await w.page.locator('#result-next').isVisible(), await w.txt('#result-map')], ['Your cavern lit', false, 'Back']);
+    eq('play: it records nothing and pays nothing',
+      [(await w.gd('save')).levels, (await w.gd('save')).shop, (await w.gd('save')).critters], [before.levels, before.shop, before.critters]);
+    await w.shot('workshop-lit');
+    await w.page.keyboard.press('r');
+    await w.page.waitForFunction(() => window.__gd.panel() === null && window.__gd.moves() === 0, null, { timeout: 4000 });
+    eq('play: R replays it, and Back still goes to the editor', [await w.txt('#level-id'), await w.page.locator('#back').getAttribute('aria-label')],
+      ['Your cavern', 'Back to the editor']);
+    await playByKeys(w, solutionOf(ws.levelDef({ ...ws.newCavern(seed), par: want.par })));
+    await waitResult(w);
+    await w.page.locator('#result-map').tap();
+    await w.screenIs('editor');
+    eq('play: the result\'s Back returns to the editor', (await w.ed()).check, 'lit');
+
+    // any change clears the check
+    await w.tool('wall');
+    await w.tapTile(3, 1);
+    eq('editor: a change clears the check', [(await w.ed()).check, (await w.ed()).par, await w.page.locator('#editor-share').getAttribute('aria-disabled')], [null, null, 'true']);
+    // a cavern that cannot be lit
+    for (const [x, y] of [[4, 2], [4, 3], [4, 4], [5, 2], [5, 4]]) await w.tapTile(x, y);
+    await w.page.locator('#editor-check').tap();
+    await w.page.waitForFunction(() => window.__gd.editor().check !== null, null, { timeout: 8000 });
+    eq('editor: a shut-in Glowbud cannot be lit', [await w.txt('#editor-status'), (await w.ed()).check], ['Can\'t be lit: every way was tried.', 'unlit']);
+    // a problem in plain words, and Play refuses it
+    await w.tool('floor');
+    await w.tapTile(5, 3);
+    await w.tool('wall');
+    await w.tapTile(5, 3);
+    await w.page.locator('#editor-play').tap();
+    eq('editor: Play with no Glowbud says what is missing', [await w.gd('screen'), await w.txt('#editor-status'), await w.lastHeard()], ['editor', 'Add a Glowbud.', 'blocked']);
+
+    // size and options
+    await w.page.locator('#editor-options').tap();
+    await w.panelIs('cavern');
+    eq('size: it shows the size', [await w.txt('#width-val'), await w.txt('#height-val')], ['7', '7']);
+    eq('size: the Gloam option once a Gloam encounter is lit (1-11), no shutter option before one is met',
+      [await w.page.locator('#opt-gloam-box').isVisible(), await w.page.locator('#opt-shutter-box').isVisible()], [met.gloam, met.shutter]);
+    ok('size: Mossmouth has its Gloam encounter and no shutter', met.gloam && !met.shutter, JSON.stringify(met));
+    await w.page.locator('#width-more').tap();
+    eq('size: wider adds a wall column', [await w.txt('#width-val'), (await w.ed()).map[0].length, (await w.ed()).map[3][7], await w.txt('#editor-size')], ['8', 8, '#', '8 by 7']);
+    await w.page.locator('#width-less').tap();
+    await w.page.locator('#width-less').tap();
+    eq('size: narrower takes the last column', (await w.ed()).map[0].length, 6);
+    for (let i = 0; i < 4; i++) await w.page.locator('#height-less').tap();
+    eq('size: shorter, until Wren is in the last row', [(await w.ed()).map.length, await w.txt('#cavern-why'), await w.lastHeard()],
+      [4, 'Wren, a Glowbud or the lantern is in the last row. Move it first.', 'blocked']);
+    eq('size: Done on screen', await w.inView('#cavern-close', 390, 844), true);
+    await auditPage(w, 'size');
+    await w.shot('workshop-size');
+    await w.page.locator('#cavern-close').tap();
+    eq('size: Done closes it', [await w.gd('panel'), await w.page.locator('#cavern-why').isVisible()], [null, false]);
+    eq('size: the cavern is saved at its new size', (await w.gd('save')).workshop[0].map.length, 4);
+
+    // back to the list
+    await w.page.locator('#editor-back').tap();
+    await w.screenIs('workshop');
+    eq('workshop: the list shows the cavern', await w.page.locator('#caverns .cavern').count(), 1);
+    eq('workshop: its row says name, size and check', await w.page.locator('#caverns .cavern').first().getAttribute('aria-label'),
+      `${ws.cavernName(seed)}, 6 by 4, Not checked`);
+    ok('workshop: with its picture', await w.page.locator('#caverns .cavern svg').count() === 1);
+    eq('workshop: the count', await w.txt('#workshop-count'), '1 of 12');
+    await w.page.locator('#caverns .cavern').first().tap();
+    await w.screenIs('editor');
+    eq('workshop: a tap on a row opens it', (await w.ed()).index, 0);
+    await w.page.keyboard.press('Escape');
+    eq('editor: Escape (Back) goes to the list', await w.gd('screen'), 'workshop');
+
+    // play a code
+    const shared = { ...ws.newCavern(500), map: ['#######', '#W.#..#', '#..#G.#', '#.....#', '#######'] };
+    const sharedCheck = ws.checkCavern(shared);
+    const sharedCode = codes.encodeCavern({ ...shared, par: sharedCheck.par });
+    await w.page.locator('#workshop-code').tap();
+    await w.panelIs('code');
+    eq('code: Play a code opens its sheet, ready to type', [await w.page.locator('#code-input').isVisible(), await w.page.evaluate(() => document.activeElement.id)], [true, 'code-input']);
+    const playIt = async () => {
+      await w.page.locator('#code-play').tap();
+      await w.page.waitForFunction(() => !window.__gd.checking(), null, { timeout: 8000 });
+    };
+    await playIt();
+    eq('code: an empty code', [await w.txt('#code-why'), await w.gd('panel')], ['That code is not complete.', 'code']);
+    const plain = sharedCode.replace(/-/g, '');
+    await w.page.locator('#code-input').fill(plain.slice(0, 9) + (plain[9] === '7' ? '8' : '7') + plain.slice(10));
+    await playIt();
+    eq('code: a typo', await w.txt('#code-why'), 'That code has a typo in it.');
+    await w.page.locator('#code-input').fill(codes.encodeCavern({ ...shared, par: sharedCheck.par + 1 }));
+    await playIt();
+    eq('code: a code whose par is wrong', await w.txt('#code-why'), 'That cavern can\'t be lit at its par.');
+    eq('code: Play on screen above the keyboard line', await w.inView('#code-play', 390, 844), true);
+    await auditPage(w, 'code');
+    await w.shot('workshop-code');
+    await w.page.locator('#code-input').fill(' ' + sharedCode.toLowerCase() + ' ');
+    await w.page.locator('#code-input').press('Enter');
+    await w.screenIs('level');
+    eq('code: a good code plays as a shared cavern', [await w.txt('#level-id'), await w.txt('#level-name')], ['Shared cavern', ws.cavernName(500)]);
+    eq('code: Back is labelled for the Workshop', await w.page.locator('#back').getAttribute('aria-label'), 'Back to the Workshop');
+    await playByKeys(w, sharedCheck.par ? solutionOf(ws.levelDef({ ...shared, par: sharedCheck.par })) : []);
+    await waitResult(w);
+    eq('code: lit', [await w.txt('#result-id'), await w.txt('#result-moves')], ['Shared cavern lit', `${sharedCheck.par} moves  ·  par ${sharedCheck.par}`]);
+    await w.page.locator('#result-map').tap();
+    await w.screenIs('workshop');
+    eq('code: playing a code changes nothing in your caverns', (await w.gd('save')).workshop.length, 1);
+
+    // delete, asking twice
+    await w.page.locator('#caverns .cavern').first().tap();
+    await w.screenIs('editor');
+    await w.page.locator('#editor-options').tap();
+    await w.panelIs('cavern');
+    await w.page.locator('#cavern-delete').tap();
+    eq('delete: the first tap asks again', [await w.txt('#cavern-delete'), (await w.gd('save')).workshop.length], ['Delete for good?', 1]);
+    await w.page.locator('#cavern-delete').tap();
+    await w.screenIs('workshop');
+    eq('delete: the second deletes it', [(await w.gd('save')).workshop.length, await w.page.locator('#caverns .cavern').count(), await w.gd('panel')], [0, 0, null]);
+
+    // kept through a relaunch and Reset progress
+    await w.page.locator('#workshop-new').tap();
+    await w.screenIs('editor');
+    await w.reopen();
+    await w.toMap();
+    eq('workshop: caverns are kept when the app starts again', (await w.gd('save')).workshop.length, 1);
+    await w.page.locator('#set-reset').tap();
+    await w.page.locator('#confirm-yes').tap();
+    eq('workshop: Reset progress keeps them', (await w.gd('save')).workshop.length, 1);
+    eq('workshop: but the card is closed again', await w.page.locator('#workshop-open').getAttribute('aria-disabled'), 'true');
+    await w.close();
+
+    // ---- everything met: the whole palette, turning, options, a full list, Android sizes
+    const twelve = Array.from({ length: 12 }, (_, i) => ({ ...ws.newCavern(i * 80), par: null, check: null }));
+    const all = await studio({ tag: 'workshop-all', seed: { levels: {}, seen, critters: [], shop, workshop: twelve, settings: { tutorials: false, unlockAll: true } } });
+    await all.open();
+    await all.toMap();
+    eq('workshop: the card counts your caverns', await all.txt('#workshop-tally'), '12 caverns');
+    await all.page.locator('#workshop-open').tap();
+    await all.screenIs('workshop');
+    eq('workshop: twelve is the most', [await all.txt('#workshop-count'), await all.page.locator('#workshop-full').isVisible()], ['12 of 12', true]);
+    await all.page.locator('#workshop-new').tap({ force: true });   // aria-disabled, but a player can still tap it
+    eq('workshop: New cavern is refused when full', [await all.gd('screen'), await all.lastHeard(), (await all.gd('save')).workshop.length], ['workshop', 'blocked', 12]);
+    {
+      const list = await all.page.locator('#cavern-list').evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+      ok('workshop: a long list scrolls', list.scroll > list.client, JSON.stringify(list));
+    }
+    await all.shot('workshop-list');
+    await all.page.locator('#caverns .cavern').nth(3).tap();
+    await all.screenIs('editor');
+    eq('editor: Unlock all shows every tool', await all.page.locator('#editor-tools .paint-tool').evaluateAll((els) => els.map((e) => e.dataset.tool)), ws.TOOLS.map((t) => t.id));
+    await all.tool('stumpcap');
+    eq('editor: a turning tool says so', await all.txt('#editor-status'), 'Stumpcap: tap one again to turn it.');
+    await all.tapTile(3, 1);
+    await all.tapTile(3, 1);
+    eq('editor: a second tap turns it', (await all.ed()).map[1][3], '>');
+    await all.drag([1, 1], [5, 1]);
+    eq('editor: a drag passes over it without turning', (await all.ed()).map[1], '#^^>^^#');
+    await all.page.locator('#editor-tools').evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+    eq('editor: the last tool scrolls into reach', await all.inView('.paint-tool[data-tool="beetle"]', 390, 844), true);
+    await all.page.locator('#editor-options').tap();
+    await all.panelIs('cavern');
+    eq('size: the options show once met', [await all.page.locator('#opt-gloam-box').isVisible(), await all.page.locator('#opt-shutter-box').isVisible()], [true, true]);
+    await all.page.locator('#cavern-sheet .choice[data-shutter="true"]').tap();
+    eq('size: the shutter option is kept', (await all.ed()).shutter, true);
+    eq('size: Done on screen with every option', await all.inView('#cavern-close', 390, 844), true);
+    await all.page.keyboard.press('Escape');
+    eq('size: Escape closes it', [await all.gd('panel'), await all.gd('screen')], [null, 'editor']);
+    await all.shot('editor-all');
+    await all.close();
+
+    // ---- a small phone
+    const sm = await studio({ tag: 'workshop-small', viewport: { width: 360, height: 640 }, seed: { levels: {}, seen, critters: [], shop, workshop: twelve.slice(0, 2), settings: { tutorials: false, unlockAll: true } } });
+    await sm.open();
+    await sm.toMap();
+    await sm.page.locator('#workshop-open').tap();
+    await sm.screenIs('workshop');
+    eq('small: the Workshop buttons on screen', [await sm.inView('#workshop-new', 360, 640), await sm.inView('#workshop-code', 360, 640)], [true, true]);
+    await sm.page.locator('#caverns .cavern').first().tap();
+    await sm.screenIs('editor');
+    {
+      const L = await sm.gd('editorLayout');
+      ok('small: the cavern gets room to paint', L && L.size >= 30, JSON.stringify(L));
+    }
+    for (const id of ['editor-undo', 'editor-options', 'editor-check', 'editor-play', 'editor-share']) {
+      eq(`small: #${id} on screen`, await sm.inView(`#${id}`, 360, 640), true);
+    }
+    eq('small: the page does not scroll sideways', await sm.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    await auditPage(sm, 'editor small');
+    await sm.shot('editor-small');
+    await sm.page.locator('#editor-options').tap();
+    await sm.panelIs('cavern');
+    eq('small: the size sheet\'s Done on screen', await sm.inView('#cavern-close', 360, 640), true);
+    await sm.shot('editor-small-size');
+    await sm.close();
+  }
 
   // ------------------------------------------------------------------ screenshots at three sizes
   async function shots(prefix, viewport, dpr) {
@@ -379,7 +757,7 @@ async function main() {
     await h.close();
   }
 
-  if (!SHOTS_ONLY) {
+  if (!SHOTS_ONLY && !ONLY) {
     // ---------------------------------------------------------------- 0. title screen
     console.log('title');
     const h = await phone();
@@ -1284,7 +1662,9 @@ async function main() {
     ok('page: viewport-fit=cover', style.vp.includes('viewport-fit=cover'), style.vp);
     ok('page: nothing to scroll', style.scroll <= 0, style.scroll);
     eq('page: the level draws on one canvas', await h.page.locator('#screen-level canvas').count(), 1);
-    eq('page: the only other canvas is the title picture', await h.page.locator('canvas:not(#screen-level canvas)').evaluateAll((els) => els.map((e) => e.id)), ['title-art']);
+    // the Workshop's editor (SPEC section 26) has its own, drawn only when the cavern changes, never in a loop
+    eq('page: the only other canvases are the title picture and the Workshop editor',
+      await h.page.locator('canvas:not(#screen-level canvas)').evaluateAll((els) => els.map((e) => e.id)), ['title-art', 'editor-canvas']);
     // hidden page: the loop stops
     await h.page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
@@ -1408,7 +1788,7 @@ async function main() {
     }
   }
 
-  if (!SHOTS_ONLY) {
+  if (!SHOTS_ONLY && !ONLY) {
     // ---------------------------------------------------------------- story pages and the Field Journal (SPEC 13)
     console.log('story and journal');
     const s = await phone({ tag: 'story' });
@@ -2332,11 +2712,15 @@ async function main() {
     }
   }
 
+  if (!SHOTS_ONLY && (!ONLY || ONLY === 'workshop')) await workshopChecks();
+
   // ------------------------------------------------------------------ screenshots
-  console.log('screenshots');
-  await shots('', { width: 390, height: 844 }, 2);
-  await shots('small', { width: 360, height: 640 }, 2);
-  await shots('tablet', { width: 820, height: 1180 }, 1);
+  if (!ONLY) {
+    console.log('screenshots');
+    await shots('', { width: 390, height: 844 }, 2);
+    await shots('small', { width: 360, height: 640 }, 2);
+    await shots('tablet', { width: 820, height: 1180 }, 1);
+  }
 
   await browser.close();
 

@@ -114,6 +114,63 @@
     </div>
   </main>
 
+  <!-- The Workshop: your own caverns (SPEC section 26) -->
+  <main id="screen-workshop" class="screen workshop" hidden>
+    <header class="journal-head">
+      <button id="workshop-back" class="round" type="button" aria-label="Back to map"><span class="ico" data-icon="map"></span></button>
+      <div class="heading">
+        <span class="kicker">Wren's</span>
+        <h2>Workshop</h2>
+      </div>
+      <span id="workshop-count" class="counter"></span>
+    </header>
+    <div id="cavern-list" class="cavern-list">
+      <p class="workshop-intro">Make your own caverns and share them with a code.</p>
+      <div id="caverns" class="caverns" role="list"></div>
+      <p id="workshop-full" class="opt-note" hidden>Twelve caverns is the most. Delete one to make room.</p>
+    </div>
+    <nav class="bar workshop-bar" aria-label="Workshop">
+      <button id="workshop-new" class="btn primary" type="button" aria-label="New cavern">New cavern</button>
+      <button id="workshop-code" class="btn" type="button" aria-label="Play a code">Play a code</button>
+    </nav>
+  </main>
+
+  <!-- The editor: paint a cavern tile by tile (SPEC section 26) -->
+  <section id="screen-editor" class="screen editor" hidden>
+    <div class="editor-head">
+      <header class="topbar">
+        <button id="editor-back" class="round" type="button" aria-label="Back to the Workshop"><span class="ico" data-icon="map"></span></button>
+        <div class="heading">
+          <span id="editor-size" class="kicker"></span>
+          <h2 id="editor-name"></h2>
+        </div>
+        <span class="topbar-spacer" aria-hidden="true"></span>
+      </header>
+      <p id="editor-status" class="status" role="status" aria-live="polite"></p>
+    </div>
+    <div id="editor-stage" class="stage">
+      <canvas id="editor-canvas" role="img" aria-label="The cavern you are making. Tap or drag to paint with the chosen tool."></canvas>
+    </div>
+    <div id="editor-tools" class="editor-tools" role="toolbar" aria-label="Tools"></div>
+    <nav class="bar editor-bar" aria-label="Cavern">
+      <button id="editor-undo" class="tool" type="button" aria-label="Undo">
+        <span class="ico" data-icon="undo"></span><span class="lbl">Undo</span>
+      </button>
+      <button id="editor-options" class="tool" type="button" aria-label="Cavern size and options">
+        <span class="ico" data-icon="grid"></span><span class="lbl">Size</span>
+      </button>
+      <button id="editor-check" class="tool" type="button" aria-label="Check the cavern">
+        <span class="ico" data-icon="hint"></span><span class="lbl">Check</span>
+      </button>
+      <button id="editor-play" class="tool" type="button" aria-label="Play the cavern">
+        <span class="ico" data-icon="lantern"></span><span class="lbl">Play</span>
+      </button>
+      <button id="editor-share" class="tool" type="button" aria-label="Share the cavern">
+        <span class="ico" data-icon="share"></span><span class="lbl">Share</span>
+      </button>
+    </nav>
+  </section>
+
   <!-- Level: top bar, board, thumb bar -->
   <section id="screen-level" class="screen level" hidden>
     <div class="level-head">
@@ -217,6 +274,75 @@
     <div id="lantern-list" class="lantern-list" role="group" aria-labelledby="lanterns-title"></div>
     <div class="buttons">
       <button id="lanterns-close" class="btn primary" type="button" aria-label="Close lantern styles">Done</button>
+    </div>
+  </aside>
+
+  <!-- Workshop sheets: a cavern's size and options, its share code, playing a code (SPEC section 26) -->
+  <aside id="cavern-sheet" class="sheet paper cavern-sheet" role="dialog" aria-modal="true" aria-labelledby="cavern-title" hidden>
+    <span id="cavern-kicker" class="kicker ink">Workshop</span>
+    <h3 id="cavern-title">Size and options</h3>
+    <div class="sheet-scroll">
+      <section class="opt sizes">
+        <div class="size">
+          <h4 id="opt-width">Width</h4>
+          <div class="stepper" role="group" aria-labelledby="opt-width">
+            <button id="width-less" class="choice" type="button" aria-label="Narrower">−</button>
+            <span id="width-val" class="step-val"></span>
+            <button id="width-more" class="choice" type="button" aria-label="Wider">+</button>
+          </div>
+        </div>
+        <div class="size">
+          <h4 id="opt-height">Height</h4>
+          <div class="stepper" role="group" aria-labelledby="opt-height">
+            <button id="height-less" class="choice" type="button" aria-label="Shorter">−</button>
+            <span id="height-val" class="step-val"></span>
+            <button id="height-more" class="choice" type="button" aria-label="Taller">+</button>
+          </div>
+        </div>
+      </section>
+      <p id="cavern-why" class="shop-why" role="alert" hidden></p>
+      <section id="opt-gloam-box" class="opt">
+        <h4 id="opt-gloam">Gloam encounter</h4>
+        <p class="opt-note">The Hush creeps a tile a turn.</p>
+        <div class="choices" role="group" aria-labelledby="opt-gloam">
+          <button class="choice" type="button" data-gloam="false" aria-pressed="true" aria-label="Gloam encounter off">Off</button>
+          <button class="choice" type="button" data-gloam="true" aria-pressed="false" aria-label="Gloam encounter on">On</button>
+        </div>
+      </section>
+      <section id="opt-shutter-box" class="opt">
+        <h4 id="opt-shutter">Lantern shutter</h4>
+        <p class="opt-note">The planted lantern can be aimed.</p>
+        <div class="choices" role="group" aria-labelledby="opt-shutter">
+          <button class="choice" type="button" data-shutter="false" aria-pressed="true" aria-label="Lantern shutter off">Off</button>
+          <button class="choice" type="button" data-shutter="true" aria-pressed="false" aria-label="Lantern shutter on">On</button>
+        </div>
+      </section>
+    </div>
+    <div class="buttons">
+      <button id="cavern-delete" class="btn" type="button" aria-label="Delete this cavern">Delete</button>
+      <button id="cavern-close" class="btn primary" type="button" aria-label="Close size and options">Done</button>
+    </div>
+  </aside>
+
+  <aside id="share-sheet" class="sheet paper share-sheet" role="dialog" aria-modal="true" aria-labelledby="share-title" hidden>
+    <span id="share-name" class="kicker ink"></span>
+    <h3 id="share-title">Share code</h3>
+    <p id="share-code" class="share-code" aria-label="Share code"></p>
+    <p id="share-note" class="opt-note" role="status" aria-live="polite">Anyone with Glimmerdeep can play it from their Workshop.</p>
+    <div class="buttons">
+      <button id="share-copy" class="btn primary" type="button" aria-label="Copy the code">Copy</button>
+      <button id="share-close" class="btn" type="button" aria-label="Close the share code">Done</button>
+    </div>
+  </aside>
+
+  <aside id="code-sheet" class="sheet paper code-sheet" role="dialog" aria-modal="true" aria-labelledby="code-title" hidden>
+    <span class="kicker ink">Workshop</span>
+    <h3 id="code-title">Play a code</h3>
+    <input id="code-input" class="code-input" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" aria-label="Share code" placeholder="Paste a code">
+    <p id="code-why" class="shop-why" role="alert" hidden></p>
+    <div class="buttons">
+      <button id="code-play" class="btn primary" type="button" aria-label="Play this code">Play</button>
+      <button id="code-close" class="btn" type="button" aria-label="Close play a code">Cancel</button>
     </div>
   </aside>
 

@@ -924,3 +924,68 @@ it must keep doing so for players with protanopia, deuteranopia or tritanopia:
   amber with blue-yellow (17 apart). It is now lilac, `#9877D9`. The marks on roots and gates (circle,
   triangle, square) still tell the channels apart without any colour.
 - There are no colour presets: one palette that works for everyone needs no setting to find.
+
+## 26. The Workshop: make caverns, share them by code (decided 19 Nov 2026)
+
+The design doc's "level editor with share codes". Everything stays on the phone: a code holds the whole
+cavern, so there is no server, no gallery and no typed text that anyone else ever sees (a cavern's name is
+made from two fixed word lists), which keeps it clear of moderation.
+
+- **Where:** a **Workshop** card on the map, after the Night Garden. It opens once Mossmouth's last cavern
+  (1-11) is lit, or with Unlock all; until then it says "Opens when Mossmouth is lit." It opens the Workshop
+  screen: "Make your own caverns and share them with a code.", your caverns (at most 12, "3 of 12"), **New
+  cavern** and **Play a code**. Each cavern row shows its picture (a square per tile, a dot per thing), its
+  name, its size and its check: "Not checked", "Lights in 14 moves", "Can't be lit" or "Too big to check".
+  With twelve, New cavern is refused: "Twelve caverns is the most. Delete one to make room." A tap on a row
+  opens it in the editor.
+- **The editor:** the cavern's size ("7 by 7") and name at the top with Back (to the list), then a status
+  line, the cavern drawn in full light with a faint grid, the tools in a row that scrolls sideways, and the
+  bar: **Undo**, **Size**, **Check**, **Play**, **Share**. Size opens a sheet with width and height steppers,
+  the options met so far, and **Delete**, which asks "Delete for good?" before it deletes.
+- **A cavern** (`src/ui/workshop.js`, no DOM): `{ seed, map, gloam, shutter, par, check }`. `seed` (0 to
+  1023) is fixed when it is made and names it: `cavernName(seed)` is one of 32 first words and one of 32
+  second words ("Mossy Hollow"). A new cavern is 7 wide and 7 tall: walls round the edge, floor inside,
+  Wren at the left and a Glowbud at the right. Sizes go from 3 to 9 wide and 3 to 11 tall; growing adds a
+  column on the right or a row at the bottom, made of wall, and shrinking takes the last one away (the
+  change is refused when that line holds Wren, a Glowbud or the planted lantern: "Wren, a Glowbud or the
+  lantern is in the last row. Move it first.", or "column").
+- **Painting:** pick a tool ("Wall: tap or drag to paint."), then tap or drag over tiles. Terrain tools: Floor, Wall, Puddle, Glowbud,
+  Hush, roots and gates (A, B, C), Crystal. Things: Wren (exactly one: placing it moves it), a planted
+  lantern (at most one), and one tool per species. Things stand on floor only: painting a thing turns the
+  tile under it into floor. Painting a Stumpcap, Dozer newt, Mirrorbeetle, root or gate onto one of its kind
+  turns it instead (Stumpcap and newt: north, east, south, west; beetle: `/` then `\`; root and gate: A, B,
+  C), on a tap; a drag passes over
+  them. Wren and the lantern can't be painted over; Floor clears a creature. **Undo** takes back the last tap
+  or drag, as far back as the editor was opened.
+- **What you have met:** a tool shows once a lit chapter, Night Garden or daily level's map holds its
+  character (Hush also counts `gloam` levels); the Gloam encounter option needs a lit `gloam` level and the
+  shutter option a lit `shutter` level. Floor, Wall, Puddle, Glowbud, Wren and the planted lantern are
+  always there. Unlock all
+  shows everything.
+- **Check:** first the map's own problems, in plain words ("Put Wren in the cavern.", "Add a Glowbud.", "It
+  starts lit already."); then the solver, up to 150,000 positions: "Lights in 14 moves. That is its par.",
+  "Can't be lit: every way was tried." or "Too big to check: try fewer creatures or a smaller cavern." Any
+  change clears the check (`par: null`, `check: null`).
+- **Play** plays the cavern as it stands, like any cavern but recording nothing, earning no star moss or
+  Glimmer and hiding no critter. Its kicker is "Your cavern" ("Your cavern lit" on the result). A cavern
+  with a problem is refused with that problem in the status line. Back, or the result's button (which reads
+  **Back** in place of Map), returns to the editor.
+- **Share** needs a check that lit it ("Check it first: a code carries its par."). It shows the cavern's
+  name and its code, with **Copy** ("Copied.", or "Press and hold the code to copy it." when the phone
+  will not let the game copy), and the code's text can be selected.
+- **Codes** (`src/ui/codes.js`, no DOM): `encodeCavern(cavern)` and `decodeCavern(code)`. Crockford base 32
+  (digits and capitals without I, L, O, U), in groups of four joined by `-`; decoding ignores case, spaces
+  and dashes, and reads `I` and `L` as `1`, `O` as `0`. The bits: a 10-bit checksum (CRC-10, polynomial
+  `0x233`) of everything after it, the number of characters in the code (8), version (3, now 1), width minus
+  3 (3), height minus 3 (4), gloam and shutter (1 each), seed (10), par (8), then the map row by row as runs:
+  a 5-bit symbol (an index into `# . ~ G H a b c A B C * W M S ^ > v < n e s w K O / \ L`) and its length
+  (`0` for one tile, else `1` and 4 bits for 2 to 17), then zero bits up to a whole character. A small
+  cavern's code is about 30 characters. `decodeCavern` -> `{ ok: true, cavern }` or `{ ok: false, why }`:
+  "That code is not complete." (fewer characters than it says), "That code has a typo in it." (a wrong
+  checksum, a stray letter or extra characters) or "That code is from a newer Glimmerdeep."
+- **Play a code:** a sheet with a text field and **Play**. A code that decodes is checked again with the
+  solver; it plays only when its shortest way is exactly its par, else "That cavern can't be lit at its
+  par." It plays as a "Shared cavern"; Back returns to the Workshop. Playing a code changes nothing in your
+  caverns.
+- **The save** keeps your caverns as `save.workshop` (a list; anything malformed is dropped). Reset progress
+  keeps them.

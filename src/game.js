@@ -2,6 +2,7 @@
 //
 //   title screen (Play)  ->  map screen  ->  level screen (top bar, board canvas, thumb bar)  ->  result panel
 //   story pages (Wren's journal, between chapters) show on the way, and the map opens the Field Journal.
+//   The map's Workshop card opens your own caverns (SPEC section 26): the list, the editor, playing a code.
 //
 // Every legal action goes through Session.act (one engine.step), then BoardView animates the events.
 
@@ -34,6 +35,12 @@ import { Tutorial, resolvePoint, STUCK_AFTER } from './ui/tutorial.js';
 import { NOTES, storyDue, journal, pageById, speciesOf } from './ui/story.js';
 import { gardenState, gardenNote, puzzleOpen, levelTitle } from './ui/garden.js';
 import { dateKey, dayLabel, dateLabel, dailyLevel, streakOf, weekOf, dayOpen, finishDaily } from './ui/daily.js';
+import {
+  MAX_CAVERNS, TOOLS, cavernName, newCavern, paint, resize, levelDef, cavernProblems, checkCavern, metInWorkshop,
+  workshopOpen, nextSeed, cavernThumb, cavernSummary, canShare, playCode,
+} from './ui/workshop.js';
+import { encodeCavern, decodeCavern } from './ui/codes.js';
+import { EditorView, toolIconUrl } from './ui/editor.js';
 
 const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
@@ -85,6 +92,8 @@ const mapEl = $('screen-map');
 const levelEl = $('screen-level');
 const storyEl = $('screen-story');
 const journalEl = $('screen-journal');
+const workshopEl = $('screen-workshop');
+const editorEl = $('screen-editor');
 const chaptersEl = $('chapters');
 const canvas = $('board');
 const statusEl = $('status');
@@ -135,6 +144,12 @@ let catchNudge = false;    // after the second catch the Hint button pulses unti
 let rewindTimer = 0;
 let book = null;           // story pages showing (SPEC section 13): { ids, index, reading, then }
 let journalTab = 'creatures';
+let playFrom = null;       // 'editor' | 'workshop' while a Workshop cavern or a shared code is played (SPEC section 26)
+let editing = null;        // the cavern in the editor: { index, tool, undo: [earlier caverns], note }
+let stroke = null;         // a finger painting: { id, before, first, last, left, changed }
+let checking = 0;          // a check by the solver is running (a cavern's Check, or a code's Play)
+let deleteArmed = false;   // Delete was tapped once on the size sheet
+let cavernWhy = '';        // why a size change was refused
 const queue = [];
 // the store (SPEC section 14): null until src/ui/native.js says which store sells
 let store = null;
@@ -155,6 +170,7 @@ const view = new BoardView(canvas, {
   onSettled,
   onCelebrated,
 });
+const editorView = new EditorView($('editor-canvas'));
 
 // ---------------------------------------------------------------- small helpers
 
@@ -285,6 +301,9 @@ function showScreen(name) {
   levelEl.hidden = name !== 'level';
   storyEl.hidden = name !== 'story';
   journalEl.hidden = name !== 'journal';
+  workshopEl.hidden = name !== 'workshop';
+  editorEl.hidden = name !== 'editor';
+  if (name === 'editor') editorView.resize();
   if (name === 'level') {
     view.resize();
     startLoop();
@@ -321,6 +340,7 @@ function titleProgress() {
 
 function showMap() {
   leaveLevel();
+  playFrom = null;
   showScreen('map');
   drawMap();
 }
@@ -352,8 +372,23 @@ function drawMap() {
       openShop('chapter', chapter);
     },
     daily: dailyView(),
+    workshop: {
+      open: workshopIsOpen(),
+      count: save.workshop.length,
+      onOpen: () => {
+        play('ui');
+        showWorkshop();
+      },
+      onLocked: (button) => {
+        sfx('blocked');
+        button.classList.remove('wiggle');
+        void button.offsetWidth;   // restart the animation
+        button.classList.add('wiggle');
+      },
+    },
   });
   for (const lock of chaptersEl.querySelectorAll('.lock')) setIcon(lock, 'lock');
+  applyIcons($('workshop-card'));
   const j = journal(save, CHAPTERS);
   $('btn-journal').querySelector('.val').textContent = `${j.met} of ${j.total} met`;
   syncSettings();
@@ -544,7 +579,8 @@ function renderJournal() {
 
 // Starts a level. -> false when the definition does not parse.
 // day: the date of a Daily Glimmer cavern ('YYYY-MM-DD'); its levels are ad hoc for the chapters' records.
-function openLevel(def, adhoc, day) {
+// from: 'editor' | 'workshop' for a Workshop cavern or a shared code (SPEC section 26), where Back goes.
+function openLevel(def, adhoc, day, from) {
   const loose = !!adhoc || !(LEVELS.includes(def) || NIGHT.includes(def));
   let fresh;
   try {
@@ -559,6 +595,7 @@ function openLevel(def, adhoc, day) {
   cancelWalk();
   queue.length = 0;
   session = fresh;
+  playFrom = from || null;
   current = { def, chapter: day ? DAILY_CHAPTER : chapterOf(def), adhoc: loose, day: day || null, result: null };
   current.critterKind = (day ? dailyCritterKind(def, CHAPTERS) : critterKind(current.chapter)) || CRITTERS[0];
   // Tutorials and the stuck nudge are for a level's first visits: never solved, and the setting on.
@@ -580,6 +617,7 @@ function openLevel(def, adhoc, day) {
   view.setLevel(session.state, { accent: current.chapter.accent, facing: session.facing, critter });
   $('level-id').textContent = day ? `Daily Glimmer, ${dateLabel(day)}` : levelTitle(def);
   $('level-name').textContent = def.name || 'Unnamed cavern';
+  $('back').setAttribute('aria-label', backLabel());
   clearHint();
   showScreen('level');
   refreshHud();
@@ -1194,6 +1232,8 @@ function showResult() {
   best.hidden = !lines.length;
   const next = nextLevelAfter(def);
   $('result-next').hidden = !next || current.adhoc;
+  $('result-map').textContent = playFrom ? 'Back' : 'Map';
+  $('result-map').setAttribute('aria-label', backLabel());
   openPanel('result');
 }
 
@@ -1268,20 +1308,25 @@ function chooseLantern(style) {
   if (pressed) pressed.focus({ preventScroll: true });
 }
 
+// the Workshop's sheets go by short names
+const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet' };
+const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code'];   // sheets over a screen, on the store's scrim
+const panelEl = (name) => $(PANEL_EL[name] || name);
+
 function openPanel(name) {
   panel = name;
-  if (name === 'shop' || name === 'comfort' || name === 'lanterns') {
+  if (SHEETS.includes(name)) {
     shopScrim.hidden = false;
   } else if (name !== 'confirm') {
     scrim.hidden = false;
     scrim.className = name === 'result' ? 'scrim soft' : 'scrim';
   }
-  const el = $(name);
-  el.hidden = false;
+  panelEl(name).hidden = false;
   const focus = name === 'result'
     ? ($('result-next').hidden ? $('result-replay') : $('result-next'))
     : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : name === 'comfort' ? $('comfort-close')
-      : name === 'lanterns' ? $('lanterns-close') : $('confirm-no');
+      : name === 'lanterns' ? $('lanterns-close') : name === 'cavern' ? $('cavern-close') : name === 'share' ? $('share-copy')
+        : name === 'code' ? $('code-input') : $('confirm-no');
   try {
     focus.focus({ preventScroll: true });
   } catch (e) {
@@ -1292,7 +1337,7 @@ function openPanel(name) {
 function closePanel() {
   if (!panel) return false;
   const was = panel;
-  $(panel).hidden = true;
+  panelEl(panel).hidden = true;
   scrim.hidden = true;
   shopScrim.hidden = true;
   panel = null;
@@ -1620,7 +1665,7 @@ onClick(btn.lantern, () => userAction('L'));
 onClick(btn.hint, () => requestHint());
 onClick($('back'), () => {
   play('ui');
-  showMap();
+  backFromLevel();
 });
 
 onClick($('card-close'), (e) => {
@@ -1646,11 +1691,11 @@ onClick($('result-next'), () => {
 });
 onClick($('result-replay'), () => {
   play('ui');
-  if (current) openLevel(current.def, current.adhoc, current.day);
+  if (current) openLevel(current.def, current.adhoc, current.day, playFrom);
 });
 onClick($('result-map'), () => {
   play('ui');
-  leaveResult(showMap);
+  leaveResult(backFromLevel);
 });
 
 function startPlaying() {
@@ -1678,7 +1723,7 @@ onClick($('shop-close'), () => {
   closePanel();
 });
 shopScrim.addEventListener('click', () => {
-  if (panel === 'shop' || panel === 'comfort' || panel === 'lanterns') closePanel();
+  if (SHEETS.includes(panel)) closePanel();
 });
 onClick($('btn-lanterns'), () => {
   play('ui');
@@ -1751,6 +1796,457 @@ onClick($('confirm-no'), () => {
   closePanel();
 });
 
+// ---------------------------------------------------------------- the Workshop (SPEC section 26)
+
+const TURNS = ['stumpcap', 'newt', 'beetle'];
+
+function workshopIsOpen() {
+  return forceUnlock || workshopOpen(save, save.settings.unlockAll);
+}
+
+// The tools and options met so far: in a lit chapter, Night Garden or daily level.
+function metTools() {
+  const lit = { ...save.levels };
+  for (const day of Object.keys(save.daily || {})) {
+    const def = dailyLevel(DAILY, day);
+    if (def) lit[def.id] = save.daily[day];
+  }
+  return metInWorkshop({ levels: lit }, [...LEVELS, ...NIGHT, ...DAILY], forceUnlock || save.settings.unlockAll);
+}
+
+function cavernNow() {
+  return editing ? save.workshop[editing.index] : null;
+}
+
+// Where Back goes from a level, and what it is called.
+function backLabel() {
+  return playFrom === 'editor' ? 'Back to the editor' : playFrom === 'workshop' ? 'Back to the Workshop' : 'Back to map';
+}
+
+function backFromLevel() {
+  if (playFrom === 'editor' && editing && cavernNow()) openEditor(editing.index);
+  else if (playFrom) showWorkshop();
+  else showMap();
+}
+
+function showWorkshop() {
+  leaveLevel();
+  playFrom = null;
+  editing = null;
+  showScreen('workshop');
+  renderWorkshop();
+}
+
+function renderWorkshop() {
+  const list = $('caverns');
+  list.textContent = '';
+  save.workshop.forEach((cavern, i) => {
+    const s = cavernSummary(cavern);
+    const item = document.createElement('div');
+    item.setAttribute('role', 'listitem');
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'cavern' + (cavern.check === 'lit' ? ' lit' : '');
+    row.setAttribute('aria-label', `${s.name}, ${s.size}, ${s.check}`);
+    const pic = document.createElement('span');
+    pic.className = 'cavern-pic';
+    pic.innerHTML = cavernThumb(cavern.map);   // built from the map's own symbols only
+    const body = document.createElement('span');
+    body.className = 'cavern-body';
+    const name = document.createElement('span');
+    name.className = 'cavern-name';
+    name.textContent = s.name;
+    const meta = document.createElement('span');
+    meta.className = 'cavern-meta';
+    meta.textContent = `${s.size}  ·  ${s.check}`;
+    body.append(name, meta);
+    row.append(pic, body);
+    onClick(row, () => {
+      play('ui');
+      openEditor(i);
+    });
+    item.appendChild(row);
+    list.appendChild(item);
+  });
+  const n = save.workshop.length;
+  $('workshop-count').textContent = `${n} of ${MAX_CAVERNS}`;
+  $('workshop-full').hidden = n < MAX_CAVERNS;
+  setDisabled($('workshop-new'), n >= MAX_CAVERNS);
+}
+
+function openEditor(index) {
+  leaveLevel();
+  playFrom = null;
+  if (!editing || editing.index !== index) editing = { index, tool: 'wall', undo: [], note: '' };
+  renderTools();
+  showScreen('editor');
+  refreshEditor();
+}
+
+function renderTools() {
+  const met = metTools().tools;
+  if (!met.includes(editing.tool)) editing.tool = 'wall';
+  const bar = $('editor-tools');
+  bar.textContent = '';
+  for (const tool of TOOLS) {
+    if (!met.includes(tool.id)) continue;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'paint-tool';
+    b.dataset.tool = tool.id;
+    b.setAttribute('aria-label', tool.name);
+    b.setAttribute('aria-pressed', tool.id === editing.tool ? 'true' : 'false');
+    const art = document.createElement('span');
+    art.className = 'tool-art';
+    const url = toolIconUrl(tool.id);
+    if (url) art.style.backgroundImage = `url(${url})`;
+    const lbl = document.createElement('span');
+    lbl.className = 'lbl';
+    lbl.textContent = tool.short || tool.name;
+    b.append(art, lbl);
+    onClick(b, () => {
+      play('ui');
+      editing.tool = tool.id;
+      editing.note = '';
+      for (const other of bar.querySelectorAll('.paint-tool')) other.setAttribute('aria-pressed', other === b ? 'true' : 'false');
+      refreshEditor();
+    });
+    bar.appendChild(b);
+  }
+}
+
+function toolHint(id) {
+  const tool = TOOLS.find((t) => t.id === id);
+  if (id === 'wren') return 'Wren: tap where Wren starts.';
+  if (id === 'lantern') return 'Lantern: tap where it starts, planted.';
+  if (id === 'root' || id === 'gate') return `${tool.name}: tap one again for the next colour.`;
+  if (TURNS.includes(id)) return `${tool.name}: tap one again to turn it.`;
+  return `${tool.name}: tap or drag to paint.`;
+}
+
+function refreshEditor() {
+  const c = cavernNow();
+  if (!c) return;
+  editorView.setMap(c.map);
+  $('editor-name').textContent = cavernName(c.seed);
+  $('editor-size').textContent = `${c.map[0].length} by ${c.map.length}`;
+  $('editor-status').textContent = checking ? 'Checking every way…' : editing.note || toolHint(editing.tool);
+  setDisabled($('editor-share'), !canShare(c));
+  setDisabled($('editor-undo'), false);
+}
+
+// A new version of the cavern in the editor (not yet saved: a stroke saves once, at its end).
+function setCavern(next) {
+  save.workshop[editing.index] = next;
+  editing.note = '';
+  refreshEditor();
+}
+
+// One change that Undo takes back as a whole, saved now.
+function commitCavern(before, next) {
+  editing.undo.push(before);
+  if (editing.undo.length > 200) editing.undo.shift();
+  setCavern(next);
+  writeSave(save);
+}
+
+function paintAt(tile, turn) {
+  const next = paint(cavernNow(), editing.tool, tile.x, tile.y, { turn });
+  if (!next) return false;
+  setCavern(next);
+  stroke.changed = true;
+  play('step');
+  return true;
+}
+
+const editorCanvas = $('editor-canvas');
+editorCanvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (stroke) return;   // a second finger changes nothing
+  e.preventDefault();
+  if (!editing || panel || checking) return;
+  const tile = editorView.tileAt(e.clientX, e.clientY);
+  stroke = { id: e.pointerId, before: cavernNow(), first: tile, last: tile, left: false, changed: false };
+  try {
+    editorCanvas.setPointerCapture(e.pointerId);
+  } catch (err) {
+    // capture is a nicety
+  }
+  if (tile) paintAt(tile, false);   // a thing of the tool's own kind turns on a tap, at the lift
+});
+editorCanvas.addEventListener('pointermove', (e) => {
+  if (!stroke || e.pointerId !== stroke.id) return;
+  const tile = editorView.tileAt(e.clientX, e.clientY);
+  if (!tile || (stroke.last && tile.x === stroke.last.x && tile.y === stroke.last.y)) return;
+  stroke.last = tile;
+  stroke.left = true;
+  paintAt(tile, false);
+});
+function endStroke(e, lifted) {
+  if (!stroke || e.pointerId !== stroke.id) return;
+  const s = stroke;
+  if (lifted && !s.left && !s.changed && s.first) paintAt(s.first, true);
+  stroke = null;
+  if (s.changed) {
+    editing.undo.push(s.before);
+    if (editing.undo.length > 200) editing.undo.shift();
+    writeSave(save);
+  } else if (lifted && s.first) {
+    sfx('blocked');
+  }
+}
+editorCanvas.addEventListener('pointerup', (e) => endStroke(e, true));
+editorCanvas.addEventListener('pointercancel', (e) => endStroke(e, false));
+
+onClick($('editor-undo'), () => {
+  if (!editing || checking) return;
+  if (!editing.undo.length) {
+    sfx('blocked');
+    return;
+  }
+  save.workshop[editing.index] = editing.undo.pop();
+  writeSave(save);
+  editing.note = '';
+  sfx('undo');
+  refreshEditor();
+});
+
+onClick($('editor-check'), () => {
+  const c = cavernNow();
+  if (!c || checking) return;
+  const problems = cavernProblems(c);
+  if (problems.length) {
+    editing.note = problems[0];
+    sfx('blocked');
+    refreshEditor();
+    return;
+  }
+  checking++;
+  play('hint');
+  refreshEditor();
+  const run = () => {
+    const r = checkCavern(c);
+    checking--;
+    if (!editing || cavernNow() !== c) return;   // changed meanwhile: the answer is for another cavern
+    save.workshop[editing.index] = { ...c, check: r.check === 'problem' ? null : r.check, par: r.par };
+    writeSave(save);
+    editing.note = r.text;
+    sfx(r.check === 'lit' ? 'budOn' : 'blocked');
+    refreshEditor();
+  };
+  window.setTimeout(run, 30);   // let "Checking" reach the screen before the search holds the thread
+});
+
+onClick($('editor-play'), () => {
+  const c = cavernNow();
+  if (!c || checking) return;
+  const problems = cavernProblems(c);
+  if (problems.length) {
+    editing.note = problems[0];
+    sfx('blocked');
+    refreshEditor();
+    return;
+  }
+  play('ui');
+  openLevel(levelDef(c), true, undefined, 'editor');
+});
+
+onClick($('editor-share'), () => {
+  const c = cavernNow();
+  if (!c || checking) return;
+  if (!canShare(c)) {
+    editing.note = 'Check it first: a code carries its par.';
+    sfx('blocked');
+    refreshEditor();
+    return;
+  }
+  play('ui');
+  $('share-name').textContent = cavernName(c.seed);
+  $('share-code').textContent = encodeCavern(c);
+  $('share-note').textContent = 'Anyone with Glimmerdeep can play it from their Workshop.';
+  openPanel('share');
+});
+
+onClick($('share-copy'), () => {
+  const code = $('share-code').textContent;
+  const done = (copied) => {
+    $('share-note').textContent = copied ? 'Copied.' : 'Press and hold the code to copy it.';
+    sfx(copied ? 'ui' : 'blocked');
+  };
+  try {
+    navigator.clipboard.writeText(code).then(() => done(true), () => done(false));
+  } catch (e) {
+    done(false);
+  }
+});
+onClick($('share-close'), () => {
+  play('ui');
+  closePanel();
+});
+
+// ---- the size and options sheet
+
+function renderCavernSheet() {
+  const c = cavernNow();
+  const met = metTools();
+  const w = c.map[0].length;
+  const h = c.map.length;
+  $('cavern-kicker').textContent = cavernName(c.seed);
+  $('width-val').textContent = String(w);
+  $('height-val').textContent = String(h);
+  setDisabled($('width-less'), w <= 3);
+  setDisabled($('width-more'), w >= 9);
+  setDisabled($('height-less'), h <= 3);
+  setDisabled($('height-more'), h >= 11);
+  $('opt-gloam-box').hidden = !met.gloam && !c.gloam;
+  $('opt-shutter-box').hidden = !met.shutter && !c.shutter;
+  for (const b of $('cavern-sheet').querySelectorAll('.choice[data-gloam]')) b.setAttribute('aria-pressed', String((b.dataset.gloam === 'true') === !!c.gloam));
+  for (const b of $('cavern-sheet').querySelectorAll('.choice[data-shutter]')) b.setAttribute('aria-pressed', String((b.dataset.shutter === 'true') === !!c.shutter));
+  const del = $('cavern-delete');
+  del.textContent = deleteArmed ? 'Delete for good?' : 'Delete';
+  del.classList.toggle('warn', deleteArmed);
+  del.setAttribute('aria-label', deleteArmed ? 'Delete this cavern for good' : 'Delete this cavern');
+  $('cavern-why').textContent = cavernWhy;
+  $('cavern-why').hidden = !cavernWhy;
+}
+
+onClick($('editor-options'), () => {
+  if (!cavernNow() || checking) return;
+  play('ui');
+  deleteArmed = false;
+  cavernWhy = '';
+  renderCavernSheet();
+  openPanel('cavern');
+});
+
+function resizeBy(dw, dh) {
+  const c = cavernNow();
+  const next = resize(c, dw, dh);
+  deleteArmed = false;
+  if (!next) {
+    const w = c.map[0].length + dw;
+    const h = c.map.length + dh;
+    cavernWhy = w < 3 || w > 9 || h < 3 || h > 11 ? 'Caverns are 3 to 9 tiles wide and 3 to 11 tall.'
+      : `Wren, a Glowbud or the lantern is in the last ${dw ? 'column' : 'row'}. Move it first.`;
+    sfx('blocked');
+  } else {
+    cavernWhy = '';
+    play('ui');
+    commitCavern(c, next);
+  }
+  renderCavernSheet();
+}
+onClick($('width-less'), () => resizeBy(-1, 0));
+onClick($('width-more'), () => resizeBy(1, 0));
+onClick($('height-less'), () => resizeBy(0, -1));
+onClick($('height-more'), () => resizeBy(0, 1));
+
+for (const b of $('cavern-sheet').querySelectorAll('.choice[data-gloam], .choice[data-shutter]')) {
+  onClick(b, () => {
+    const c = cavernNow();
+    const change = b.dataset.gloam !== undefined ? { gloam: b.dataset.gloam === 'true' } : { shutter: b.dataset.shutter === 'true' };
+    deleteArmed = false;
+    cavernWhy = '';
+    play('ui');
+    if (Object.keys(change).some((k) => !!c[k] !== change[k])) commitCavern(c, { ...c, ...change, par: null, check: null });
+    renderCavernSheet();
+  });
+}
+
+onClick($('cavern-delete'), () => {
+  if (!deleteArmed) {
+    deleteArmed = true;
+    cavernWhy = '';
+    sfx('ui');
+    renderCavernSheet();
+    return;
+  }
+  deleteArmed = false;
+  save.workshop.splice(editing.index, 1);
+  writeSave(save);
+  closePanel();
+  play('restart');
+  showWorkshop();
+});
+onClick($('cavern-close'), () => {
+  play('ui');
+  closePanel();
+});
+
+// ---- the list: a new cavern, play a code
+
+onClick($('workshop-back'), () => {
+  play('ui');
+  showMap();
+});
+onClick($('editor-back'), () => {
+  play('ui');
+  showWorkshop();
+});
+
+onClick($('workshop-new'), () => {
+  if (save.workshop.length >= MAX_CAVERNS) {
+    sfx('blocked');
+    return;
+  }
+  save.workshop.push(newCavern(nextSeed(save.workshop, Math.random())));
+  writeSave(save);
+  play('ui');
+  editing = null;
+  openEditor(save.workshop.length - 1);
+});
+
+onClick($('workshop-code'), () => {
+  play('ui');
+  $('code-input').value = '';
+  $('code-why').hidden = true;
+  openPanel('code');
+});
+
+function playTypedCode() {
+  if (checking) return;
+  const why = (text) => {
+    $('code-why').textContent = text;
+    $('code-why').hidden = false;
+    sfx('blocked');
+  };
+  const typed = $('code-input').value;
+  const read = decodeCavern(typed);
+  if (!read.ok) {
+    why(read.why);
+    return;
+  }
+  checking++;
+  const button = $('code-play');
+  button.textContent = 'Checking…';
+  $('code-why').hidden = true;
+  window.setTimeout(() => {
+    const r = playCode(typed);
+    checking--;
+    button.textContent = 'Play';
+    if (panel !== 'code') return;
+    if (!r.ok) {
+      why(r.why);
+      return;
+    }
+    closePanel();
+    play('ui');
+    openLevel(r.def, true, undefined, 'workshop');
+  }, 30);
+}
+onClick($('code-play'), playTypedCode);
+$('code-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    playTypedCode();
+  }
+});
+onClick($('code-close'), () => {
+  play('ui');
+  closePanel();
+});
+
+
 // ---------------------------------------------------------------- input: Android back button
 
 onBackButton(() => {
@@ -1758,9 +2254,15 @@ onBackButton(() => {
   else if (screen === 'journal') {
     play('ui');
     showMap();
-  } else if (panel === 'result') leaveResult(showMap);
+  } else if (panel === 'result') leaveResult(backFromLevel);
   else if (panel) closePanel();
   else if (screen === 'level') {
+    play('ui');
+    backFromLevel();
+  } else if (screen === 'editor') {
+    play('ui');
+    showWorkshop();
+  } else if (screen === 'workshop') {
     play('ui');
     showMap();
   } else if (screen === 'map') {
@@ -1776,8 +2278,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (screen === 'story') closeBook();
     else if (screen === 'journal') showMap();
-    else if (panel === 'result') leaveResult(showMap);
+    else if (panel === 'result') leaveResult(backFromLevel);
     else if (panel) closePanel();
+    else if (screen === 'editor') showWorkshop();
+    else if (screen === 'workshop') showMap();
     else if (screen === 'map') showTitle();
     return;
   }
@@ -1802,7 +2306,7 @@ document.addEventListener('keydown', (e) => {
   if (panel === 'shop') return;   // the store keeps the board still; Escape closes it
   if (what === 'undo') undo();
   else if (what === 'restart') {
-    if (panel === 'result') openLevel(current.def, current.adhoc, current.day);
+    if (panel === 'result') openLevel(current.def, current.adhoc, current.day, playFrom);
     else restart();
   } else if (panel) return;
   else if (what === 'hint') requestHint();
@@ -1840,6 +2344,7 @@ onAppState((active) => {
 function onResize() {
   if (screen === 'level') view.resize();
   else if (screen === 'title') titleArt.start();
+  else if (screen === 'editor') editorView.resize();
   else layoutMap(chaptersEl);
 }
 window.addEventListener('resize', onResize);
@@ -1848,11 +2353,21 @@ if (typeof ResizeObserver === 'function') {
   new ResizeObserver(onResize).observe($('stage'));
   new ResizeObserver(onResize).observe(chaptersEl);
   new ResizeObserver(onResize).observe($('title-stage'));
+  new ResizeObserver(onResize).observe($('editor-stage'));
 }
 
 // No callouts, no selection, no pinch or double-tap zoom, no rubber-band scroll during play.
-document.addEventListener('contextmenu', (e) => e.preventDefault());
-document.addEventListener('selectstart', (e) => e.preventDefault());
+// A share code and the code field are the exception: their text can be selected and copied.
+const selectable = (e) => {
+  const el = e.target && (e.target.nodeType === 1 ? e.target : e.target.parentElement);
+  return !!(el && el.closest && el.closest('input, .share-code'));
+};
+document.addEventListener('contextmenu', (e) => {
+  if (!selectable(e)) e.preventDefault();
+});
+document.addEventListener('selectstart', (e) => {
+  if (!selectable(e)) e.preventDefault();
+});
 document.addEventListener('dblclick', (e) => e.preventDefault());
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('touchmove', (e) => {
@@ -1860,7 +2375,10 @@ document.addEventListener('touchmove', (e) => {
   const scroller = e.target && e.target.closest
     && (screen === 'map' && e.target.closest('.chapters')
       || screen === 'journal' && e.target.closest('.journal-list')
-      || screen === 'story' && e.target.closest('.story-scroll'));
+      || screen === 'story' && e.target.closest('.story-scroll')
+      || screen === 'workshop' && e.target.closest('.cavern-list')
+      || screen === 'editor' && e.target.closest('.editor-tools')
+      || panel && e.target.closest('.sheet'));
   if (!scroller || e.touches.length > 1) e.preventDefault();
 }, { passive: false });
 
@@ -1941,6 +2459,12 @@ window.__gd = {
   tutorial: () => (tutorial ? { index: tutorial.index, done: tutorial.done } : null),
   heard: () => heard.slice(),
   shop: () => ({ ...JSON.parse(JSON.stringify(save.shop)), kind: store ? store.kind : null, prices: { ...prices } }),
+  // the Workshop (SPEC section 26): the cavern in the editor, where its tiles are, and whether a check is running
+  editor: () => (editing && cavernNow()
+    ? JSON.parse(JSON.stringify({ ...cavernNow(), index: editing.index, tool: editing.tool, undo: editing.undo.length, note: editing.note }))
+    : null),
+  editorLayout: () => (editorView.layout ? { ...editorView.layout, left: editorView.rect.left, top: editorView.rect.top } : null),
+  checking: () => checking > 0,
   // resolves true once every save so far is on disk (SPEC section 16)
   saved: () => savedDurably().then(() => true),
   // the Daily Glimmer's date, in place of the clock ('YYYY-MM-DD', or null for the clock again)

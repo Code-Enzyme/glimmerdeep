@@ -8,18 +8,19 @@ import { freshShop, readShop } from './shop.js';
 import { readDaily } from './daily.js';
 import { COMFORT_DEFAULTS, readComfort } from './comfort.js';
 import { DEFAULT_LANTERN, readLantern } from './lanterns.js';
+import { readWorkshop } from './workshop.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
 const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS, lantern: DEFAULT_LANTERN };
 
 function freshSave() {
-  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, settings: { ...SETTING_DEFAULTS }, rev: 0 };
+  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, workshop: [], settings: { ...SETTING_DEFAULTS }, rev: 0 };
 }
 
 // -> { levels: { [id]: { moves, stars } }, seen: [story page id], critters: [level id] (section 23),
 //      shop: { full, glimmer, freeAt, paid },
-//      daily: { [YYYY-MM-DD]: { moves, stars } },
+//      daily: { [YYYY-MM-DD]: { moves, stars } }, workshop: [cavern] (section 26),
 //      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion, lantern }, rev }
 export function loadSave() {
   let raw = null;
@@ -60,6 +61,7 @@ export function parseSave(raw) {
     }
     data.shop = readShop(parsed.shop);
     data.daily = readDaily(parsed.daily);
+    data.workshop = readWorkshop(parsed.workshop);   // SPEC section 26
     if (parsed.settings && typeof parsed.settings === 'object') {
       for (const k of Object.keys(SETTING_DEFAULTS)) {
         if (typeof parsed.settings[k] === 'boolean' && typeof SETTING_DEFAULTS[k] === 'boolean') data.settings[k] = parsed.settings[k];
@@ -111,7 +113,8 @@ export function writeSave(data) {
   data.rev = (Number.isFinite(data.rev) ? data.rev : 0) + 1;
   writes += 1;
   const json = JSON.stringify({
-    levels: data.levels, seen: data.seen || [], critters: data.critters || [], shop: data.shop || freshShop(), daily: data.daily || {}, settings: data.settings, rev: data.rev,
+    levels: data.levels, seen: data.seen || [], critters: data.critters || [], shop: data.shop || freshShop(), daily: data.daily || {},
+    workshop: data.workshop || [], settings: data.settings, rev: data.rev,
   });
   let ok = false;
   try {
@@ -143,7 +146,7 @@ export function recordResult(data, id, moves, stars) {
 }
 
 // Reset progress: every level, the story, the found critters and the Daily Glimmer records start over; the settings,
-// the shop and the revision stay (the revision never goes back, SPEC section 16).
+// the shop, the Workshop's caverns and the revision stay (the revision never goes back, SPEC section 16).
 export function clearProgress(data) {
   data.levels = {};
   data.seen = [];

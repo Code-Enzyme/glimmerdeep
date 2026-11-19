@@ -44,6 +44,8 @@ export function puzzleOpen(def, save, night, levels, unlockAll) {
 // What the level screen and the result call a level: "Night Garden 3" for N-3, else "Level 1-2".
 export function levelTitle(def) {
   if (!def || def.id === undefined) return 'Test cavern';
+  if (def.id === 'workshop') return 'Your cavern';      // SPEC section 26
+  if (def.id === 'shared') return 'Shared cavern';
   const m = /^N-(\d+)$/.exec(String(def.id));
   return m ? `Night Garden ${m[1]}` : `Level ${def.id}`;
 }

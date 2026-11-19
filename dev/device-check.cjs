@@ -4,7 +4,8 @@
 //   2. level 1-1 and the last level of each chapter solve at par through the game's moves,
 //   3. the store (SPEC section 14): the Billing plugin is in the app, a debug build uses the free test store,
 //      and the Full Expedition bought there opens the later chapters,
-//   4. the save, purchases included, survives the app being killed and opened again.
+//   4. the save, purchases included, survives the app being killed and opened again,
+//   5. the Workshop (SPEC section 26) opens once Mossmouth is lit, and the solver checks a new cavern on the device.
 // Screenshots of the real device screen go to dev/device-shots/. Needs adb on PATH and one device.
 const { _android: android } = require('playwright');
 const path = require('path');
@@ -169,6 +170,31 @@ async function killApp(device, webview) {
   if (seen !== CHAPTERS.length + 1) fail(`${seen} story pages counted as seen, not ${CHAPTERS.length + 1}`);
   else console.log(`story pages seen: ${seen}`);
   await device.screenshot({ path: path.join(shots, 'map-after-restart.png') });
+
+  // the Workshop: Mossmouth is lit, so it is open; a new cavern is checked by the solver on the device
+  await page.evaluate(() => document.getElementById('workshop-open').click());
+  await page.waitForFunction(() => window.__gd.screen() === 'workshop', null, { timeout: 10000 }).catch(() => {});
+  if ((await page.evaluate(() => window.__gd.screen())) !== 'workshop') fail('the Workshop did not open with Mossmouth lit');
+  else {
+    await page.evaluate(() => document.getElementById('workshop-new').click());
+    await page.waitForFunction(() => window.__gd.screen() === 'editor', null, { timeout: 10000 }).catch(() => {});
+    const t0 = Date.now();
+    await page.evaluate(() => document.getElementById('editor-check').click());
+    await page.waitForFunction(() => window.__gd.editor() && window.__gd.editor().check !== null, null, { timeout: 20000 }).catch(() => {});
+    const made = await page.evaluate(() => window.__gd.editor());
+    if (!made || made.check !== 'lit' || made.par !== 3) fail(`the new cavern's check on the device: ${JSON.stringify(made && { check: made.check, par: made.par })}`);
+    else console.log(`workshop: a new cavern checked on the device in ${Date.now() - t0} ms, par ${made.par}`);
+    await page.waitForTimeout(400);
+    await device.screenshot({ path: path.join(shots, 'workshop-editor.png') });
+    await page.evaluate(() => document.getElementById('editor-share').click());
+    await page.evaluate(() => document.getElementById('share-copy').click());
+    await page.waitForTimeout(600);
+    // a click from here is not a finger, so the WebView may refuse the clipboard: what it said is only logged
+    console.log(`workshop: share code ${await page.evaluate(() => document.getElementById('share-code').textContent)}, Copy said "${await page.evaluate(() => document.getElementById('share-note').textContent)}"`);
+    await device.screenshot({ path: path.join(shots, 'workshop-share.png') });
+    const kept = await page.evaluate(() => window.__gd.save().workshop.length);
+    if (kept !== 1) fail(`the save holds ${kept} Workshop caverns, not 1`);
+  }
 
   const pid = (await device.shell(`pidof ${PKG}`)).toString().trim();
   if (!pid) fail('app is not running at the end');

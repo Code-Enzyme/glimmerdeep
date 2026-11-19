@@ -1901,7 +1901,8 @@ function paintGlow(g) {
 // Icons
 // ---------------------------------------------------------------------------
 
-const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort', 'glow'];
+const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort', 'glow', 'grid', 'share', 'brush'];
+export const ICON_NAMES = ICONS.slice();
 
 function arrowHead(g, x, y, ang, len) {
   g.moveTo(x + Math.cos(ang + 2.5) * len, y + Math.sin(ang + 2.5) * len);
@@ -2089,6 +2090,49 @@ function iconPath(g, name) {
       g.lineTo(0.9, 0.8);
       g.moveTo(0.66, 0.67);
       g.lineTo(0.84, 0.67);
+      break;
+    case 'grid':
+      // a cavern's tiles with a corner pulled out, for a cavern's size and options (SPEC section 26)
+      g.moveTo(0.16, 0.16);
+      g.lineTo(0.66, 0.16);
+      g.lineTo(0.66, 0.66);
+      g.lineTo(0.16, 0.66);
+      g.closePath();
+      g.moveTo(0.33, 0.16);
+      g.lineTo(0.33, 0.66);
+      g.moveTo(0.49, 0.16);
+      g.lineTo(0.49, 0.66);
+      g.moveTo(0.16, 0.33);
+      g.lineTo(0.66, 0.33);
+      g.moveTo(0.16, 0.49);
+      g.lineTo(0.66, 0.49);
+      g.moveTo(0.62, 0.62);
+      g.lineTo(0.86, 0.86);
+      arrowHead(g, 0.86, 0.86, Math.PI / 4, 0.14);
+      break;
+    case 'share':
+      // three seeds joined by stems, for a cavern's share code (SPEC section 26)
+      g.arc(0.72, 0.24, 0.1, 0, TAU);
+      g.moveTo(0.38, 0.5);
+      g.arc(0.28, 0.5, 0.1, 0, TAU);
+      g.moveTo(0.82, 0.76);
+      g.arc(0.72, 0.76, 0.1, 0, TAU);
+      g.moveTo(0.37, 0.45);
+      g.lineTo(0.63, 0.29);
+      g.moveTo(0.37, 0.55);
+      g.lineTo(0.63, 0.71);
+      break;
+    case 'brush':
+      // a paintbrush over a dab, for the Workshop (SPEC section 26)
+      g.moveTo(0.82, 0.14);
+      g.lineTo(0.88, 0.2);
+      g.lineTo(0.5, 0.6);
+      g.lineTo(0.42, 0.52);
+      g.closePath();
+      g.moveTo(0.42, 0.52);
+      g.bezierCurveTo(0.3, 0.5, 0.24, 0.58, 0.24, 0.66);
+      g.bezierCurveTo(0.24, 0.76, 0.18, 0.8, 0.12, 0.84);
+      g.bezierCurveTo(0.3, 0.88, 0.48, 0.8, 0.5, 0.6);
       break;
     default:
       g.arc(0.5, 0.5, 0.08, 0, TAU);
@@ -2392,7 +2436,7 @@ export function drawCreature(ctx, type, px, py, size, opts) {
   }
 }
 
-// Line icons in journal cream: undo, restart, wait, hint, lantern, map, sound, mute, star, lock, contrast, book.
+// Line icons in journal cream: every name in ICONS.
 export function drawIcon(ctx, name, px, py, size) {
   const b = bucketFor(ctx, size);
   const i = ICONS.indexOf(name);

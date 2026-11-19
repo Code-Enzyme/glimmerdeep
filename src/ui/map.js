@@ -82,10 +82,50 @@ function dailyCard(d) {
   return card;
 }
 
+// The Workshop card (SPEC section 26), after the chapters and the Night Garden.
+// w: { open, count, onOpen(), onLocked(button) }
+function workshopCard(w) {
+  const card = el('section', 'workshop-card paper' + (w.open ? '' : ' locked'));
+  card.id = 'workshop-card';
+  card.setAttribute('aria-label', 'Workshop');
+  const head = el('div', 'chapter-head');
+  const art = el('span', 'ico workshop-art');
+  art.dataset.icon = 'brush';
+  art.dataset.tint = '#24162E';
+  head.appendChild(art);
+  const names = el('div', 'chapter-names');
+  names.appendChild(el('span', 'kicker ink', "Wren's"));
+  names.appendChild(el('h2', '', 'Workshop'));
+  head.appendChild(names);
+  if (w.open) {
+    const tally = el('span', 'tally', w.count ? `${w.count} cavern${w.count === 1 ? '' : 's'}` : 'No caverns yet');
+    tally.id = 'workshop-tally';
+    head.appendChild(tally);
+  }
+  card.appendChild(head);
+  const foot = el('div', 'workshop-foot');
+  const note = el('p', 'waits', w.open ? 'Make your own caverns and share them with a code.' : 'Opens when Mossmouth is lit.');
+  note.id = 'workshop-note';
+  foot.appendChild(note);
+  const go = el('button', 'btn primary workshop-open');
+  go.id = 'workshop-open';
+  go.type = 'button';
+  go.setAttribute('aria-label', w.open ? 'Open the Workshop' : 'Workshop, locked. Opens when Mossmouth is lit.');
+  if (w.open) go.appendChild(el('span', 'lbl', 'Open'));
+  else {
+    go.setAttribute('aria-disabled', 'true');
+    go.appendChild(el('span', 'lock ico'));
+  }
+  go.addEventListener('click', () => (w.open ? w.onOpen() : w.onLocked(go)));
+  foot.appendChild(go);
+  card.appendChild(foot);
+  return card;
+}
+
 // opts: { chapters, levels, records: { [id]: { moves, stars } }, isUnlocked(def), onOpen(def), onLocked(def, node),
 //         chapterLocked(chapter) (part of the Full Expedition, not bought), onShop(chapter), daily (see dailyCard),
 //         label(def) (what a level is called, default "Level <id>"), note(chapter) (what a closed section waits
-//         for, or '') }
+//         for, or '') , workshop (see workshopCard) }
 // A chapter may carry a kicker (the line over its name, default "Chapter <id>") and a night flag.
 export function renderMap(root, opts) {
   root.textContent = '';
@@ -168,6 +208,7 @@ export function renderMap(root, opts) {
     }
     root.appendChild(section);
   }
+  if (opts.workshop) root.appendChild(workshopCard(opts.workshop));
   layoutMap(root);
 }
 
