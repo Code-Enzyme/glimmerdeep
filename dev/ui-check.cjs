@@ -1705,7 +1705,8 @@ async function main() {
       const t = await phone({ tag: 'tutorials' });
       const status = () => t.page.locator('#status').textContent();
       const hasClass = (id, cls) => t.page.evaluate(([i, c]) => document.getElementById(i).classList.contains(c), [id, cls]);
-      const STUCK = 'Stuck? Hint helps a step at a time, and Undo steps back.';
+      // 1-1 is lit here, so 1-2 is open and not lit: the nudge points at it (SPEC section 29)
+      const STUCK = 'Stuck? Hint helps a step at a time, and one other cavern is open on the map.';
       // pixels of the coach colour in the 3 x 3 tiles around (x, y): the pointer is really drawn
       const coachPixels = (x, y) => t.page.evaluate(([tx, ty]) => {
         const L = window.__gd.layout();
@@ -3073,9 +3074,95 @@ async function main() {
     await sm.close();
   }
 
+  // ------------------------------------------------------------------ open ahead (SPEC section 29)
+  async function pathsChecks() {
+    console.log('paths');
+    const seen = ['prologue', ...CHAPTERS.map((c) => 'ch' + c.id)];
+    const shop = { full: true, glimmer: 3, freeAt: 0, paid: [] };
+    const ch1 = CHAPTERS[0].levels;
+    const ch2 = CHAPTERS[1].levels;
+    const rec = (defs) => Object.fromEntries(defs.map((d) => [d.id, { moves: d.par, stars: 3 }]));
+    const nodeState = (ph, def) => ph.page.locator(`.node[data-level="${def.id}"]`).evaluate((n) => ({
+      locked: n.classList.contains('locked'), next: n.classList.contains('next'), label: n.getAttribute('aria-label'),
+    }));
+    const openIds = (ph, defs) => ph.page.evaluate((ids) => ids.filter((id) => !document.querySelector(`.node[data-level="${id}"]`).classList.contains('locked')), defs.map((d) => d.id));
+
+    // chapter 1 lit and 2-1, 2-2: 2-3, 2-4 and 2-5 are open, 2-6 not
+    const p = await phone({ tag: 'paths', seed: { levels: rec([...ch1, ch2[0], ch2[1]]), seen, critters: [], shop, settings: { tutorials: true } } });
+    await p.open();
+    await p.toMap();
+    eq('paths: from chapter 2, the three caverns after a lit one are open', await openIds(p, ch2), ch2.slice(0, 5).map((d) => d.id));
+    eq('paths: the marker is on the first open cavern not lit', (await nodeState(p, ch2[2])).next, true);
+    eq('paths: a locked cavern says what opens it', (await nodeState(p, ch2[5])).label,
+      `Level ${ch2[5].id}, locked. Solve one of the three levels before it first.`);
+    await p.page.locator(`.node[data-level="${ch2[4].id}"]`).scrollIntoViewIfNeeded();
+    await p.shot('paths-map');
+    // a tap on the third open one plays it
+    await p.page.locator(`.node[data-level="${ch2[4].id}"]`).tap();
+    await p.page.waitForFunction(() => window.__gd.screen() === 'level');
+    eq('paths: a cavern two ahead plays', (await p.gd('state')) && (await p.page.locator('#level-id').textContent()).includes(ch2[4].id), true);
+    // stuck there: the nudge names the two other open caverns
+    if ((await p.gd('panel')) === 'card') await p.page.keyboard.press('Escape');
+    const s0 = engine.parseLevel(ch2[4]);
+    const pair = ['E', 'W', 'N', 'S'].map((d) => [d, { E: 'W', W: 'E', N: 'S', S: 'N' }[d]]).find(([a, b]) => {
+      const one = engine.step(s0, a);
+      return one && !one.solved && engine.step(one, b);
+    });
+    if (pair) {
+      for (let k = 0; k < ch2[4].par + 6; k++) {
+        await p.gd('act', pair[k % 2]);
+      }
+      await p.idle();
+      eq('paths: the stuck nudge points at the other open caverns', ((await p.page.locator('#status').textContent()) || '').trim(),
+        'Stuck? Hint helps a step at a time, and two other caverns are open on the map.');
+      await p.shot('paths-stuck');
+    } else {
+      ok(`paths: ${ch2[4].id} has a step and its way back from the start`, false);
+    }
+    await p.close();
+
+    // 2-3 skipped: 2-4 and 2-5 lit, 2-3 stays open and the marker waits there; the window moves on to 2-8
+    const q = await phone({ tag: 'paths-skip', seed: { levels: rec([...ch1, ch2[0], ch2[1], ch2[3], ch2[4]]), seen, critters: [], shop, settings: { tutorials: false } } });
+    await q.open();
+    await q.toMap();
+    eq('paths: a skipped cavern stays open, and the window moves on', await openIds(q, ch2), ch2.slice(0, 8).map((d) => d.id));
+    eq('paths: the marker waits on the skipped one', [(await nodeState(q, ch2[2])).next, (await nodeState(q, ch2[5])).next], [true, false]);
+    eq('paths: the next chapter still waits for this one\'s last cavern', (await nodeState(q, CHAPTERS[2].levels[0])).locked, true);
+    await q.close();
+
+    // chapter 1 keeps its order
+    const r = await phone({ tag: 'paths-ch1', seed: { levels: rec([ch1[0], ch1[1]]), seen, critters: [], settings: { tutorials: true } } });
+    await r.open();
+    await r.toMap();
+    eq('paths: chapter 1 keeps its order', await openIds(r, ch1), ch1.slice(0, 3).map((d) => d.id));
+    eq('paths: and its locked caverns say so', (await nodeState(r, ch1[3])).label, `Level ${ch1[3].id}, locked. Solve the level before it first.`);
+    // with no other cavern open, the stuck nudge is the plain one
+    {
+      const def = ch1[2];
+      await r.page.locator(`.node[data-level="${def.id}"]`).tap();
+      await r.page.waitForFunction(() => window.__gd.screen() === 'level');
+      if ((await r.gd('panel')) === 'card') await r.page.keyboard.press('Escape');
+      const s1 = engine.parseLevel(def);
+      const back = ['E', 'W', 'N', 'S'].map((d) => [d, { E: 'W', W: 'E', N: 'S', S: 'N' }[d]]).find(([a, b]) => {
+        const one = engine.step(s1, a);
+        return one && !one.solved && engine.step(one, b);
+      });
+      if (back) {
+        for (let k = 0; k < def.par + 6; k++) await r.gd('act', back[k % 2]);
+        await r.idle();
+        eq('paths: with nothing else open, the stuck nudge is the plain one', ((await r.page.locator('#status').textContent()) || '').trim(),
+          'Stuck? Hint helps a step at a time, and Undo steps back.');
+      } else {
+        ok(`paths: ${def.id} has a step and its way back from the start`, false);
+      }
+    }
+    await r.close();
+  }
+
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'workshop')) await workshopChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'controls')) await controlsChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'talk')) await talkChecks();
+  if (!SHOTS_ONLY && (!ONLY || ONLY === 'paths')) await pathsChecks();
 
   // ------------------------------------------------------------------ screenshots
   if (!ONLY) {

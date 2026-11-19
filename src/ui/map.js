@@ -125,7 +125,7 @@ function workshopCard(w) {
 // opts: { chapters, levels, records: { [id]: { moves, stars } }, isUnlocked(def), onOpen(def), onLocked(def, node),
 //         chapterLocked(chapter) (part of the Full Expedition, not bought), onShop(chapter), daily (see dailyCard),
 //         label(def) (what a level is called, default "Level <id>"), note(chapter) (what a closed section waits
-//         for, or '') , workshop (see workshopCard) }
+//         for, or '') , workshop (see workshopCard), why(def) (what opens a locked level, SPEC section 29) }
 // A chapter may carry a kicker (the line over its name, default "Chapter <id>") and a night flag.
 export function renderMap(root, opts) {
   root.textContent = '';
@@ -186,7 +186,8 @@ export function renderMap(root, opts) {
         const stars = record ? record.stars : 0;
         const what = def.gloam ? ', Gloam encounter' : '';
         const title = opts.label ? opts.label(def) : `Level ${def.id}`;
-        const why = paid ? 'Part of the Full Expedition.' : i === 0 && note ? note : 'Solve the level before it first.';
+        const why = paid ? 'Part of the Full Expedition.' : i === 0 && note ? note
+          : opts.why ? opts.why(def) : 'Solve the level before it first.';
         node.setAttribute('aria-label', open
           ? `${title}, ${def.name}${what}` + (record ? `, ${stars} of 3 star moss, best ${record.moves} moves` : ', not solved yet')
           : `${title}${what}, locked. ${why}`);

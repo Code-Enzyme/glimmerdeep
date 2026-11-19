@@ -25,6 +25,7 @@ import { HintLadder, pieceText } from './ui/hints.js';
 import { previewOf } from './ui/preview.js';
 import { reducedMotion, swipeNeed } from './ui/comfort.js';
 import { describeBoard, describeTurn, describeRefusal, describeBack } from './ui/talk.js';
+import { levelOpen, lockedWhy, othersOpen } from './ui/paths.js';
 import { CRITTERS, critterKind, dailyCritterKind, isFound, markFound, critterJournal } from './ui/critters.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
@@ -195,9 +196,16 @@ function isUnlocked(def) {
   if (forceUnlock) return true;
   if (chapterLocked(chapterOf(def))) return false;   // Unlock all skips the level order, never the purchase
   if (NIGHT.includes(def)) return puzzleOpen(def, save, NIGHT, LEVELS, save.settings.unlockAll);
-  const i = LEVELS.indexOf(def);
-  if (i <= 0 || save.settings.unlockAll) return true;
-  return !!save.levels[def.id] || !!save.levels[LEVELS[i - 1].id];
+  if (!LEVELS.includes(def) || save.settings.unlockAll) return true;
+  return levelOpen(def, CHAPTERS, save.levels);   // open ahead (SPEC section 29)
+}
+
+// The stuck nudge (SPEC section 12) points at the other open caverns when there are some (section 29).
+function stuckText() {
+  const n = current.adhoc || current.day ? 0 : othersOpen(current.def, LEVELS, isUnlocked, save.levels);
+  if (!n) return STUCK_TEXT;
+  const count = n === 1 ? 'one other cavern is' : `${['two', 'three', 'four', 'five'][n - 2] || n} other caverns are`;
+  return `Stuck? Hint helps a step at a time, and ${count} open on the map.`;
 }
 
 // ---------------------------------------------------------------- the Daily Glimmer (SPEC section 15)
@@ -353,6 +361,7 @@ function drawMap() {
     chapters: NIGHT.length ? [...CHAPTERS, GARDEN] : CHAPTERS,
     levels: [...LEVELS, ...NIGHT],
     label: levelTitle,
+    why: (def) => lockedWhy(def, CHAPTERS),   // what opens a locked cavern (SPEC section 29)
     // what a closed section waits for: the garden before its first puzzle opens (SPEC section 20)
     note: (chapter) => (chapter === GARDEN && !forceUnlock && !puzzleOpen(NIGHT[0], save, NIGHT, LEVELS, save.settings.unlockAll)
       ? gardenNote(gardenState(save, LEVELS)) : ''),
@@ -705,7 +714,7 @@ function refreshStatus() {
     showWayStatus(way);
     return;
   } else if (stuck > 0) {
-    text = STUCK_TEXT;
+    text = stuckText();
   } else if (step && typeof step.say === 'string' && step.say) {
     text = step.say;
   } else if (critterNote) {

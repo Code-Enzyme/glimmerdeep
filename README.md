@@ -29,6 +29,10 @@ instant hints; a free hint comes every ten minutes anyway. No ads, no energy, no
 sell through Google Play Billing (`android/.../BillingPlugin.java`); debug builds and browsers use a
 free test store, so every purchase can be tried without a Play account (SPEC section 14).
 
+Mossmouth, the first chapter, is played in order. From chapter 2 on, every lit cavern opens the three after
+it, so a player stuck on one always has two others to try; a chapter still opens only once the chapter
+before is finished (SPEC section 29, `src/ui/paths.js`).
+
 The Daily Glimmer, the map's first card, is one cavern a day, the same for everyone on the same date:
 light it to keep a streak going, and earn a Glimmer the first time each day. The Full Expedition opens
 the last six days too, so a missed day can be mended (SPEC section 15).

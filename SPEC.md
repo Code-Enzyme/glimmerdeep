@@ -474,7 +474,8 @@ and never ask for a move the solution does not need.
 - **Stuck nudge:** on a level that has never been solved, with Tutorials on, once per visit: when the move
   count reaches par + 6 and the level is not solved, the Hint button pulses and the status row says
   "Stuck? Hint helps a step at a time, and Undo steps back." It goes away after a hint, an undo, a restart
-  or four more moves.
+  or four more moves. When other caverns are open and not yet lit (section 29), it says so instead of Undo:
+  "Stuck? Hint helps a step at a time, and two other caverns are open on the map." ("one other cavern is").
 - The **Tutorials** setting sits with the other settings on the map. Resetting progress brings every
   tutorial back, because the levels are no longer solved.
 - `src/ui/tutorial.js` holds the step logic (no DOM), so it can be tested in Node. `checkTutorial(def)`
@@ -541,7 +542,7 @@ lives. Prices and amounts marked [PLACEHOLDER - PLAYTEST] are starting points, n
   Prices on screen come from the store in the player's own currency; the table's prices only show in the
   test store and while real prices load ("…" until then).
 - **Chapters:** chapter 1 is free. A level in any later chapter opens only with the Full Expedition, and
-  then by the usual rule (it is solved, or the level before it is). The **Unlock all** setting skips the
+  then by the usual order (section 29). The **Unlock all** setting skips the
   level order, never the purchase. Developer links skip both: `?unlock=1` opens everything, and
   `?level=<id>` (and the `loadLevel` check hook) opens any level.
 - **Hints:** a hint is **free** when no free hint was taken in the last 10 minutes [PLACEHOLDER - PLAYTEST]
@@ -1083,3 +1084,25 @@ two tiles north')". The board is a picture, so a player who cannot see it well n
 - **The voice** is the one call in `src/ui/native.js`, `speak(text)` (an empty text stops it): the app's
   `Speech` plugin (Android TextToSpeech, the phone's language, else English) and the browser's
   speechSynthesis elsewhere; with neither it does nothing.
+
+## 29. Open ahead: a stuck player has other caverns (decided 19 Nov 2026)
+
+The design doc: "from chapter 2 the map branches, so a stuck player always has two or three other caverns
+open." The map keeps its one trail per chapter; what changes is how far ahead it opens.
+
+- **Chapter 1** (Mossmouth) keeps its order: a cavern opens when it is lit or the one before it is lit. It
+  teaches the game one idea at a time.
+- **A chapter's first cavern** opens when it is lit or the last cavern of the chapter before (its Gloam
+  encounter) is lit, so the story page and the new creature's tutorial always come first. The very first
+  cavern is always open.
+- **From chapter 2, every other cavern** opens when it is lit or when any of the three caverns before it in
+  its chapter is lit. So a player who has lit 2-2 can play 2-3, 2-4 or 2-5: stuck on one, two others wait.
+  The Gloam encounter follows the same rule. Nothing is lost by skipping: a skipped cavern stays open.
+- **The map** shows the open caverns without a lock, as now; its marker stays on the first open cavern not
+  yet lit, so a skipped one is where the marker waits. A locked cavern's label says what opens it: "Solve
+  the level before it first." (chapter 1, a chapter's first cavern, and a chapter's second), "Solve one of
+  the two levels before it first." (third) or "Solve one of the three levels before it first.".
+- The Full Expedition, the Night Garden's own order (section 20), Unlock all and `?unlock=1` are unchanged.
+- `src/ui/paths.js` (no DOM): `AHEAD` (3), `levelOpen(def, chapters, records)` (the order alone, no
+  purchase), `lockedWhy(def, chapters)` (the label's sentence) and `othersOpen(def, levels, isOpen,
+  records)` (how many caverns other than `def` are open and not lit, for the stuck nudge).
