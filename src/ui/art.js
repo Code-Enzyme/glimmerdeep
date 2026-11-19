@@ -3,7 +3,7 @@
 // canvas), plus the star-moss mark as inline SVG.
 
 import { drawIcon, PALETTE } from '../sprites.js';
-import { drawTile, drawWren, drawCreature, drawGlow, drawLantern, drawCritter, CRITTER_KINDS, charStyle } from '../chars.js';
+import { drawTile, drawWren, drawCreature, drawGlow, drawLantern, drawCritter, CRITTER_KINDS, charStyle, lanternStyle, setLanternStyle } from '../chars.js';
 
 function paint(cssSize, scale, painter, cssHeight) {
   try {
@@ -75,7 +75,7 @@ const portraitCache = new Map();
 // A fully lit portrait for a rule card. kind: 'wren' | 'lantern' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R' | 'A' | 'bud' | 'root' | 'gate' |
 // 'puddle' | 'hush' ('A' is the Shutter: a lantern aimed east)
 export function portraitUrl(kind, accent) {
-  const k = kind + '|' + (accent || '') + '|' + charStyle();
+  const k = kind + '|' + (accent || '') + '|' + charStyle() + '|' + lanternStyle().id;
   let url = portraitCache.get(k);
   if (url !== undefined) return url;
   const size = 72;
@@ -120,6 +120,30 @@ export function portraitUrl(kind, accent) {
     }
   });
   portraitCache.set(k, url);
+  return url;
+}
+
+// A lantern style's picture for the Lantern styles sheet (SPEC section 24): the planted lantern lit in its colours.
+const swatchCache = new Map();
+export function lanternSwatchUrl(style) {
+  let url = swatchCache.get(style.id);
+  if (url !== undefined) return url;
+  const was = lanternStyle();
+  setLanternStyle(style);
+  const size = 64;
+  url = paint(size, 2, (g) => {
+    g.fillStyle = PALETTE.night;
+    g.fillRect(0, 0, size, size);
+    const glow = g.createRadialGradient(size / 2, size * 0.6, 2, size / 2, size * 0.6, size * 0.5);
+    const [r, gr, b] = style.light;
+    glow.addColorStop(0, `rgba(${r},${gr},${b},0.55)`);
+    glow.addColorStop(1, `rgba(${r},${gr},${b},0)`);
+    g.fillStyle = glow;
+    g.fillRect(0, 0, size, size);
+    drawLantern(g, 0, -size * 0.04, size, { t: 0.3 });
+  });
+  setLanternStyle(was);
+  swatchCache.set(style.id, url);
   return url;
 }
 
@@ -209,7 +233,7 @@ function paintRoot(g, state, cx, floorY) {
 // them, the Gloam at the edge, all in the dark around Wren's lantern. -> a PNG data URL, or ''.
 export function sceneUrl(scene, accent) {
   const cast = (scene && scene.cast) || [];
-  const k = JSON.stringify([cast, scene && scene.gloam, scene && scene.root, accent || '', charStyle()]);
+  const k = JSON.stringify([cast, scene && scene.gloam, scene && scene.root, accent || '', charStyle(), lanternStyle().id]);
   let url = sceneCache.get(k);
   if (url !== undefined) return url;
   url = paint(SCENE_W, 2, (g) => {

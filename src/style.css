@@ -432,22 +432,36 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 }
 .confirm p { font: calc(17px * var(--ts))/1.35 var(--serif); margin-bottom: 14px; }
 
-/* The Field Journal and Store buttons: wide paper buttons just above the settings, in thumb reach. */
-.journal-row { flex: none; display: flex; justify-content: center; gap: 10px; padding: 6px 14px 10px; }
+/* The Field Journal, Store and Lantern buttons: paper buttons just above the settings, in thumb reach. The Journal
+   is wide (its count sits under its name); the Store and Lantern are small, an icon over a short label. */
+.journal-row { flex: none; display: flex; justify-content: center; gap: 8px; padding: 6px 12px 10px; }
 .journal-open {
   flex: 1 1 auto;
+  min-width: 0;
   max-width: 320px;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 2px;
   padding: 8px 14px;
+  text-align: left;
 }
-.journal-open .ico { width: 30px; height: 30px; }
-.journal-open .lbl { flex: 1; text-align: left; font: 700 18px/1.1 var(--serif); }
+.journal-open .ico { width: 30px; height: 30px; grid-row: span 2; }
+.journal-open .lbl { font: 700 18px/1.1 var(--serif); }
 .journal-open .val { font: 600 14px/1.1 var(--sans); color: #4B3856; white-space: nowrap; }
-.shop-open { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 14px; }
+.shop-open {
+  flex: 0 0 auto;
+  min-width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 10px;
+}
 .shop-open .ico { width: 26px; height: 26px; }
-.shop-open .lbl { font: 700 18px/1.1 var(--serif); }
+.shop-open .lbl { font: 700 14px/1.1 var(--sans); }
 
 /* A chapter that is part of the Full Expedition (SPEC section 14) */
 .chapter-unlock {
@@ -908,6 +922,9 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   .bar { gap: 4px; padding-left: 5px; padding-right: 5px; }
   .heading h2 { font-size: 19px; }
   .topbar { gap: 6px; padding-left: 6px; padding-right: 6px; }
+  .journal-open { column-gap: 8px; padding: 8px 10px; }
+  .journal-open .lbl { font-size: 16px; }
+  .shop-open { min-width: 64px; padding: 6px 8px; }
 }
 
 @media (max-height: 660px) {
@@ -983,6 +1000,42 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .choice[aria-pressed="true"] { background: var(--amber); box-shadow: inset 0 -3px 0 rgba(36, 22, 46, 0.25); }
 .hc .choice { background: #FFFFFF; }
 .hc .choice[aria-pressed="true"] { background: #FFD27A; }
+
+/* The Lantern styles sheet (SPEC section 24) */
+.lanterns { z-index: 8; }
+.lantern-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.style {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 8px 10px;
+  text-align: left;
+  color: var(--ink);
+  background: var(--paper-shade);
+  border: 2px solid var(--ink);
+  border-radius: var(--wobble-small);
+}
+.style.using { background: var(--amber); box-shadow: inset 0 -3px 0 rgba(36, 22, 46, 0.25); }
+.style.locked { border-style: dashed; opacity: 0.8; }
+.style-art {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: #21172F center / cover no-repeat;
+}
+.style.locked .style-art { filter: grayscale(0.85) brightness(0.7); }
+.style-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.style-name { font: 700 18px/1.15 var(--serif); }
+.style-note { font: italic calc(14px * var(--ts))/1.3 var(--serif); color: #4B3856; }
+.style-state { display: flex; align-items: center; gap: 4px; font: 700 14px/1.2 var(--sans); }
+.style-state .ico { width: 16px; height: 16px; }
+.hc .style { background: #FFFFFF; }
+.hc .style.using { background: #FFD27A; }
+.hc .style-note { color: var(--ink); }
 
 /* ------------------------------------------------------------------ store (SPEC section 14) */
 

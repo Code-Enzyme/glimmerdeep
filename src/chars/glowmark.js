@@ -9,10 +9,16 @@
 // canvases: the body (normal blend) and its glow (drawn with 'lighter' at a pulsing alpha). A frame is
 // then a few drawImage calls per character. Canvases are made lazily, so the module imports in Node.
 import { PALETTE } from '../sprites.js';
+import { LANTERNS } from '../ui/lanterns.js';
 
 const TAU = Math.PI * 2;
 const TEAL = PALETTE.teal || '#5FBFA8';
 const AMBER = PALETTE.amber || '#F2B04C';
+// the lantern style in use (SPEC section 24); every cached picture with the lantern in it carries its id
+let LS = LANTERNS[0];
+export function setLanternStyle(style) {
+  if (style && style.glass) LS = style;
+}
 const CREAM = PALETTE.cream || '#F4EAD5';
 const TRIM = '#F7D59C'; // Wren's cloak trim: pale lantern-cream
 const OUTLINE = 'rgba(10,5,16,0.8)';
@@ -432,8 +438,11 @@ function shadow(ctx, b, cx, cy, w, h, a) {
   ctx.drawImage(s, cx - w / 2, cy - h / 2, w, h);
   ctx.globalAlpha = al;
 }
-function halo(ctx, b, cx, cy, d, a) {
-  const s = radialSprite(b, 'halo', [0, 'rgba(255,226,160,0.95)', 0.22, 'rgba(250,190,96,0.5)', 0.55, 'rgba(242,150,60,0.14)', 1, 'rgba(242,140,60,0)']);
+// look: whose colours (the lantern style in use; an Emberwick keeps the amber it always had)
+function halo(ctx, b, cx, cy, d, a, look = LS) {
+  const { inner, mid, outer } = look.halo;
+  const c = (rgb, al) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${al})`;
+  const s = radialSprite(b, 'halo' + look.id, [0, c(inner, 0.95), 0.22, c(mid, 0.5), 0.55, c(outer, 0.14), 1, c(outer, 0)]);
   if (!s) return;
   const al = ctx.globalAlpha;
   const op = ctx.globalCompositeOperation;
@@ -463,13 +472,13 @@ function paintLantern(p, cx, top, w, h, on, f) {
   const glass = rrect(cx - 0.5 * w, top + 0.28 * h, w, 0.56 * h, 0.32 * w);
   if (on) {
     const gr = g.createRadialGradient(cx, top + 0.6 * h, 0.02 * w, cx, top + 0.58 * h, 0.62 * w);
-    gr.addColorStop(0, '#FFF8DA');
-    gr.addColorStop(0.35, '#FFDB8E');
-    gr.addColorStop(0.75, AMBER);
-    gr.addColorStop(1, '#C27632');
+    gr.addColorStop(0, LS.glass[0]);
+    gr.addColorStop(0.35, LS.glass[1]);
+    gr.addColorStop(0.75, LS.glass[2]);
+    gr.addColorStop(1, LS.glass[3]);
     if (p.glow) {
       g.save();
-      g.shadowColor = AMBER;
+      g.shadowColor = LS.glow;
       g.shadowBlur = p.P * 0.12;
       g.fillStyle = gr;
       g.fill(glass);
@@ -477,7 +486,7 @@ function paintLantern(p, cx, top, w, h, on, f) {
     } else {
       g.fillStyle = gr;
       g.fill(glass);
-      g.strokeStyle = '#8A4E22';
+      g.strokeStyle = LS.rim;
       g.lineWidth = p.lw(0.03 * w);
       g.stroke(glass);
     }
@@ -490,7 +499,7 @@ function paintLantern(p, cx, top, w, h, on, f) {
       [cx - 0.07 * w, top + 0.7 * h],
       [cx - 0.1 * w, top + 0.58 * h],
     ]);
-    g.fillStyle = '#FFFDF0';
+    g.fillStyle = LS.flame;
     g.fill(fl);
   } else {
     p.body(glass, cx, top + 0.56 * h, 0.5 * w, T_DEADGLASS, 0.015);
@@ -647,7 +656,7 @@ function wrenSpec(b, o) {
   const carrying = o.carrying ? 1 : 0;
   const out = carrying && o.smothered ? 1 : 0;
   const on = carrying && !out;
-  const s = get(b, 'W' + d + carrying + out, (p) => paintWren(p, d, carrying, out, 0), null, on ? 0.92 : out ? 0.25 : 0.62);
+  const s = get(b, 'W' + d + carrying + out + (carrying ? LS.id : ''), (p) => paintWren(p, d, carrying, out, 0), null, on ? 0.92 : out ? 0.25 : 0.62);
   const br = Math.sin(t * (out ? 1.4 : 2.3));
   return { s, d, on, sx: 1 - 0.012 * br, sy: (out ? 0.95 : 1) * (1 + 0.022 * br) };
 }
@@ -679,7 +688,7 @@ function paintShutter(p, d, on) {
   else { leaves.push(leaf(cx - 0.2, cx - 0.1)); leaves.push(leaf(cx + 0.1, cx + 0.2)); }
   for (const l of leaves) {
     p.body(l, cx, (top + bot) / 2, 0.2, T_METAL, 0.01);
-    if (on) p.line(l, AMBER, 0.01, 0.5, 0.03);
+    if (on) p.line(l, LS.glow, 0.01, 0.5, 0.03);
   }
   // a little arrow of light on the open side, so the aim reads even when the beam is short
   if (!on) return;
@@ -700,7 +709,7 @@ export function drawLantern(ctx, px, py, size, opts) {
   const on = !o.out;
   const f = on ? Math.floor(t * 8) & 3 : 0;
   const d = DIRS[o.beam] === undefined ? -1 : DIRS[o.beam];
-  const s = get(b, 'L' + (on ? f : 'out') + (d < 0 ? '' : 'b' + d), (p) => {
+  const s = get(b, 'L' + (on ? f : 'out') + (d < 0 ? '' : 'b' + d) + LS.id, (p) => {
     groundShadow(p, 0.5, 0.9, 0.26, 0.065, 0.7);
     // a little iron foot pushed into the floor
     const foot = roundPoly([[0.4, 0.86], [0.6, 0.86], [0.66, 0.92], [0.34, 0.92]], 0.02);
@@ -1567,7 +1576,7 @@ export function drawCreature(ctx, type, px, py, size, opts) {
   if (sp.hover !== false) shadow(ctx, b, px + 0.5 * size, py + 0.88 * size, (0.5 - 0.04 * sp.hover) * size, 0.12 * size, 0.38);
   put(ctx, sp.s, px, py + sp.dy * size, size, sp.glowA, sp.sx, sp.sy, sp.ax, sp.ay);
   if (sp.zed) drawZed(ctx, b, px, py, size, o.t || 0, false);
-  if (sp.flame > 0) halo(ctx, b, px + 0.505 * size, py + (0.22 + sp.dy) * size, size * 0.9, sp.flame);   // a glowing Emberwick's flame
+  if (sp.flame > 0) halo(ctx, b, px + 0.505 * size, py + (0.22 + sp.dy) * size, size * 0.9, sp.flame, LANTERNS[0]);   // a glowing Emberwick's flame
 }
 
 // Emissive pass, drawn after the darkness. On an unlit tile only the luminous markings and a faint rim

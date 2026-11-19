@@ -7,10 +7,11 @@
 import { freshShop, readShop } from './shop.js';
 import { readDaily } from './daily.js';
 import { COMFORT_DEFAULTS, readComfort } from './comfort.js';
+import { DEFAULT_LANTERN, readLantern } from './lanterns.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
-const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS };
+const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS, lantern: DEFAULT_LANTERN };
 
 function freshSave() {
   return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, settings: { ...SETTING_DEFAULTS }, rev: 0 };
@@ -19,7 +20,7 @@ function freshSave() {
 // -> { levels: { [id]: { moves, stars } }, seen: [story page id], critters: [level id] (section 23),
 //      shop: { full, glimmer, freeAt, paid },
 //      daily: { [YYYY-MM-DD]: { moves, stars } },
-//      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion }, rev }
+//      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion, lantern }, rev }
 export function loadSave() {
   let raw = null;
   try {
@@ -64,6 +65,7 @@ export function parseSave(raw) {
         if (typeof parsed.settings[k] === 'boolean' && typeof SETTING_DEFAULTS[k] === 'boolean') data.settings[k] = parsed.settings[k];
       }
       Object.assign(data.settings, readComfort(parsed.settings));   // SPEC section 22
+      data.settings.lantern = readLantern(parsed.settings.lantern);  // SPEC section 24
     }
     const rev = Number(parsed.rev);
     if (Number.isFinite(rev) && rev > 0) data.rev = Math.floor(rev);

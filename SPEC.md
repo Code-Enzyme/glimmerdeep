@@ -866,3 +866,42 @@ rule: the engine, the solver's solutions and every par stay as they are, and ske
   Mossmouth." The heading counts "23 of 121 found".
 - **Save:** the save gains `critters`, the ids of the levels whose critter is found (strings, no repeats).
   Reset progress clears it with the levels.
+
+## 24. Lantern styles (decided 19 Nov 2026)
+
+Wren's lantern can wear other colours, earned with star moss (design doc: "star moss unlocks lantern
+skins"). Nothing is sold: no store product, no Play Console setup. Purely cosmetic: the light reaches exactly
+the same tiles in every style.
+
+- **Styles** live in `src/ui/lanterns.js` (no DOM, tested in Node), in this order:
+
+  | id | Name | Star moss | Light |
+  | --- | --- | --- | --- |
+  | `tallow` | Tallow | 0 | lantern amber, as before |
+  | `mossglow` | Mossglow | 30 | moss green |
+  | `emberrose` | Ember rose | 60 | warm rose |
+  | `moonglass` | Moonglass | 100 | pale moon blue |
+  | `heartroot` | Heartroot | 150 | deep gold |
+  | `gloamlight` | Gloamlight | 200 | soft violet |
+
+  The counts are [PLACEHOLDER - PLAYTEST]. Each style also has its colours (glass, flame, halo and the light
+  on lit tiles) and a short note of at most 100 characters that follows the story's text rules (section 13);
+  `checkLanterns()` lists what is wrong.
+- **Star moss** here is every star moss in the save's level records: the chapters and the Night Garden, not
+  the Daily Glimmer. A style is **unlocked** while that count is at least its number. The **Unlock all**
+  setting never unlocks a style.
+- **The choice** is saved as `settings.lantern`, a style id (anything else reads as `tallow`). The style
+  **in use** is the chosen one while it is unlocked, else Tallow. Reset progress keeps the choice (it is a
+  setting), but the star moss starts again, so Tallow is back until the moss is earned again.
+- **What changes:** the lantern's glass, flame and halo, carried and planted, wherever it is drawn (the board,
+  the title, story pictures, rule card pictures), and the colour of the lantern's warm light over lit tiles.
+  **What never changes:** which tiles are lit, the darkness, Glowbuds, the beam's reach, an Emberwick's own
+  glow, and the High contrast darkness.
+- **The map:** a third button in the row with Field Journal and Store, **Lantern** (aria-label "Lantern
+  styles", icon: a small lantern with rays). The Store and Lantern buttons are small, an icon over a short
+  label, so the row fits a 360 px wide phone. It opens the **Lantern styles** sheet: "Wren's lantern" over "Lantern styles", the line "You
+  have 64 star moss.", then one button per style with its picture, its name, its note and its state: "In
+  use", "Use it", or, while locked, "Needs 100 star moss" (aria-disabled, with a lock). Tapping an unlocked
+  style uses it at once (it plays `'plant'`) and the sheet stays open; a locked one plays `'blocked'` and
+  nothing changes.
+  Done, Escape, Back or a tap outside closes it.

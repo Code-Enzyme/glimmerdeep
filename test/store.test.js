@@ -22,7 +22,7 @@ test('store: a fresh save has no levels, no seen story pages and the default set
   assert.deepEqual(save.levels, {});
   assert.deepEqual(save.seen, []);
   assert.deepEqual(save.settings, {
-    sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system',
+    sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow',
   });
 });
 
@@ -244,4 +244,17 @@ test('store: adopting a newer save takes every part of it, the found critters to
   assert.equal(adoptInto(mine, other), true);
   for (const k of Object.keys(parseSave(null))) assert.deepEqual(mine[k], other[k], k);
   assert.deepEqual(mine.critters, ['1-1']);
+});
+
+test('store: the chosen lantern style round-trips, junk reads as Tallow, and a reset keeps it (SPEC section 24)', () => {
+  const data = withStorage();
+  const save = loadSave();
+  save.settings.lantern = 'moonglass';
+  writeSave(save);
+  assert.equal(JSON.parse(data.get(SAVE_KEY)).settings.lantern, 'moonglass');
+  assert.equal(loadSave().settings.lantern, 'moonglass');
+  withStorage(JSON.stringify({ settings: { lantern: 'disco' } }));
+  assert.equal(loadSave().settings.lantern, 'tallow');
+  clearProgress(save);
+  assert.equal(save.settings.lantern, 'moonglass');
 });

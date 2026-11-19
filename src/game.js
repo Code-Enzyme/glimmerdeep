@@ -16,7 +16,9 @@ import {
   loadSave, writeSave, recordResult, clearProgress, parseSave, adoptInto, setSaveMirror, saveWrites, savedDurably,
 } from './ui/store.js';
 import { BoardView } from './ui/board.js';
-import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg, wayMoveSvg } from './ui/art.js';
+import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg, wayMoveSvg, lanternSwatchUrl } from './ui/art.js';
+import { setLanternStyle, lanternStyle } from './chars.js';
+import { LANTERNS, lanternInUse, isUnlocked as styleUnlocked, starMoss } from './ui/lanterns.js';
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { HintLadder, pieceText } from './ui/hints.js';
 import { previewOf } from './ui/preview.js';
@@ -305,6 +307,7 @@ function leaveLevel() {
 
 function showTitle() {
   leaveLevel();
+  applyLantern();
   titleProgress();
   showScreen('title');
 }
@@ -323,6 +326,7 @@ function showMap() {
 }
 
 function drawMap() {
+  applyLantern();
   renderMap(chaptersEl, {
     chapters: NIGHT.length ? [...CHAPTERS, GARDEN] : CHAPTERS,
     levels: [...LEVELS, ...NIGHT],
@@ -571,6 +575,7 @@ function openLevel(def, adhoc, day) {
   celebrating = false;
   lastBloom = -1;
   view.highContrast = save.settings.contrast;
+  applyLantern();
   const critter = session.critter ? { ...session.critter, kind: current.critterKind.kind, found: session.found } : null;
   view.setLevel(session.state, { accent: current.chapter.accent, facing: session.facing, critter });
   $('level-id').textContent = day ? `Daily Glimmer, ${dateLabel(day)}` : levelTitle(def);
@@ -1194,9 +1199,78 @@ function showResult() {
 
 // ---------------------------------------------------------------- panels
 
+// ---------------------------------------------------------------- lantern styles (SPEC section 24)
+
+// The style in use goes to the art: the chosen one while it is unlocked, else Tallow.
+function applyLantern() {
+  setLanternStyle(lanternInUse(save));
+}
+
+function renderLanterns() {
+  const moss = starMoss(save);
+  const inUse = lanternInUse(save);
+  $('lanterns-moss').textContent = `You have ${moss} star moss.`;
+  const list = $('lantern-list');
+  list.textContent = '';
+  for (const style of LANTERNS) {
+    const open = styleUnlocked(style, save);
+    const using = style === inUse;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'style' + (using ? ' using' : '') + (open ? '' : ' locked');
+    b.dataset.style = style.id;
+    b.setAttribute('aria-pressed', using ? 'true' : 'false');
+    if (!open) b.setAttribute('aria-disabled', 'true');
+    const state = using ? 'In use' : open ? 'Use it' : `Needs ${style.moss} star moss`;
+    b.setAttribute('aria-label', `${style.name}. ${state}.`);
+    const art = document.createElement('span');
+    art.className = 'style-art';
+    art.setAttribute('aria-hidden', 'true');
+    const url = lanternSwatchUrl(style);
+    if (url) art.style.backgroundImage = `url(${url})`;
+    b.appendChild(art);
+    const body = document.createElement('span');
+    body.className = 'style-body';
+    const name = document.createElement('span');
+    name.className = 'style-name';
+    name.textContent = style.name;
+    const note = document.createElement('span');
+    note.className = 'style-note';
+    note.textContent = style.note;
+    const tag = document.createElement('span');
+    tag.className = 'style-state';
+    if (!open) {
+      const lock = document.createElement('span');
+      lock.className = 'ico';
+      lock.setAttribute('aria-hidden', 'true');
+      setIcon(lock, 'lock', '#24162E');
+      tag.appendChild(lock);
+    }
+    tag.appendChild(document.createTextNode(state));
+    body.append(name, note, tag);
+    b.appendChild(body);
+    onClick(b, () => chooseLantern(style));
+    list.appendChild(b);
+  }
+}
+
+function chooseLantern(style) {
+  if (!styleUnlocked(style, save)) {
+    sfx('blocked');
+    return;
+  }
+  save.settings.lantern = style.id;
+  writeSave(save);
+  applyLantern();
+  sfx('plant');
+  renderLanterns();
+  const pressed = $('lantern-list').querySelector('.style.using');
+  if (pressed) pressed.focus({ preventScroll: true });
+}
+
 function openPanel(name) {
   panel = name;
-  if (name === 'shop' || name === 'comfort') {
+  if (name === 'shop' || name === 'comfort' || name === 'lanterns') {
     shopScrim.hidden = false;
   } else if (name !== 'confirm') {
     scrim.hidden = false;
@@ -1206,7 +1280,8 @@ function openPanel(name) {
   el.hidden = false;
   const focus = name === 'result'
     ? ($('result-next').hidden ? $('result-replay') : $('result-next'))
-    : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : name === 'comfort' ? $('comfort-close') : $('confirm-no');
+    : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : name === 'comfort' ? $('comfort-close')
+      : name === 'lanterns' ? $('lanterns-close') : $('confirm-no');
   try {
     focus.focus({ preventScroll: true });
   } catch (e) {
@@ -1603,7 +1678,17 @@ onClick($('shop-close'), () => {
   closePanel();
 });
 shopScrim.addEventListener('click', () => {
-  if (panel === 'shop' || panel === 'comfort') closePanel();
+  if (panel === 'shop' || panel === 'comfort' || panel === 'lanterns') closePanel();
+});
+onClick($('btn-lanterns'), () => {
+  play('ui');
+  if (panel) closePanel();
+  renderLanterns();
+  openPanel('lanterns');
+});
+onClick($('lanterns-close'), () => {
+  play('ui');
+  closePanel();
 });
 onClick($('set-comfort'), () => {
   play('ui');
@@ -1840,6 +1925,8 @@ window.__gd = {
     ? { ...session.critter, shows: session.critterShows(), found: session.found, kind: current.critterKind.kind, name: current.critterKind.name }
     : null),
   sketch: () => sketchCritter(),
+  // the lantern style the drawing uses now (SPEC section 24)
+  lantern: () => lanternStyle().id,
   hintStep: () => (ladder ? ladder.tier : 0),
   way: () => {
     const way = ladder && session && !session.solved ? ladder.following(session.state) : null;

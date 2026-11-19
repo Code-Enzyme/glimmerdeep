@@ -4,7 +4,7 @@
 
 import { DIRS, terrainAt, beamPath } from '../engine.js';
 import { drawDarkness, drawBackdrop, PALETTE } from '../sprites.js';
-import { drawTile, drawWren, drawLantern, drawCreature, drawGlow, drawCritter } from '../chars.js';
+import { drawTile, drawWren, drawLantern, drawCreature, drawGlow, drawCritter, lanternStyle } from '../chars.js';
 
 const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',
@@ -681,7 +681,7 @@ export class BoardView {
       }
     }
 
-    drawDarkness(ctx, { ox, oy, size, w: s.w, h: s.h, lit, source, t, highContrast: this.highContrast });
+    drawDarkness(ctx, { ox, oy, size, w: s.w, h: s.h, lit, source, t, highContrast: this.highContrast, tint: lanternStyle().light });
     if (!cel) this.drawBeam(ctx, L, lightState, a ? clamp01(tau / 200) : 1, a && a.beamAt, t);
 
     // Glowing markings shine through the dark, so creatures and Wren can be found in unlit tiles.

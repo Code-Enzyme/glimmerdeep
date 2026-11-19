@@ -53,6 +53,9 @@
       <button id="btn-shop" class="btn shop-open" type="button" aria-label="Store">
         <span class="ico" data-icon="lantern" data-tint="#24162E"></span><span class="lbl">Store</span>
       </button>
+      <button id="btn-lanterns" class="btn shop-open lanterns-open" type="button" aria-label="Lantern styles">
+        <span class="ico" data-icon="glow" data-tint="#24162E"></span><span class="lbl">Lantern</span>
+      </button>
     </div>
 
     <nav class="bar settings" aria-label="Settings">
@@ -203,6 +206,17 @@
     <div class="buttons">
       <button id="shop-restore" class="btn" type="button" aria-label="Restore purchases">Restore</button>
       <button id="shop-close" class="btn" type="button" aria-label="Close the store">Close</button>
+    </div>
+  </aside>
+
+  <!-- Lantern styles, earned with star moss (SPEC section 24) -->
+  <aside id="lanterns" class="sheet paper lanterns" role="dialog" aria-modal="true" aria-labelledby="lanterns-title" hidden>
+    <span class="kicker ink">Wren's lantern</span>
+    <h3 id="lanterns-title">Lantern styles</h3>
+    <p id="lanterns-moss" class="opt-note"></p>
+    <div id="lantern-list" class="lantern-list" role="group" aria-labelledby="lanterns-title"></div>
+    <div class="buttons">
+      <button id="lanterns-close" class="btn primary" type="button" aria-label="Close lantern styles">Done</button>
     </div>
   </aside>
 

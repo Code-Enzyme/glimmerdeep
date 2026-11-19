@@ -42,6 +42,10 @@ for its hidden Journal critter, a small faceless creature tucked into a dark noo
 nook is lit; tap it (or press C) and Wren sketches it into the Field Journal's Critters tab. Where each
 critter hides is chosen by `node tools/place-critters.mjs` (SPEC section 23).
 
+Star moss also earns Wren's lantern new colours: Mossglow, Ember rose, Moonglass, Heartroot and
+Gloamlight, chosen from the map's Lantern button. They only change how the light looks, never where it
+reaches (SPEC section 24).
+
 The save lives in `localStorage`. In the Android app every save is also written to a file
 (`android/.../SaveFilePlugin.java`), on disk before a purchase is confirmed, so an app swiped away right
 after a purchase still has it when it opens again (SPEC section 16).

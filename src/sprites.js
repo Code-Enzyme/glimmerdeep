@@ -1898,7 +1898,7 @@ function paintGlow(g) {
 // Icons
 // ---------------------------------------------------------------------------
 
-const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort'];
+const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort', 'glow'];
 
 function arrowHead(g, x, y, ang, len) {
   g.moveTo(x + Math.cos(ang + 2.5) * len, y + Math.sin(ang + 2.5) * len);
@@ -2054,6 +2054,25 @@ function iconPath(g, name) {
       g.quadraticCurveTo(0.32, 0.5, 0.41, 0.54);
       g.moveTo(0.59, 0.41);
       g.quadraticCurveTo(0.68, 0.37, 0.76, 0.4);
+      break;
+    case 'glow':
+      // a small lantern with rays round it, for the Lantern styles (SPEC section 24)
+      g.arc(0.5, 0.3, 0.05, 0, TAU);
+      g.moveTo(0.42, 0.37);
+      g.lineTo(0.58, 0.37);
+      g.lineTo(0.64, 0.46);
+      g.lineTo(0.36, 0.46);
+      g.closePath();
+      g.moveTo(0.38, 0.46);
+      g.lineTo(0.36, 0.7);
+      g.lineTo(0.64, 0.7);
+      g.lineTo(0.62, 0.46);
+      g.moveTo(0.33, 0.75);
+      g.lineTo(0.67, 0.75);
+      for (const [x0, y0, x1, y1] of [[0.18, 0.58, 0.08, 0.58], [0.82, 0.58, 0.92, 0.58], [0.24, 0.34, 0.15, 0.27], [0.76, 0.34, 0.85, 0.27], [0.27, 0.82, 0.19, 0.89], [0.73, 0.82, 0.81, 0.89]]) {
+        g.moveTo(x0, y0);
+        g.lineTo(x1, y1);
+      }
       break;
     case 'comfort':
       // a large A and a small a, for the Comfort settings (SPEC section 22)
@@ -2399,13 +2418,13 @@ const MAX_AREA = 8e6;
 // around the region and two plain blits.
 const dark = {
   c: null, g: null, low: null, lg: null, img: null,
-  w: 0, h: 0, P: 0, sx: 0, sy: 0, sr: 0, hc: -1, fill: '',
+  w: 0, h: 0, P: 0, sx: 0, sy: 0, sr: 0, hc: -1, tk: -1, fill: '',
   lit: null, mixed: null, any: false, valid: false,
   rx: 0, ry: 0, rw: 0, rh: 0, // region, in tiles
   gx: 0, gy: 0, gw: 0, gh: 0, // where the bloom is not empty, in cache pixels inside the region
 };
 
-function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
+function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc, tint = WARM) {
   const LW = w * DK;
   const LH = h * DK;
   const AW = LW * 2 + GUT;
@@ -2540,9 +2559,9 @@ function rebuildDark(w, h, P, lit, hasSource, sx, sy, sr, hc) {
       d[di + 1] = NIGHT[1];
       d[di + 2] = NIGHT[2];
       d[di + 3] = aDark;
-      d[gi] = WARM[0];
-      d[gi + 1] = WARM[1];
-      d[gi + 2] = WARM[2];
+      d[gi] = tint[0];
+      d[gi + 1] = tint[1];
+      d[gi + 2] = tint[2];
       d[gi + 3] = aGlow;
     }
     // gutter: repeat the neighbouring columns so scaling never bleeds one layer into the other
@@ -2648,6 +2667,9 @@ export function drawDarkness(ctx, opts) {
   const src = o.source || null;
   const lit = src ? o.lit : null;
   const hc = o.highContrast ? 1 : 0;
+  // the lantern's light colour (SPEC section 24), r, g, b; the lamplighters' amber by default
+  const tint = Array.isArray(o.tint) && o.tint.length === 3 ? o.tint : WARM;
+  const tk = tint[0] * 65536 + tint[1] * 256 + tint[2];
   const sx = src ? Math.round((+src.x || 0) * 10) : -99999;
   const sy = src ? Math.round((+src.y || 0) * 10) : -99999;
   const sr = src ? Math.round((src.radius > 0 ? src.radius : 1) * 10) : 0;
@@ -2674,7 +2696,7 @@ export function drawDarkness(ctx, opts) {
   if (P > cap) P = cap;
   if (P < 4) P = 4;
   const n = w * h;
-  let dirty = !dark.valid || dark.w !== w || dark.h !== h || dark.P !== P || dark.sx !== sx || dark.sy !== sy || dark.sr !== sr || dark.hc !== hc;
+  let dirty = !dark.valid || dark.w !== w || dark.h !== h || dark.P !== P || dark.sx !== sx || dark.sy !== sy || dark.sr !== sr || dark.hc !== hc || dark.tk !== tk;
   if (!dirty) {
     const m = dark.lit;
     for (let i = 0; i < n; i++) {
@@ -2684,7 +2706,8 @@ export function drawDarkness(ctx, opts) {
       }
     }
   }
-  if (dirty && !rebuildDark(w, h, P, lit, !!src, sx, sy, sr, hc)) return;
+  if (dirty && !rebuildDark(w, h, P, lit, !!src, sx, sy, sr, hc, tint)) return;
+  dark.tk = tk;
 
   // the board, plus the one device pixel that tiles bleed past it
   const px1 = 1 / a;

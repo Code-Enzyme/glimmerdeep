@@ -4,6 +4,7 @@
 // the signatures in SPEC section 7, and optionally drawBridgeMoth.
 import { drawTile as baseTile } from './sprites.js';
 import * as glowmark from './chars/glowmark.js';
+import { LANTERNS } from './ui/lanterns.js';
 
 export const CHAR_STYLES = {
   glowmark: { name: 'Glowmark', mod: glowmark },
@@ -31,6 +32,21 @@ export function drawLantern(ctx, px, py, size, opts) {
 }
 export function drawCreature(ctx, type, px, py, size, opts) {
   return CHAR_STYLES[current].mod.drawCreature(ctx, type, px, py, size, opts);
+}
+
+// The lantern style in use (SPEC section 24): every character style paints the lantern in its colours.
+let lantern = LANTERNS[0];
+export function setLanternStyle(style) {
+  if (!style || !style.glass || style === lantern) return lantern;
+  lantern = style;
+  for (const key of Object.keys(CHAR_STYLES)) {
+    const mod = CHAR_STYLES[key].mod;
+    if (mod.setLanternStyle) mod.setLanternStyle(style);
+  }
+  return lantern;
+}
+export function lanternStyle() {
+  return lantern;
 }
 
 // The hidden Journal critters (SPEC section 23) keep one look whatever the style.

@@ -23,6 +23,7 @@ const SHOTS_ONLY = args.includes('--shots');
 
 const DIRV = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
 const KEY_OF = { N: 'ArrowUp', E: 'ArrowRight', S: 'ArrowDown', W: 'ArrowLeft', L: ' ', Z: '.' };
+const SAVE_KEY = 'glimmerdeep.v1';   // the app's save in localStorage (src/ui/store.js)
 
 // Ad-hoc levels for the mechanics the shipped levels may not reach yet.
 const ADHOC = {
@@ -118,6 +119,10 @@ async function main() {
     });
     if (opts.init) await context.addInitScript(opts.init);
     const tag = opts.tag || 'phone';
+    // opts.seed: a save the check writes once, before the app first starts. (An init script that writes a save
+    // whenever it finds none can, now and then, find none in a new tab of headless Chromium and write over the
+    // real one.) The app writes nothing until something changes, so loading it once to reach its storage is safe.
+    let seed = opts.seed ? JSON.stringify(opts.seed) : null;
     const watch = (pg) => {
       pg.on('console', (m) => {
         if (m.type() === 'error') errors.push(`[${tag}] console: ${m.text()}`);
@@ -135,12 +140,15 @@ async function main() {
     const h = {
       context, page,
       open: async (query = '') => {
+        if (seed) {
+          await page.goto(URL0);
+          await page.evaluate(([k, v]) => localStorage.setItem(k, v), [SAVE_KEY, seed]);
+          seed = null;
+        }
         await page.goto(URL0 + query);
         await page.waitForFunction(() => window.__gd && window.__gd.screen());
       },
-      // The app started again from its save, in a new tab of the same browser: what a relaunch does. (Reloading
-      // the same tab right after a write can, now and then, show that tab an empty localStorage in headless
-      // Chromium, though every other tab still sees the save; the app never removes it.)
+      // The app started again from its save, in a new tab of the same browser: what a relaunch does.
       reopen: async (query = '') => {
         await page.close();
         page = await context.newPage();
@@ -867,7 +875,7 @@ async function main() {
     await h.page.locator('#back').tap();
     await h.page.locator('#set-contrast').tap();
     await h.page.locator('#set-sound').tap();
-    eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system' });
+    eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow' });
 
     // Unlock all skips the level order, never the purchase (SPEC section 14)
     const paidCount = LEVELS.filter((def) => !CHAPTERS.find((c) => c.id === 1).levels.includes(def)).length + NIGHT.length;
@@ -1838,11 +1846,10 @@ async function main() {
     }
     {
       // nothing left to pay with: the Hint opens the store instead
-      const KEY = 'glimmerdeep.v1';
       const np = await phone({
         tag: 'no-glimmer',
-        init: `if (!localStorage.getItem('${KEY}')) localStorage.setItem('${KEY}', JSON.stringify({ levels: {}, seen: ['prologue'],
-          shop: { full: false, glimmer: 0, freeAt: Date.now(), paid: [] }, settings: { sound: true, contrast: false, unlockAll: false, tutorials: false } }));`,
+        seed: { levels: {}, seen: ['prologue'], shop: { full: false, glimmer: 0, freeAt: Date.now(), paid: [] },
+          settings: { sound: true, contrast: false, unlockAll: false, tutorials: false } },
       });
       const txt = async (sel) => ((await np.page.locator(sel).textContent()) || '').trim();
       await np.open();
@@ -1927,16 +1934,15 @@ async function main() {
     // ---------------------------------------------------------------- the Night Garden (SPEC sections 19 and 20)
     console.log('night garden');
     {
-      const KEY = 'glimmerdeep.v1';
       ok('garden: ten deep puzzles at least', NIGHT.length >= 10, NIGHT.length);
       const [n1, n2] = NIGHT;
       const allLit = (stars) => Object.fromEntries(LEVELS.map((d) => [d.id, { moves: d.par, stars }]));
       // a save where the story is done (every chapter level lit), with every story page read
-      const seeded = (levels, full, tutorials) => `if (!localStorage.getItem('${KEY}')) localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify({
+      const seeded = (levels, full, tutorials) => ({
         levels, seen: STORY.map((p) => p.id),
         shop: { full, glimmer: 3, freeAt: 0, paid: [] },
         settings: { sound: true, contrast: false, unlockAll: false, tutorials },
-      }))});`;
+      });
       const at = (ph) => async (sel) => ((await ph.page.locator(sel).textContent()) || '').trim();
       const note = (moss) => `Opens when the story is done and you have 100 star moss. You have ${moss}.`;
       // the map back at its top, so the thumb-reach audit sees what a player sees there
@@ -1946,7 +1952,7 @@ async function main() {
       });
 
       // bought, the story done, but one star moss a cavern: not enough
-      const poor = await phone({ tag: 'garden-closed', init: seeded(allLit(1), true, true) });
+      const poor = await phone({ tag: 'garden-closed', seed: seeded(allLit(1), true, true) });
       let txt = at(poor);
       await poor.open();
       eq('garden: deep puzzles do not count toward the caverns lit', await txt('#title-progress'), `${LEVELS.length} of ${LEVELS.length} caverns lit`);
@@ -1968,7 +1974,7 @@ async function main() {
       await poor.close();
 
       // not bought: the garden is part of the Full Expedition
-      const unpaid = await phone({ tag: 'garden-unpaid', init: seeded(allLit(3), false, true) });
+      const unpaid = await phone({ tag: 'garden-unpaid', seed: seeded(allLit(3), false, true) });
       txt = at(unpaid);
       await unpaid.open();
       await unpaid.toMap();
@@ -1982,7 +1988,7 @@ async function main() {
       await unpaid.close();
 
       // bought, the story done, two star moss a cavern: open
-      const gd = await phone({ tag: 'garden', init: seeded(allLit(2), true, true) });
+      const gd = await phone({ tag: 'garden', seed: seeded(allLit(2), true, true) });
       txt = at(gd);
       await gd.open();
       await gd.toMap();
@@ -2158,6 +2164,159 @@ async function main() {
       eq('comfort: Full plays everything anyway', await rm.gd('reduced'), false);
       ok('comfort: the page too', await rm.page.evaluate(() => document.getElementById('app').classList.contains('motion-full')));
       await rm.close();
+    }
+
+    // ---------------------------------------------------------------- lantern styles (SPEC section 24)
+    console.log('lantern styles');
+    {
+      // 64 star moss: 21 levels with three and one with one. Tallow, Mossglow and Ember rose are open.
+      const levels = {};
+      LEVELS.slice(0, 21).forEach((def) => { levels[def.id] = { moves: def.par, stars: 3 }; });
+      levels[LEVELS[21].id] = { moves: LEVELS[21].par + 9, stars: 1 };
+      const ln = await phone({
+        tag: 'lanterns',
+        seed: { levels, seen: ['prologue', ...CHAPTERS.map((c) => 'ch' + c.id)], critters: [], shop: { full: true, glimmer: 3, freeAt: 0, paid: [] }, settings: { tutorials: false } },
+      });
+      const txt = async (sel) => ((await ln.page.locator(sel).textContent()) || '').trim();
+      const inView = async (sel, W = 390, H = 844) => {
+        const b = await ln.page.locator(sel).boundingBox();
+        return !!b && b.x >= 0 && b.y >= 0 && b.x + b.width <= W && b.y + b.height <= H ? true : JSON.stringify(b);
+      };
+      const sheetOpen = () => ln.page.waitForFunction(() => window.__gd.panel() === 'lanterns');
+      const labels = () => ln.page.locator('#lantern-list .style').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+      const pressedStyles = () => ln.page.locator('#lantern-list .style[aria-pressed="true"]').evaluateAll((els) => els.map((e) => e.dataset.style));
+      const lastHeard = async () => (await ln.gd('heard')).slice(-1)[0];
+      // the average colour of a lit floor tile beside Wren, as drawn
+      const litColour = async () => {
+        await ln.page.waitForTimeout(300);
+        const w = (await ln.gd('state')).wren;
+        const t = await ln.tile(w.x + 1, w.y);
+        const png = await ln.page.screenshot({ clip: { x: t.x - t.size / 4, y: t.y - t.size / 4, width: t.size / 2, height: t.size / 2 } });
+        return ln.page.evaluate(async (b64) => {
+          const img = new Image();
+          img.src = 'data:image/png;base64,' + b64;
+          await img.decode();
+          const c = document.createElement('canvas');
+          c.width = img.width;
+          c.height = img.height;
+          const g = c.getContext('2d');
+          g.drawImage(img, 0, 0);
+          const d = g.getImageData(0, 0, c.width, c.height).data;
+          const sum = [0, 0, 0];
+          for (let i = 0; i < d.length; i += 4) { sum[0] += d[i]; sum[1] += d[i + 1]; sum[2] += d[i + 2]; }
+          return sum.map((v) => Math.round(v / (d.length / 4)));
+        }, png.toString('base64'));
+      };
+      const openFirst = async () => {
+        await ln.page.locator(`.node[data-level="${first.id}"]`).tap();
+        await ln.page.waitForFunction(() => window.__gd.screen() === 'level');
+        if ((await ln.gd('panel')) === 'card') await ln.page.keyboard.press('Escape');
+      };
+      const backToMap = async () => {
+        await ln.page.locator('#back').tap();
+        await ln.page.waitForFunction(() => window.__gd.screen() === 'map');
+      };
+
+      await ln.open();
+      await ln.toMap();
+      eq('lanterns: a fresh choice is Tallow, in use', [(await ln.gd('save')).settings.lantern, await ln.gd('lantern')], ['tallow', 'tallow']);
+      ok('lanterns: the map has a Lantern button', await ln.page.locator('#btn-lanterns').isVisible());
+      eq('lanterns: it is labelled', [await ln.page.locator('#btn-lanterns').getAttribute('aria-label'), await txt('#btn-lanterns .lbl')], ['Lantern styles', 'Lantern']);
+      for (const id of ['btn-journal', 'btn-shop', 'btn-lanterns']) {
+        eq(`lanterns: #${id} on screen, in thumb reach`, [await inView(`#${id}`), (await ln.page.locator(`#${id}`).boundingBox()).y > 844 / 2], [true, true]);
+      }
+
+      // a level drawn in Tallow, to compare with
+      await openFirst();
+      const tallowLight = await litColour();
+      await backToMap();
+
+      await ln.page.locator('#btn-lanterns').tap();
+      await sheetOpen();
+      ok('lanterns: the sheet shows', await ln.page.locator('#lanterns').isVisible());
+      eq('lanterns: its heading', [await txt('#lanterns .kicker'), await txt('#lanterns-title')], ["Wren's lantern", 'Lantern styles']);
+      eq('lanterns: it counts the star moss', await txt('#lanterns-moss'), 'You have 64 star moss.');
+      eq('lanterns: Done has the focus', await ln.page.evaluate(() => document.activeElement && document.activeElement.id), 'lanterns-close');
+      eq('lanterns: one button per style, in order', await ln.page.locator('#lantern-list .style').evaluateAll((els) => els.map((e) => e.dataset.style)),
+        ['tallow', 'mossglow', 'emberrose', 'moonglass', 'heartroot', 'gloamlight']);
+      eq('lanterns: each says its state', await labels(), ['Tallow. In use.', 'Mossglow. Use it.', 'Ember rose. Use it.',
+        'Moonglass. Needs 100 star moss.', 'Heartroot. Needs 150 star moss.', 'Gloamlight. Needs 200 star moss.']);
+      eq('lanterns: the one in use is pressed', await pressedStyles(), ['tallow']);
+      eq('lanterns: the locked ones are disabled, with a lock',
+        [await ln.page.locator('#lantern-list .style[aria-disabled="true"]').count(), await ln.page.locator('#lantern-list .style.locked .ico').count()], [3, 3]);
+      eq('lanterns: every style shows its picture',
+        await ln.page.locator('#lantern-list .style-art').evaluateAll((els) => els.filter((e) => /url\(/.test(e.style.backgroundImage)).length), 6);
+      eq('lanterns: and its note', await ln.page.locator('#lantern-list .style-note').evaluateAll((els) => els.every((e) => e.textContent.length > 10)), true);
+      eq('lanterns: Done on screen', await inView('#lanterns-close'), true);
+      await auditPage(ln, 'lanterns');
+      await ln.shot('lanterns');
+
+      // choosing one
+      await ln.page.locator('.style[data-style="mossglow"]').tap();
+      eq('lanterns: an open style is used at once', [(await ln.gd('save')).settings.lantern, await ln.gd('lantern')], ['mossglow', 'mossglow']);
+      eq('lanterns: it plays the plant sound', await lastHeard(), 'plant');
+      eq('lanterns: the sheet stays open', await ln.gd('panel'), 'lanterns');
+      eq('lanterns: the states follow', (await labels()).slice(0, 2), ['Tallow. Use it.', 'Mossglow. In use.']);
+      eq('lanterns: the new one is pressed', await pressedStyles(), ['mossglow']);
+      await ln.page.locator('.style[data-style="moonglass"]').tap({ force: true });   // aria-disabled, but a player can still tap it
+      eq('lanterns: a locked style plays blocked', await lastHeard(), 'blocked');
+      eq('lanterns: and changes nothing', [(await ln.gd('save')).settings.lantern, await ln.gd('lantern')], ['mossglow', 'mossglow']);
+      await ln.shot('lanterns-mossglow');
+      await ln.page.keyboard.press('Escape');
+      eq('lanterns: Escape (Back) closes it', [await ln.gd('screen'), await ln.gd('panel'), await ln.page.locator('#lanterns').isVisible()], ['map', null, false]);
+      await ln.page.locator('#btn-lanterns').tap();
+      await sheetOpen();
+      await ln.page.locator('#lanterns-close').tap();
+      eq('lanterns: Done closes it', await ln.gd('panel'), null);
+      await ln.page.locator('#btn-lanterns').tap();
+      await sheetOpen();
+      await ln.page.touchscreen.tap(5, 422);
+      eq('lanterns: a tap outside closes it', await ln.gd('panel'), null);
+
+      // the board's light takes the style's colour
+      await openFirst();
+      eq('lanterns: the level uses it', await ln.gd('lantern'), 'mossglow');
+      {
+        const moss = await litColour();
+        ok('lanterns: lit tiles turn greener in Mossglow', moss[1] - moss[0] > tallowLight[1] - tallowLight[0] + 6, JSON.stringify({ tallow: tallowLight, mossglow: moss }));
+      }
+      await ln.shot('lanterns-level');
+      await backToMap();
+
+      // Unlock all never unlocks a style
+      await ln.page.locator('#set-unlock').tap();
+      await ln.page.locator('#btn-lanterns').tap();
+      await sheetOpen();
+      eq('lanterns: Unlock all opens no style', (await labels())[3], 'Moonglass. Needs 100 star moss.');
+      await ln.page.keyboard.press('Escape');
+      await ln.page.locator('#set-unlock').tap();
+
+      // kept when the app starts again
+      await ln.reopen();
+      await ln.toMap();
+      eq('lanterns: the choice is kept', [(await ln.gd('save')).settings.lantern, await ln.gd('lantern')], ['mossglow', 'mossglow']);
+
+      // Reset progress keeps the choice, but the moss starts again, so Tallow is back
+      await ln.page.locator('#set-reset').tap();
+      await ln.page.locator('#confirm-yes').tap();
+      eq('lanterns: Reset keeps the choice, Tallow is in use', [(await ln.gd('save')).settings.lantern, await ln.gd('lantern')], ['mossglow', 'tallow']);
+      await ln.page.locator('#btn-lanterns').tap();
+      await sheetOpen();
+      eq('lanterns: no star moss after Reset', await txt('#lanterns-moss'), 'You have 0 star moss.');
+      eq('lanterns: Mossglow locked again', (await labels()).slice(0, 2), ['Tallow. In use.', 'Mossglow. Needs 30 star moss.']);
+      await ln.close();
+
+      // a small phone: the three buttons fit side by side
+      const sm = await phone({ tag: 'lanterns-small', viewport: { width: 360, height: 640 } });
+      await sm.open();
+      await sm.toMap();
+      const boxes = [];
+      for (const id of ['btn-journal', 'btn-shop', 'btn-lanterns']) boxes.push(await sm.page.locator(`#${id}`).boundingBox());
+      eq('lanterns: on a small phone the row fits the screen', boxes.every((b) => b.x >= 0 && b.x + b.width <= 360) || JSON.stringify(boxes), true);
+      eq('lanterns: in one row, none overlapping',
+        boxes.every((b, i) => i === 0 || (b.x >= boxes[i - 1].x + boxes[i - 1].width && Math.abs(b.y - boxes[0].y) < 20)) || JSON.stringify(boxes), true);
+      eq('lanterns: and the page does not scroll sideways', await sm.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+      await sm.close();
     }
   }
 
