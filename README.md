@@ -37,6 +37,11 @@ After the story comes the Night Garden: deep puzzles that mix every creature, al
 walls, which let light through but nothing that walks. It is part of the Full Expedition and opens once
 the last chapter is lit and the chapters have earned 100 star moss (SPEC sections 19 and 20).
 
+Every cavern earns up to three star moss: one for lighting it, one for doing it at or under par, and one
+for its hidden Journal critter, a small faceless creature tucked into a dark nook. It peeks out while its
+nook is lit; tap it (or press C) and Wren sketches it into the Field Journal's Critters tab. Where each
+critter hides is chosen by `node tools/place-critters.mjs` (SPEC section 23).
+
 The save lives in `localStorage`. In the Android app every save is also written to a file
 (`android/.../SaveFilePlugin.java`), on disk before a purchase is confirmed, so an app swiped away right
 after a purchase still has it when it opens again (SPEC section 16).

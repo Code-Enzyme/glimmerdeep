@@ -220,6 +220,8 @@ feature-removed variants) must stay under 150,000 positions, so that hints are i
   tutorial: [ ... ],      // optional: guided steps for a player's first visit (section 12)
   shutter: true,          // optional: the lantern can be aimed (section 2)
   gloam: true,            // optional: a Gloam encounter, where the Hush creeps (section 17)
+  critter: [6, 1],        // the hidden Journal critter's tile, x and y (section 23); every chapter, Night Garden
+                          // and Daily Glimmer level has one
 }
 ```
 
@@ -324,6 +326,11 @@ export function solve(state, { maxStates = 300000, actions = ACTIONS } = {})
 
 export function nextMove(state, opts)   // -> the first action of a shortest solution from this state, or null
 
+export function lightRoute(state, x, y, { maxStates = 300000 } = {})
+// -> the shortest list of actions after which tile (x, y) is lit ([] when it is lit already), or null when no
+//    such position was found within maxStates. Same order and dead ends as solve; a solved position is not
+//    expanded. Used for the hidden critters (section 23).
+
 export function checkLevel(levelDef, opts)
 // -> { id, ok, par: declared, shortest: number | null, explored, featureOk: { M: true, ... }, problems: string[] }
 //    ok means: solvable, shortest === par, the search was exhaustive where it must be, and every feature is necessary.
@@ -364,6 +371,7 @@ export function play(name)               // one-shot sound; unknown names are ig
 //          'stumpStep' 'stumpBump' 'stumpWake' 'newtStep' 'newtTurn' 'newtDoze' 'newtWake'
 //          'emberWarm' 'emberCool' 'emberIgnite' 'emberStep' 'gloamDrift' 'gloamSnuff' 'aim' 'beetleCrawl' 'beetleGlint'
 //          'gateOpen' 'gateClose' 'budOn' 'budOff' 'solve' 'undo' 'restart' 'ui' 'hint' 'page' 'creep' 'caught'
+//          'spot'
 export function setMusic({ playing, intensity, chapter })   // adaptive bed: intensity 0..1 = share of Glowbuds lit; chapter 1..3
 ```
 
@@ -667,8 +675,7 @@ player who only needs a nudge gets a nudge, and nobody is ever left stuck.
 
 - **Asking:** Hint searches for a shortest solution from the position on the board (as before, within the
   size limit) and pays for it as section 14 says. That solution is the hint's **way**: the moves, and the
-  positions it passes through (by `key`, section 7). It counts as one hint for the star moss, however many
-  of its steps are shown. A search that finds no way pays as before and says so as before.
+  positions it passes through (by `key`, section 7). However many of its steps are shown, it is one hint. A search that finds no way pays as before and says so as before.
 - **Steps:** each press of Hint while Wren stands **on the way** (the position is one of the way's
   positions, not yet solved) is free and shows the next step, from that position:
   1. **The key piece**, ringed on the board, and the status row names it:
@@ -797,3 +804,65 @@ state shown by shape, High contrast): bigger text, a plainer font, and motion th
   default. Reset progress keeps them.
 - `src/ui/comfort.js` holds the rules (no DOM): `TEXT_SIZES`, `MOTIONS`, `readComfort(settings)` (the
   three, validated) and `reducedMotion(motion, phoneReduces)`.
+
+## 23. Hidden Journal critters (decided 19 Nov 2026)
+
+The design doc's third star moss: every cavern hides one small critter in a dark nook. It peeks out while
+its nook is lit; tap it and Wren sketches it into the Field Journal. It is a second layer of discovery (the
+puzzles are tight, so lighting a nook alone would find most critters without looking) and never changes a
+rule: the engine, the solver's solutions and every par stay as they are, and sketching is not a move.
+
+- **Star moss** for a level is now: one for lighting the cavern, one for doing it at or under par, and one
+  for **finding its critter**. Using a hint no longer costs star moss (hints already cost Glimmer or a
+  wait, section 14). Moss already earned is kept: a record's star moss never goes down.
+- **Placement:** a level's `critter: [x, y]` is a tile written `.` in its map (plain floor, nothing on it at
+  the start) that is dark at the start and that some play can light (`lightRoute` finds a way). Every level
+  in `CHAPTERS`, `NIGHT` and `DAILY` has one. `tools/place-critters.mjs` chooses it, the same way every time:
+  first the tiles lit in some position along the solver's shortest solution before the last, so everyone who
+  solves the level passes it; among those the tile with the most walls round it (a nook, counting `#` and the
+  map's edge among its four neighbours), then the one lit in the most of those positions (more chances to
+  spot it), then reading order. When no tile is lit along the way, the tile with the most walls, then the one
+  lit soonest by any play (fewest actions in `lightRoute`), then reading order. Test caverns may have none;
+  their third moss cannot be earned.
+- **Finding:** while the critter shows (its tile is lit in the position on the board, by any light), a tap on
+  its tile sketches it, ahead of walking there or tapping Wren; on a keyboard, `C` does the same. A tap while
+  it is dark does what a tap always does. Sketching is not an action: no turn passes and nothing is undone.
+  Undo and restart never take it back.
+  - Chapter and Night Garden levels: found is saved at once, for good, in the save's `critters` (level
+    ids). If the level is already lit, its record gains the moss at once (one for lighting, one if its best
+    is at or under par, one for the critter). Finding it in an attempt that is not finished still counts.
+  - Daily Glimmer caverns: found counts for the visit, and the moss when the cavern is lit on that visit.
+    Daily critters are not kept in the Journal.
+  - With tutorials on and no critter found yet in the save, the status row says "Something small peeks
+    out of the dark. Tap it to sketch it." while a critter shows (not over a tutorial step's words).
+  - The status row says "Wren sketched a Dewmite for the Journal." until the next move (not over a
+    tutorial step's words), the board gives a small sparkle on the tile and `'spot'` plays: a soft
+    two-note chirp.
+- **On the board** a critter shows on its tile while the tile is lit, drawn small in a corner of the tile
+  and under anything standing there, with a slow soft twinkle until it is sketched; in the dark it is not
+  drawn at all. No faces (section 10).
+- **Kinds:** one kind per chapter, in `src/ui/critters.js` (no DOM, tested in Node):
+
+  | Where | Kind | Name |
+  | --- | --- | --- |
+  | Chapter 1, Mossmouth | `dewmite` | Dewmite |
+  | Chapter 2, Whelk Grottos | `pebblecrab` | Pebble crab |
+  | Chapter 3, Stumpwood | `sporeling` | Sporeling |
+  | Chapter 4, Newt Flats | `skimmer` | Lake skimmer |
+  | Chapter 5, Ember Hollow | `cinderfly` | Cinderfly |
+  | Chapter 6, The Heartroot | `rootworm` | Rootworm |
+  | Chapter 7, Beetle Vaults | `cogmite` | Cogmite |
+  | The Night Garden | `glasswing` | Glasswing |
+
+  A Daily Glimmer critter is the kind of the chapter that brings in the first species of its `feature`.
+  Each kind has a `note` (Wren's sketch note, shown once one is found) and a `lore` line (shown once every
+  critter of its chapter is found) that hints at the story. Both follow the story's text rules (section
+  13): at most 160 characters, no gendered pronouns. `checkCritters()` lists what is wrong.
+- **Result panel:** the third mark reads "Found the Dewmite" when earned, else "A critter hides in the
+  dark" (or "No critter in this cavern" for a test cavern without one).
+- **Field Journal:** a third tab, **Critters**: one entry per kind in the table's order. A kind with one or
+  more found shows its picture, its name, "Found 5 of 12 in Mossmouth", its note, and its lore once all are
+  found. A kind with none found shows a dark blot, "Not found yet" and "Hiding in the dark corners of
+  Mossmouth." The heading counts "23 of 121 found".
+- **Save:** the save gains `critters`, the ids of the levels whose critter is found (strings, no repeats).
+  Reset progress clears it with the levels.

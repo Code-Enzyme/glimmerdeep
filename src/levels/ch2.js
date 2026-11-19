@@ -6,6 +6,7 @@ export default [
     name: 'A Timid Weight',
     feature: 'S',
     par: 9,
+    critter: [3, 1],
     map: [
       '#######',
       '#W....#',
@@ -28,6 +29,7 @@ export default [
     name: 'Step Aside',
     feature: 'S',
     par: 9,
+    critter: [1, 3],
     map: [
       '#####',
       '#W.##',
@@ -46,6 +48,7 @@ export default [
     name: 'Round the Back',
     feature: 'S',
     par: 12,
+    critter: [5, 2],
     map: [
       '#######',
       '#G.####',
@@ -60,6 +63,7 @@ export default [
     name: 'Two to Hold',
     feature: 'S',
     par: 13,
+    critter: [5, 1],
     map: [
       '#######',
       '#W....#',
@@ -78,6 +82,7 @@ export default [
     name: 'The Far Bank',
     feature: 'SML',
     par: 25,
+    critter: [1, 1],
     map: [
       '#######',
       '#.#####',
@@ -95,6 +100,7 @@ export default [
     name: 'Moth in the Way',
     feature: 'S',
     par: 16,
+    critter: [5, 2],
     map: [
       '#######',
       '##.####',
@@ -112,6 +118,7 @@ export default [
     name: 'Bridge and Shaft',
     feature: 'MS',
     par: 19,
+    critter: [5, 2],
     map: [
       '#######',
       '####W.#',
@@ -129,6 +136,7 @@ export default [
     name: 'The High Nook',
     feature: 'S',
     par: 20,
+    critter: [3, 1],
     map: [
       '#######',
       '###.###',
@@ -146,6 +154,7 @@ export default [
     name: 'Swap Places',
     feature: 'SL',
     par: 25,
+    critter: [3, 6],
     map: [
       '#######',
       '#..M..#',
@@ -164,6 +173,7 @@ export default [
     name: 'Grotto Gate',
     feature: 'MSL',
     par: 30,
+    critter: [5, 4],
     map: [
       '#######',
       '##GS~.#',
@@ -184,6 +194,7 @@ export default [
     name: 'Shells Before the Dark',
     feature: 'SH',
     par: 19,
+    critter: [7, 1],
     gloam: true,
     map: [
       '#########',

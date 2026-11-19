@@ -7,6 +7,7 @@ export const DAILY = [
     name: 'Puddle Steps',
     feature: 'ML',
     par: 18,
+    critter: [5, 5],
     map: [
       '#######',
       '#.M####',
@@ -22,6 +23,7 @@ export const DAILY = [
     name: 'Whelk Walk',
     feature: 'S',
     par: 14,
+    critter: [4, 5],
     map: [
       '#######',
       '#####.#',
@@ -38,6 +40,7 @@ export const DAILY = [
     name: 'Turnabout',
     feature: 'TL',
     par: 17,
+    critter: [1, 2],
     map: [
       '#######',
       '##..W##',
@@ -54,6 +57,7 @@ export const DAILY = [
     name: 'Kindling',
     feature: 'KL',
     par: 16,
+    critter: [3, 1],
     map: [
       '########',
       '#G#....#',
@@ -69,6 +73,7 @@ export const DAILY = [
     name: 'Newt Nap',
     feature: 'DL',
     par: 25,
+    critter: [1, 4],
     map: [
       '#######',
       '##G..##',
@@ -84,6 +89,7 @@ export const DAILY = [
     name: 'Gloam Gate',
     feature: 'TO',
     par: 18,
+    critter: [2, 2],
     map: [
       '#########',
       '#######W#',
@@ -100,6 +106,7 @@ export const DAILY = [
     name: 'Mothlight',
     feature: 'ML',
     par: 23,
+    critter: [3, 1],
     map: [
       '#######',
       '#M...~#',
@@ -116,6 +123,7 @@ export const DAILY = [
     name: 'Slow Company',
     feature: 'SL',
     par: 17,
+    critter: [1, 5],
     map: [
       '######',
       '##..##',
@@ -132,6 +140,7 @@ export const DAILY = [
     name: 'Stump Shuffle',
     feature: 'T',
     par: 25,
+    critter: [2, 6],
     map: [
       '#######',
       '#WM.G##',
@@ -148,6 +157,7 @@ export const DAILY = [
     name: 'Little Pool',
     feature: 'ML',
     par: 12,
+    critter: [1, 2],
     map: [
       '######',
       '##.W##',
@@ -163,6 +173,7 @@ export const DAILY = [
     name: 'Candle Path',
     feature: 'KL',
     par: 22,
+    critter: [2, 4],
     map: [
       '#######',
       '#G#####',
@@ -179,6 +190,7 @@ export const DAILY = [
     name: 'Wake the Newt',
     feature: 'MD',
     par: 14,
+    critter: [1, 5],
     map: [
       '#######',
       '##G#~W#',
@@ -194,6 +206,7 @@ export const DAILY = [
     name: 'Hush Hollow',
     feature: 'OL',
     par: 23,
+    critter: [3, 2],
     map: [
       '########',
       '###...O#',
@@ -211,6 +224,7 @@ export const DAILY = [
     name: 'Wet Feet',
     feature: 'ML',
     par: 17,
+    critter: [1, 2],
     map: [
       '#######',
       '##W####',
@@ -227,6 +241,7 @@ export const DAILY = [
     name: 'Shell Game',
     feature: 'S',
     par: 18,
+    critter: [5, 6],
     map: [
       '#######',
       '##..W##',
@@ -243,6 +258,7 @@ export const DAILY = [
     name: 'Turnstump',
     feature: 'TL',
     par: 12,
+    critter: [1, 3],
     map: [
       '######',
       '#.W###',
@@ -259,6 +275,7 @@ export const DAILY = [
     name: 'Warm Hands',
     feature: 'KL',
     par: 17,
+    critter: [3, 1],
     map: [
       '#######',
       '##...##',
@@ -274,6 +291,7 @@ export const DAILY = [
     name: 'Moth Ferry',
     feature: 'M',
     par: 12,
+    critter: [5, 5],
     map: [
       '#######',
       '#M..###',
@@ -290,6 +308,7 @@ export const DAILY = [
     name: 'Crowded Nook',
     feature: 'ST',
     par: 17,
+    critter: [4, 5],
     map: [
       '#######',
       '#....##',
@@ -306,6 +325,7 @@ export const DAILY = [
     name: 'Stump Corner',
     feature: 'TL',
     par: 21,
+    critter: [5, 5],
     map: [
       '#######',
       '#..##W#',
@@ -322,6 +342,7 @@ export const DAILY = [
     name: 'Moth Steps',
     feature: 'M',
     par: 21,
+    critter: [3, 1],
     map: [
       '#######',
       '###..G#',
@@ -338,6 +359,7 @@ export const DAILY = [
     name: 'Doze Off',
     feature: 'D',
     par: 25,
+    critter: [3, 4],
     map: [
       '#######',
       '##W..##',
@@ -354,6 +376,7 @@ export const DAILY = [
     name: 'Dim Company',
     feature: 'TO',
     par: 18,
+    critter: [5, 7],
     map: [
       '########',
       '###....#',
@@ -371,6 +394,7 @@ export const DAILY = [
     name: 'Spark Shaft',
     feature: 'KL',
     par: 16,
+    critter: [4, 1],
     map: [
       '#######',
       '####..#',
@@ -387,6 +411,7 @@ export const DAILY = [
     name: 'Stepping Stones',
     feature: 'ML',
     par: 15,
+    critter: [1, 6],
     map: [
       '#######',
       '#####G#',
@@ -403,6 +428,7 @@ export const DAILY = [
     name: 'Snug Fit',
     feature: 'MSL',
     par: 13,
+    critter: [2, 1],
     map: [
       '#####',
       '#..##',
@@ -418,6 +444,7 @@ export const DAILY = [
     name: 'Root Rotation',
     feature: 'TL',
     par: 17,
+    critter: [1, 4],
     map: [
       '#######',
       '###..##',
@@ -434,6 +461,7 @@ export const DAILY = [
     name: 'Mossy Ledge',
     feature: 'ML',
     par: 17,
+    critter: [3, 3],
     map: [
       '#######',
       '#####M#',
@@ -450,6 +478,7 @@ export const DAILY = [
     name: 'Narrow Flats',
     feature: 'DL',
     par: 19,
+    critter: [3, 5],
     map: [
       '#####',
       '#G.w#',
@@ -465,6 +494,7 @@ export const DAILY = [
     name: 'Shade Drift',
     feature: 'TO',
     par: 20,
+    critter: [2, 1],
     map: [
       '########',
       '##.....#',
@@ -482,6 +512,7 @@ export const DAILY = [
     name: 'Long Wick',
     feature: 'KL',
     par: 17,
+    critter: [1, 4],
     map: [
       '#######',
       '#####W#',
@@ -498,6 +529,7 @@ export const DAILY = [
     name: 'Grotto Bend',
     feature: 'SL',
     par: 16,
+    critter: [4, 6],
     map: [
       '#######',
       '#####M#',
@@ -514,6 +546,7 @@ export const DAILY = [
     name: 'Moth Hollow',
     feature: 'ML',
     par: 16,
+    critter: [4, 6],
     map: [
       '######',
       '##M.##',
@@ -530,6 +563,7 @@ export const DAILY = [
     name: 'Stump March',
     feature: 'TL',
     par: 22,
+    critter: [3, 5],
     map: [
       '#######',
       '###..M#',

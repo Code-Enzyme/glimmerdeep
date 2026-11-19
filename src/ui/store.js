@@ -13,10 +13,11 @@ export const SAVE_KEY = 'glimmerdeep.v1';
 const SETTING_DEFAULTS = { sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS };
 
 function freshSave() {
-  return { levels: {}, seen: [], shop: freshShop(), daily: {}, settings: { ...SETTING_DEFAULTS }, rev: 0 };
+  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, settings: { ...SETTING_DEFAULTS }, rev: 0 };
 }
 
-// -> { levels: { [id]: { moves, stars } }, seen: [story page id], shop: { full, glimmer, freeAt, paid },
+// -> { levels: { [id]: { moves, stars } }, seen: [story page id], critters: [level id] (section 23),
+//      shop: { full, glimmer, freeAt, paid },
 //      daily: { [YYYY-MM-DD]: { moves, stars } },
 //      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion }, rev }
 export function loadSave() {
@@ -51,6 +52,11 @@ export function parseSave(raw) {
         if (typeof id === 'string' && id && !data.seen.includes(id)) data.seen.push(id);
       }
     }
+    if (Array.isArray(parsed.critters)) {
+      for (const id of parsed.critters) {
+        if (typeof id === 'string' && id && !data.critters.includes(id)) data.critters.push(id);
+      }
+    }
     data.shop = readShop(parsed.shop);
     data.daily = readDaily(parsed.daily);
     if (parsed.settings && typeof parsed.settings === 'object') {
@@ -70,6 +76,13 @@ export function parseSave(raw) {
 // Of two saves, the one written more often; a tie (or no second save) keeps the first.
 export function newerSave(a, b) {
   return b && b.rev > a.rev ? b : a;
+}
+
+// Takes every part of `other` into `data` when `other` is the newer save (SPEC section 16). -> true when it did
+export function adoptInto(data, other) {
+  if (newerSave(data, other) === data) return false;
+  for (const k of Object.keys(freshSave())) data[k] = other[k];
+  return true;
 }
 
 let mirror = null; // (json) -> Promise, resolved once the copy is on disk
@@ -96,7 +109,7 @@ export function writeSave(data) {
   data.rev = (Number.isFinite(data.rev) ? data.rev : 0) + 1;
   writes += 1;
   const json = JSON.stringify({
-    levels: data.levels, seen: data.seen || [], shop: data.shop || freshShop(), daily: data.daily || {}, settings: data.settings, rev: data.rev,
+    levels: data.levels, seen: data.seen || [], critters: data.critters || [], shop: data.shop || freshShop(), daily: data.daily || {}, settings: data.settings, rev: data.rev,
   });
   let ok = false;
   try {
@@ -127,10 +140,11 @@ export function recordResult(data, id, moves, stars) {
   return record;
 }
 
-// Reset progress: every level, the story and the Daily Glimmer records start over; the settings, the shop and the
-// revision stay (the revision never goes back, SPEC section 16).
+// Reset progress: every level, the story, the found critters and the Daily Glimmer records start over; the settings,
+// the shop and the revision stay (the revision never goes back, SPEC section 16).
 export function clearProgress(data) {
   data.levels = {};
   data.seen = [];
+  data.critters = [];
   data.daily = {};
 }

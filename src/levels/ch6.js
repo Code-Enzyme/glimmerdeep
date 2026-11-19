@@ -6,6 +6,7 @@ export default [
     name: 'Lights Out',
     feature: 'O',
     par: 5,
+    critter: [2, 3],
     map: [
       '#########',
       '#.......#',
@@ -31,6 +32,7 @@ export default [
     name: 'Shadow Stop',
     feature: 'O',
     par: 9,
+    critter: [3, 1],
     map: [
       '#########',
       '###....##',
@@ -49,6 +51,7 @@ export default [
     name: 'The Long Way Round',
     feature: 'O',
     par: 14,
+    critter: [5, 6],
     map: [
       '#########',
       '###....##',
@@ -68,6 +71,7 @@ export default [
     name: 'Herding',
     feature: 'O',
     par: 21,
+    critter: [2, 1],
     map: [
       '#########',
       '#e......#',
@@ -85,6 +89,7 @@ export default [
     name: 'Heartlight',
     feature: 'OKL',
     par: 25,
+    critter: [5, 5],
     map: [
       '#########',
       '###...O##',
@@ -104,6 +109,7 @@ export default [
     name: 'In the Dark',
     feature: 'DO',
     par: 22,
+    critter: [2, 1],
     map: [
       '#########',
       '#s...####',
@@ -120,6 +126,7 @@ export default [
     name: 'Lend a Light',
     feature: 'TOL',
     par: 25,
+    critter: [4, 5],
     map: [
       '########',
       '#>..a..#',
@@ -137,6 +144,7 @@ export default [
     name: 'Short Stop',
     feature: 'OL',
     par: 26,
+    critter: [3, 5],
     map: [
       '#########',
       '###....O#',
@@ -155,6 +163,7 @@ export default [
     name: 'One More Step',
     feature: 'TKOL',
     par: 27,
+    critter: [2, 1],
     map: [
       '#########',
       '##..O####',
@@ -173,6 +182,7 @@ export default [
     name: 'Deep Shade',
     feature: 'TO',
     par: 36,
+    critter: [2, 3],
     map: [
       '#########',
       '###.....#',
@@ -192,6 +202,7 @@ export default [
     name: 'The Gloam\'s Shadow',
     feature: 'OH',
     par: 16,
+    critter: [3, 1],
     gloam: true,
     map: [
       '#########',

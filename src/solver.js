@@ -1,6 +1,6 @@
 // Glimmerdeep solver. Pure: breadth-first search over engine.step, nothing else. Contract in SPEC.md section 7.
 
-import { ACTIONS, parseLevel, step, key } from './engine.js';
+import { ACTIONS, parseLevel, step, key, isLit } from './engine.js';
 
 // Breadth-first search, so the first solution found is a shortest one. Among equally short solutions the
 // one that uses earlier entries of `actions` first wins, which keeps the result deterministic. A position
@@ -48,6 +48,39 @@ export function solve(state, { maxStates = 300000, actions = ACTIONS } = {}) {
 export function nextMove(state, opts) {
   const result = solve(state, opts || {});
   return result.solved && result.moves.length > 0 ? result.moves[0] : null;
+}
+
+// The shortest list of actions after which tile (x, y) is lit, for the hidden critters (SPEC section 23).
+// Same order and dead ends as solve; a solved position ends the level, so it is not expanded.
+// -> [] when the tile is lit already, or null when no such position was found within maxStates.
+export function lightRoute(state, x, y, { maxStates = 300000, actions = ACTIONS } = {}) {
+  if (isLit(state, x, y)) return [];
+  const seen = new Set([key(state)]);
+  const queue = [state];
+  const parent = [-1];
+  const via = [-1];
+  for (let head = 0; head < queue.length; head++) {
+    const current = queue[head];
+    queue[head] = null;
+    for (let a = 0; a < actions.length; a++) {
+      const next = step(current, actions[a]);
+      if (next === null || next.caught) continue;
+      if (isLit(next, x, y)) {
+        const moves = [actions[a]];
+        for (let i = head; parent[i] >= 0; i = parent[i]) moves.push(actions[via[i]]);
+        return moves.reverse();
+      }
+      if (next.solved) continue;
+      const k = key(next);
+      if (seen.has(k)) continue;
+      if (seen.size >= maxStates) return null;
+      seen.add(k);
+      queue.push(next);
+      parent.push(head);
+      via.push(a);
+    }
+  }
+  return null;
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;

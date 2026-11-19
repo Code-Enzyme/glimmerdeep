@@ -33,6 +33,9 @@ export function drawCreature(ctx, type, px, py, size, opts) {
   return CHAR_STYLES[current].mod.drawCreature(ctx, type, px, py, size, opts);
 }
 
+// The hidden Journal critters (SPEC section 23) keep one look whatever the style.
+export { drawCritter, CRITTER_KINDS } from './chars/critters.js';
+
 // Optional emissive pass, drawn AFTER the darkness so glowing markings show in the dark.
 // who: 'wren' | 'M' | 'S' | 'T' | 'D' | 'K' | 'O' | 'R'; opts as for drawWren / drawCreature, plus lit (the tile is lit).
 export function drawGlow(ctx, who, px, py, size, opts) {

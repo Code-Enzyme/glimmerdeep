@@ -7,6 +7,7 @@ export default [
     name: 'Narrow Light',
     feature: 'A',
     par: 5,
+    critter: [3, 1],
     shutter: true,
     map: [
       '#########',
@@ -29,6 +30,7 @@ export default [
     name: 'Mirror Shell',
     feature: 'RA',
     par: 5,
+    critter: [4, 2],
     shutter: true,
     map: [
       '#########',
@@ -53,6 +55,7 @@ export default [
     name: 'Fifth Tile',
     feature: 'AT',
     par: 12,
+    critter: [3, 1],
     shutter: true,
     map: [
       '#########',
@@ -71,6 +74,7 @@ export default [
     name: 'Relay',
     feature: 'RAT',
     par: 13,
+    critter: [5, 1],
     shutter: true,
     map: [
       '#########',
@@ -90,6 +94,7 @@ export default [
     name: 'Two Mirrors',
     feature: 'RA',
     par: 21,
+    critter: [7, 5],
     shutter: true,
     map: [
       '#########',
@@ -108,6 +113,7 @@ export default [
     name: 'Out of the Corner',
     feature: 'LA',
     par: 21,
+    critter: [1, 1],
     shutter: true,
     map: [
       '#########',
@@ -126,6 +132,7 @@ export default [
     name: 'Sent Below',
     feature: 'TRLA',
     par: 22,
+    critter: [3, 1],
     shutter: true,
     map: [
       '########',
@@ -144,6 +151,7 @@ export default [
     name: 'Bridgework',
     feature: 'RLA',
     par: 27,
+    critter: [2, 3],
     shutter: true,
     map: [
       '#########',
@@ -161,6 +169,7 @@ export default [
     name: 'Clear the Line',
     feature: 'TLA',
     par: 31,
+    critter: [5, 3],
     shutter: true,
     map: [
       '#########',
@@ -178,6 +187,7 @@ export default [
     name: 'Hall of Mirrors',
     feature: 'RLA',
     par: 34,
+    critter: [1, 5],
     shutter: true,
     map: [
       '#########',
@@ -196,6 +206,7 @@ export default [
     name: 'Mirror Against the Dark',
     feature: 'RH',
     par: 18,
+    critter: [5, 5],
     gloam: true,
     map: [
       '#########',

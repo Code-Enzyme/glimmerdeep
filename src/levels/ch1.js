@@ -6,6 +6,7 @@ export default [
     name: 'First Light',
     feature: 'M',
     par: 5,
+    critter: [3, 1],
     map: [
       '#########',
       '#W..~..G#',
@@ -25,6 +26,7 @@ export default [
     name: 'Across the Water',
     feature: 'ML',
     par: 9,
+    critter: [1, 3],
     map: [
       '#####',
       '#W#G#',
@@ -46,6 +48,7 @@ export default [
     name: 'Tagalong',
     feature: 'M',
     par: 9,
+    critter: [4, 1],
     map: [
       '#######',
       '##W..##',
@@ -65,6 +68,7 @@ export default [
     name: 'Two Pools',
     feature: 'M',
     par: 15,
+    critter: [1, 1],
     map: [
       '######',
       '#..W.#',
@@ -82,6 +86,7 @@ export default [
     name: 'Mirror Moths',
     feature: 'M',
     par: 15,
+    critter: [5, 1],
     map: [
       '#######',
       '#..W..#',
@@ -99,6 +104,7 @@ export default [
     name: 'Dark Footing',
     feature: 'ML',
     par: 17,
+    critter: [3, 1],
     map: [
       '#######',
       '#.....#',
@@ -119,6 +125,7 @@ export default [
     name: 'Two Crossings',
     feature: 'M',
     par: 21,
+    critter: [3, 1],
     map: [
       '#######',
       '#....M#',
@@ -136,6 +143,7 @@ export default [
     name: 'Corner Roost',
     feature: 'ML',
     par: 22,
+    critter: [5, 1],
     map: [
       '#######',
       '#.G#..#',
@@ -153,6 +161,7 @@ export default [
     name: 'Wide Water',
     feature: 'M',
     par: 24,
+    critter: [1, 1],
     map: [
       '########',
       '#.....M#',
@@ -169,6 +178,7 @@ export default [
     name: 'Last Crossing',
     feature: 'M',
     par: 26,
+    critter: [4, 3],
     map: [
       '#######',
       '#MM#..#',
@@ -187,6 +197,7 @@ export default [
     name: 'The Gloam Wakes',
     feature: 'MLH',
     par: 20,
+    critter: [4, 2],
     gloam: true,
     map: [
       '#########',

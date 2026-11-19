@@ -6,6 +6,7 @@ export default [
     name: 'Sleepwalker',
     feature: 'D',
     par: 6,
+    critter: [5, 3],
     map: [
       '#######',
       '#.s..W#',
@@ -30,6 +31,7 @@ export default [
     name: 'Stepping Aside',
     feature: 'DM',
     par: 12,
+    critter: [3, 6],
     map: [
       '#######',
       '#..M..#',
@@ -48,6 +50,7 @@ export default [
     name: 'Wallflower',
     feature: 'DL',
     par: 16,
+    critter: [5, 3],
     map: [
       '#######',
       '#W....#',
@@ -66,6 +69,7 @@ export default [
     name: 'Early Riser',
     feature: 'DT',
     par: 17,
+    critter: [2, 3],
     map: [
       '#######',
       '#W....#',
@@ -85,6 +89,7 @@ export default [
     name: 'Double Shift',
     feature: 'DL',
     par: 27,
+    critter: [5, 3],
     map: [
       '#######',
       '#...eW#',
@@ -105,6 +110,7 @@ export default [
     name: 'Second Root',
     feature: 'TDL',
     par: 18,
+    critter: [5, 4],
     map: [
       '#######',
       '###.G##',
@@ -124,6 +130,7 @@ export default [
     name: 'Pacing',
     feature: 'DL',
     par: 21,
+    critter: [3, 1],
     map: [
       '#######',
       '###..##',
@@ -142,6 +149,7 @@ export default [
     name: 'Out of the Way',
     feature: 'DL',
     par: 25,
+    critter: [4, 4],
     map: [
       '#######',
       '###w.~#',
@@ -158,6 +166,7 @@ export default [
     name: 'Up the Shaft',
     feature: 'DL',
     par: 27,
+    critter: [4, 1],
     map: [
       '#######',
       '#....##',
@@ -175,6 +184,7 @@ export default [
     name: 'Over the Top',
     feature: 'DL',
     par: 30,
+    critter: [2, 3],
     map: [
       '#######',
       '#...s##',
@@ -192,6 +202,7 @@ export default [
     name: 'Root Before the Dark',
     feature: 'DH',
     par: 27,
+    critter: [6, 1],
     gloam: true,
     map: [
       '#########',

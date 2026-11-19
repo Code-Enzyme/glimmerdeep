@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  loadSave, writeSave, recordResult, clearProgress, SAVE_KEY, parseSave, newerSave, setSaveMirror, savedDurably, saveWrites,
+  loadSave, writeSave, recordResult, clearProgress, SAVE_KEY, parseSave, newerSave, setSaveMirror, savedDurably, saveWrites, adoptInto,
 } from '../src/ui/store.js';
 
 function withStorage(initial) {
@@ -209,4 +209,39 @@ test('store: every write goes to the mirror too, and savedDurably waits for it',
   setSaveMirror(null);
   writeSave(save);
   await savedDurably();
+});
+
+// ---------------------------------------------------------------- SPEC section 23: hidden Journal critters
+
+test('store: the found critters round-trip, junk is dropped, an old save has none, a reset clears them', () => {
+  const data = withStorage();
+  const save = loadSave();
+  assert.deepEqual(save.critters, []);
+  save.critters.push('1-1', '2-3');
+  writeSave(save);
+  assert.deepEqual(JSON.parse(data.get(SAVE_KEY)).critters, ['1-1', '2-3']);
+  assert.deepEqual(loadSave().critters, ['1-1', '2-3']);
+  withStorage(JSON.stringify({ levels: {} }));
+  assert.deepEqual(loadSave().critters, []);
+  withStorage(JSON.stringify({ levels: {}, critters: ['1-1', 4, '', null, '1-1', 'N-2'] }));
+  assert.deepEqual(loadSave().critters, ['1-1', 'N-2']);
+  withStorage(JSON.stringify({ levels: {}, critters: '1-1' }));
+  assert.deepEqual(loadSave().critters, []);
+  save.settings.contrast = true;
+  clearProgress(save);
+  assert.deepEqual(save.critters, []);
+  assert.equal(save.settings.contrast, true);
+});
+
+test('store: adopting a newer save takes every part of it, the found critters too, and an older one is left alone', () => {
+  const mine = { ...parseSave(null), rev: 3 };
+  const other = parseSave(JSON.stringify({
+    levels: { '1-1': { moves: 5, stars: 3 } }, seen: ['prologue'], critters: ['1-1'], daily: { '2026-11-18': { moves: 9, stars: 2 } },
+    shop: { full: true, glimmer: 7, freeAt: 0, paid: [] }, settings: { contrast: true, textSize: 2 }, rev: 9,
+  }));
+  assert.equal(adoptInto(mine, { ...other, rev: 2 }), false, 'an older copy changes nothing');
+  assert.deepEqual(mine.levels, {});
+  assert.equal(adoptInto(mine, other), true);
+  for (const k of Object.keys(parseSave(null))) assert.deepEqual(mine[k], other[k], k);
+  assert.deepEqual(mine.critters, ['1-1']);
 });

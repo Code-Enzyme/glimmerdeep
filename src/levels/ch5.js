@@ -6,6 +6,7 @@ export default [
     name: 'First Spark',
     feature: 'K',
     par: 9,
+    critter: [4, 1],
     map: [
       '#########',
       '#S...A..#',
@@ -29,6 +30,7 @@ export default [
     name: 'Side by Side',
     feature: 'K',
     par: 13,
+    critter: [7, 3],
     map: [
       '#########',
       '#K>....a#',
@@ -47,6 +49,7 @@ export default [
     name: 'Vigil',
     feature: 'K',
     par: 18,
+    critter: [5, 4],
     map: [
       '#########',
       '##S######',
@@ -65,6 +68,7 @@ export default [
     name: 'Single File',
     feature: 'KL',
     par: 26,
+    critter: [1, 2],
     map: [
       '#########',
       '##S######',
@@ -83,6 +87,7 @@ export default [
     name: 'Twin Flames',
     feature: 'K',
     par: 32,
+    critter: [7, 2],
     map: [
       '#########',
       '##S###S##',
@@ -103,6 +108,7 @@ export default [
     name: 'Ember Errand',
     feature: 'KL',
     par: 20,
+    critter: [3, 1],
     map: [
       '########',
       '##K..###',
@@ -120,6 +126,7 @@ export default [
     name: 'Doorkeeper',
     feature: 'KL',
     par: 22,
+    critter: [6, 4],
     map: [
       '#########',
       '###.#####',
@@ -135,6 +142,7 @@ export default [
     name: 'Marching Orders',
     feature: 'KL',
     par: 22,
+    critter: [6, 5],
     map: [
       '#########',
       '#####W..#',
@@ -151,6 +159,7 @@ export default [
     name: 'Sealed Bud',
     feature: 'KL',
     par: 25,
+    critter: [5, 3],
     map: [
       '#########',
       '#..HK####',
@@ -166,6 +175,7 @@ export default [
     name: 'Foot of the Stair',
     feature: 'KL',
     par: 33,
+    critter: [1, 1],
     map: [
       '#########',
       '#...#####',
@@ -183,6 +193,7 @@ export default [
     name: 'Ember in the Hush',
     feature: 'KH',
     par: 17,
+    critter: [5, 2],
     gloam: true,
     map: [
       '#########',

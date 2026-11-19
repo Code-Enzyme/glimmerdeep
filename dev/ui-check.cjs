@@ -117,23 +117,37 @@ async function main() {
       reducedMotion: opts.reducedMotion || 'no-preference',
     });
     if (opts.init) await context.addInitScript(opts.init);
-    const page = await context.newPage();
     const tag = opts.tag || 'phone';
-    page.on('console', (m) => {
-      if (m.type() === 'error') errors.push(`[${tag}] console: ${m.text()}`);
-    });
-    page.on('pageerror', (e) => errors.push(`[${tag}] pageerror: ${e.message}`));
-    page.on('dialog', (d) => {
-      errors.push(`[${tag}] a native ${d.type()} dialog opened: ${d.message()}`);
-      d.dismiss().catch(() => {});
-    });
-    const cdp = await context.newCDPSession(page);
+    const watch = (pg) => {
+      pg.on('console', (m) => {
+        if (m.type() === 'error') errors.push(`[${tag}] console: ${m.text()}`);
+      });
+      pg.on('pageerror', (e) => errors.push(`[${tag}] pageerror: ${e.message}`));
+      pg.on('dialog', (d) => {
+        errors.push(`[${tag}] a native ${d.type()} dialog opened: ${d.message()}`);
+        d.dismiss().catch(() => {});
+      });
+    };
+    let page = await context.newPage();
+    watch(page);
+    let cdp = await context.newCDPSession(page);
     const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts });
     const h = {
       context, page,
       open: async (query = '') => {
         await page.goto(URL0 + query);
         await page.waitForFunction(() => window.__gd && window.__gd.screen());
+      },
+      // The app started again from its save, in a new tab of the same browser: what a relaunch does. (Reloading
+      // the same tab right after a write can, now and then, show that tab an empty localStorage in headless
+      // Chromium, though every other tab still sees the save; the app never removes it.)
+      reopen: async (query = '') => {
+        await page.close();
+        page = await context.newPage();
+        watch(page);
+        cdp = await context.newCDPSession(page);
+        h.page = page;
+        await h.open(query);
       },
       // the app opens on the title screen; Play goes to the map
       toMap: async () => {
@@ -182,18 +196,32 @@ async function main() {
   }
 
   // Plays a list of engine actions with touch: swipes, a tap on Wren for the lantern, the Wait button.
-  async function playByTouch(h, moves) {
+  // The hidden critter (SPEC section 23): tapped in its corner of the tile, as a finger would, once it shows.
+  async function tapCritter(h) {
+    const c = await h.gd('critter');
+    if (!c || !c.shows || c.found) return false;
+    const p = await h.tile(c.x, c.y);
+    await h.tap({ x: p.x + p.size * 0.25, y: p.y + p.size * 0.24 });
+    await h.page.waitForFunction(() => window.__gd.critter().found, null, { timeout: 2000 });
+    return true;
+  }
+  // sketch: also find the level's critter on the way (a tap, or C on the keyboard)
+  async function playByTouch(h, moves, sketch = false) {
     for (const m of moves) {
       if (DIRV[m]) await h.swipe(m);
       else if (m === 'L') await h.tap(await h.wren());
       else await h.page.locator('#btn-wait').tap();
       await h.idle();
+      if (sketch && !(await h.gd('state')).solved) await tapCritter(h);
     }
   }
-  async function playByKeys(h, moves) {
+  async function playByKeys(h, moves, sketch = false) {
     for (const m of moves) {
       await h.page.keyboard.press(KEY_OF[m]);
       await h.idle();
+      if (!sketch || (await h.gd('state')).solved) continue;
+      const c = await h.gd('critter');
+      if (c && c.shows && !c.found) await h.page.keyboard.press('c');
     }
   }
   const waitResult = (h) => h.page.waitForFunction(() => window.__gd.panel() === 'result', null, { timeout: 8000 });
@@ -655,7 +683,9 @@ async function main() {
       eq('undo back onto the way: it comes back', await h.gd('way'), { index: 1, total: sol.length });
       await playByKeys(h, sol.slice(1));
       await waitResult(h);
+      // a hint costs no star moss (SPEC section 23): solved and at par, and the critter is still hiding
       eq('result after a hint: two star moss', await earned(h), 2);
+      eq('result after a hint: the third waits for the critter', await h.page.locator('#result-marks li.missed').textContent(), 'A critter hides in the dark (not earned)');
       eq('result after a hint: saved', (await h.gd('save')).levels[first.id], { moves: sol.length, stars: 2 });
       await h.page.locator('#result-replay').tap();
       eq('replay: fresh attempt', [await h.gd('moves'), await h.gd('hints'), await h.gd('panel')], [0, 0, null]);
@@ -691,10 +721,11 @@ async function main() {
     // ---------------------------------------------------------------- 8. solve 1-1 with touch swipes
     console.log('level: solve by touch and by keyboard');
     await h.gd('loadLevel', first.id);
-    await playByTouch(h, sol);
+    await playByTouch(h, sol, true);
     await waitResult(h);
     ok('touch solve: result panel visible', await h.page.locator('#result').isVisible());
     eq('touch solve: three star moss', await earned(h), 3);
+    eq('touch solve: the third for the critter', await h.page.locator('#result-marks li').nth(2).textContent(), 'Found the Dewmite (earned)');
     eq('touch solve: level name on the panel', await h.page.locator('#result-name').textContent(), first.name);
     ok('touch solve: moves and par on the panel', (await h.page.locator('#result-moves').textContent()).replace(/\s+/g, ' ').includes(`${sol.length} moves · par ${first.par}`),
       await h.page.locator('#result-moves').textContent());
@@ -752,6 +783,69 @@ async function main() {
     await h.page.keyboard.press('Escape');
     eq('Escape on the result goes to the map', await h.gd('screen'), 'map');
 
+    // ---------------------------------------------------------------- 9b. hidden Journal critters (SPEC section 23)
+    console.log('hidden critters');
+    {
+      // a fresh player, so this is the first critter ever (the touch solve above already found 1-1's)
+      const k = await phone({ tag: 'critters' });
+      await k.open();
+      await k.toMap();
+      // two chapter 1 levels without tutorial steps, so the status row is free to speak
+      const [plain, other] = CHAPTERS[0].levels.filter((def) => !def.tutorial && def !== first);
+      const routeTo = (def) => solver.lightRoute(engine.parseLevel(def), def.critter[0], def.critter[1]);
+      await k.gd('loadLevel', plain.id);
+      eq('critter: hidden in the dark at the start', await k.gd('critter'),
+        { x: plain.critter[0], y: plain.critter[1], shows: false, found: false, kind: 'dewmite', name: 'Dewmite' });
+      const route = routeTo(plain);
+      await playByKeys(k, route);
+      eq('critter: it peeks out once its nook is lit', [(await k.gd('critter')).shows, (await k.gd('critter')).found], [true, false]);
+      eq('critter: the first one ever says how to find it', await k.page.locator('#status').textContent(),
+        'Something small peeks out of the dark. Tap it to sketch it.');
+      await k.shot('critter-peek');
+      const moves = await k.gd('moves');
+      await tapCritter(k);
+      eq('critter: a tap sketches it, and is not a move', [(await k.gd('critter')).found, await k.gd('moves')], [true, moves]);
+      eq('critter: the status row says so', await k.page.locator('#status').textContent(), 'Wren sketched a Dewmite for the Journal.');
+      ok('critter: with a chirp', (await k.gd('heard')).includes('spot'), JSON.stringify(await k.gd('heard')));
+      eq('critter: saved at once, before the level is lit', (await k.gd('save')).critters, [plain.id]);
+      await k.shot('critter-sketched');
+      await k.page.locator('#btn-undo').tap();
+      await k.idle();
+      eq('critter: undo keeps it, and the note goes', [(await k.gd('critter')).found, (await k.page.locator('#status').textContent()).includes('sketched')], [true, false]);
+      await k.gd('restart');
+      await k.idle();
+      await playByKeys(k, solutionOf(plain));
+      await waitResult(k);
+      eq('critter: lit at par with the critter found: three star moss', await earned(k), 3);
+      eq('critter: the result names it', await k.page.locator('#result-marks li').nth(2).textContent(), 'Found the Dewmite (earned)');
+      await k.page.locator('#result-map').tap();
+      // C on the keyboard, in another cavern
+      await k.gd('loadLevel', other.id);
+      await playByKeys(k, routeTo(other));
+      await k.page.keyboard.press('c');
+      eq('critter: C sketches it too', [(await k.gd('critter')).found, (await k.gd('save')).critters], [true, [plain.id, other.id]]);
+      eq('critter: once one is found, no more how-to', (await k.page.locator('#status').textContent()).includes('peeks'), false);
+      // the Journal's Critters tab
+      await k.page.locator('#back').tap();
+      await k.page.locator('#btn-journal').tap();
+      await k.page.locator('#tab-critters').tap();
+      eq('journal: the Critters tab is selected', await k.page.locator('#tab-critters').getAttribute('aria-selected'), 'true');
+      const all = LEVELS.length + NIGHT.length;
+      eq('journal: critters counted', await k.page.locator('#journal-count').textContent(), `2 of ${all} found`);
+      eq('journal: one entry a chapter, and the garden', await k.page.locator('.critter-entry').count(), CHAPTERS.length + 1);
+      eq('journal: a found kind says where', await k.page.locator('.critter-entry').first().locator('.kicker').textContent(),
+        `Found 2 of ${CHAPTERS[0].levels.length} in Mossmouth`);
+      eq('journal: and its name', await k.page.locator('.critter-entry').first().locator('h3').textContent(), 'Dewmite');
+      eq('journal: no lore until all are found', await k.page.locator('.critter-entry .lore').count(), 0);
+      eq('journal: a kind not found yet says where to look', await k.page.locator('.critter-entry').nth(1).locator('.rule').textContent(),
+        'Hiding in the dark corners of Whelk Grottos.');
+      await auditPage(k, 'journal critters');
+      await k.shot('journal-critters');
+      await k.page.locator('#journal-back').tap();
+      await k.page.waitForFunction(() => window.__gd.screen() === 'map');
+      await k.close();
+    }
+
     // ---------------------------------------------------------------- 10. settings
     console.log('settings');
     eq('contrast: off by default', await h.page.locator('#set-contrast').getAttribute('aria-pressed'), 'false');
@@ -790,6 +884,7 @@ async function main() {
     await h.page.locator('#set-reset').tap();
     await h.page.locator('#confirm-yes').tap();
     eq('reset: Erase erases', (await h.gd('save')).levels, {});
+    eq('reset: the critters too', (await h.gd('save')).critters, []);
     eq('reset: map shows no marks', await h.page.locator('.node .moss.on').count(), 0);
     ok('reset: panel closed', !(await h.page.locator('#confirm').isVisible()));
     await h.page.reload();
@@ -1233,7 +1328,7 @@ async function main() {
       await g.toMap();
       eq('no storage: map renders', await g.page.locator('.node').count(), LEVELS.length + NIGHT.length);
       await g.page.locator(`.node[data-level="${first.id}"]`).tap();
-      await playByTouch(g, sol);
+      await playByTouch(g, sol, true);
       await waitResult(g);
       eq('no storage: solvable, three star moss', await earned(g), 3);
       await g.page.locator('#result-map').tap();
@@ -1250,7 +1345,7 @@ async function main() {
       eq('dpr: capped at 2', L.dpr, 2);
       eq('dpr: canvas is crisp', await g.page.evaluate(() => document.getElementById('board').width), 390 * 2);
       const t0 = Date.now();
-      await playByTouch(g, sol);
+      await playByTouch(g, sol, true);
       await waitResult(g);
       eq('reduced motion: solvable', await earned(g), 3);
       ok('reduced motion: quick', Date.now() - t0 < 6000, Date.now() - t0);
@@ -1614,7 +1709,11 @@ async function main() {
       const solveDaily = async (def) => {
         await dg.page.waitForFunction(() => window.__gd.screen() === 'level');
         if ((await dg.gd('panel')) === 'card') await dg.page.keyboard.press('Escape');
-        for (const m of solutionOf(def)) await dg.gd('act', m);
+        for (const m of solutionOf(def)) {
+          await dg.gd('act', m);
+          const c = await dg.gd('critter');
+          if (c.shows && !c.found && !(await dg.gd('state')).solved) await dg.gd('sketch');
+        }
         await waitResult(dg);
       };
       await dg.open();
@@ -1915,9 +2014,9 @@ async function main() {
       eq('garden: nothing moved', (await gd.gd('state')).turn, start.turn);
       await auditPage(gd, 'garden level');
       const sol = solutionOf(n1);
-      await playByKeys(gd, sol.slice(0, Math.ceil(sol.length / 2)));
+      await playByKeys(gd, sol.slice(0, Math.ceil(sol.length / 2)), true);
       await gd.shot('garden-level');
-      await playByKeys(gd, sol.slice(Math.ceil(sol.length / 2)));
+      await playByKeys(gd, sol.slice(Math.ceil(sol.length / 2)), true);
       await waitResult(gd);
       eq('garden: the result says "Night Garden 1 lit"', await txt('#result-id'), 'Night Garden 1 lit');
       eq('garden: its record is kept', (await gd.gd('save')).levels[n1.id], { moves: sol.length, stars: 3 });
@@ -1927,7 +2026,7 @@ async function main() {
       eq('garden: to Night Garden 2', await txt('#level-id'), 'Night Garden 2');
       await gd.gd('loadLevel', NIGHT[NIGHT.length - 1].id);
       eq('garden: __gd.loadLevel finds deep puzzles', await txt('#level-id'), `Night Garden ${NIGHT.length}`);
-      await gd.open();
+      await gd.reopen();
       eq('garden: still every chapter cavern lit, no more', await txt('#title-progress'), `${LEVELS.length} of ${LEVELS.length} caverns lit`);
       await gd.toMap();
       eq('garden: the tally counts the lit puzzle', await txt('#garden .tally'), `1 of ${NIGHT.length} lit`);

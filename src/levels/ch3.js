@@ -6,6 +6,7 @@ export default [
     name: 'Heavy Sleeper',
     feature: 'T',
     par: 10,
+    critter: [1, 4],
     map: [
       '#######',
       '#W.v..#',
@@ -29,6 +30,7 @@ export default [
     name: 'Moth Crossing',
     feature: 'TM',
     par: 12,
+    critter: [5, 1],
     map: [
       '#######',
       '#W.v..#',
@@ -47,6 +49,7 @@ export default [
     name: 'The Doorstop',
     feature: 'TS',
     par: 10,
+    critter: [1, 1],
     map: [
       '######',
       '#..###',
@@ -65,6 +68,7 @@ export default [
     name: 'Twin Pools',
     feature: 'TL',
     par: 17,
+    critter: [3, 3],
     map: [
       '#######',
       '#v~.~v#',
@@ -84,6 +88,7 @@ export default [
     name: 'Many Hands',
     feature: 'TSML',
     par: 26,
+    critter: [3, 1],
     map: [
       '#######',
       '###.~v#',
@@ -102,6 +107,7 @@ export default [
     name: 'Nook and Cranny',
     feature: 'TL',
     par: 22,
+    critter: [2, 2],
     map: [
       '#######',
       '#W#####',
@@ -119,6 +125,7 @@ export default [
     name: 'Held Open',
     feature: 'MT',
     par: 25,
+    critter: [2, 5],
     map: [
       '#######',
       '#W#####',
@@ -137,6 +144,7 @@ export default [
     name: 'Step Back',
     feature: 'T',
     par: 26,
+    critter: [1, 5],
     map: [
       '#######',
       '#..####',
@@ -154,6 +162,7 @@ export default [
     name: 'Guard Duty',
     feature: 'TL',
     par: 30,
+    critter: [2, 4],
     map: [
       '#######',
       '##GM###',
@@ -171,6 +180,7 @@ export default [
     name: 'Down the Line',
     feature: 'T',
     par: 31,
+    critter: [3, 6],
     map: [
       '#######',
       '#G##..#',
@@ -189,6 +199,7 @@ export default [
     name: 'The Gate in the Dark',
     feature: 'TH',
     par: 26,
+    critter: [5, 1],
     gloam: true,
     map: [
       '#########',

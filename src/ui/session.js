@@ -1,18 +1,22 @@
 // One attempt at one level: the engine state, the undo stack, Wren's facing and the hint count.
 // No DOM in here, so it can be driven from Node as well as from the page.
 
-import { parseLevel, step, canEnter, DIRS } from '../engine.js';
+import { parseLevel, step, canEnter, isLit, DIRS } from '../engine.js';
 
 const MOVES = ['N', 'E', 'S', 'W'];
 
 export class Session {
-  constructor(def) {
+  // found: the level's hidden critter was found on an earlier visit (SPEC section 23)
+  constructor(def, { found = false } = {}) {
     this.def = def;
     this.start = parseLevel(def);
     this.state = this.start;
     this.history = [];   // { state, facing, hints } before each legal action (and before each restart)
     this.facing = 'S';
     this.hints = 0;
+    const c = def.critter;
+    this.critter = Array.isArray(c) && Number.isInteger(c[0]) && Number.isInteger(c[1]) ? { x: c[0], y: c[1] } : null;
+    this.found = !!found && this.critter !== null;   // never goes back, whatever is undone
   }
 
   get moves() {
@@ -138,18 +142,31 @@ export class Session {
     return path.reverse();
   }
 
-  // Star moss for a solved attempt: one for solving, one for par, one for using no hint.
+  // The hidden critter peeks out while its tile is lit (SPEC section 23).
+  critterShows() {
+    return this.critter !== null && isLit(this.state, this.critter.x, this.critter.y);
+  }
+
+  // A tap on the critter while it shows sketches it. Not a move: no turn passes and nothing is undone.
+  // -> true when it was found just now
+  sketch() {
+    if (this.found || !this.critterShows()) return false;
+    this.found = true;
+    return true;
+  }
+
+  // Star moss for a solved attempt: one for solving, one for par, one for the hidden critter (SPEC section 23).
   marks() {
     const par = this.def.par;
     return {
       solved: this.state.solved,
       par: this.state.solved && (typeof par !== 'number' || this.state.turn <= par),
-      clean: this.state.solved && this.hints === 0,
+      critter: this.state.solved && this.found,
     };
   }
 
   stars() {
     const m = this.marks();
-    return (m.solved ? 1 : 0) + (m.par ? 1 : 0) + (m.clean ? 1 : 0);
+    return (m.solved ? 1 : 0) + (m.par ? 1 : 0) + (m.critter ? 1 : 0);
   }
 }

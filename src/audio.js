@@ -18,7 +18,7 @@ export const SOUND_NAMES = [
   'whelkEmerge', 'stumpStep', 'stumpBump', 'stumpWake', 'newtStep', 'newtTurn', 'newtDoze', 'newtWake',
   'emberWarm', 'emberCool', 'emberIgnite', 'emberStep', 'gloamDrift', 'gloamSnuff', 'aim', 'beetleCrawl', 'beetleGlint',
   'gateOpen', 'gateClose', 'budOn', 'budOff',
-  'solve', 'undo', 'restart', 'ui', 'hint', 'page', 'creep', 'caught',
+  'solve', 'undo', 'restart', 'ui', 'hint', 'page', 'creep', 'caught', 'spot',
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ const LEVELS = {
   stumpWake: 0.1, newtStep: 0.27, newtTurn: 0.5, newtDoze: 0.25, newtWake: 0.27,
   emberWarm: 0.5, emberCool: 0.3, emberIgnite: 0.25, emberStep: 0.235, gloamDrift: 0.24, gloamSnuff: 0.36,
   aim: 0.3, beetleCrawl: 0.24, beetleGlint: 0.2, gateOpen: 0.13, gateClose: 0.133, budOn: 0.27, budOff: 0.22, solve: 0.22,
-  undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185, page: 0.34, creep: 0.2, caught: 0.5,
+  undo: 0.155, restart: 0.195, ui: 0.115, hint: 0.185, page: 0.34, creep: 0.2, caught: 0.5, spot: 0.2,
 };
 
 // Sounds that are only colour. They are dropped first when a turn gets busy.
@@ -66,7 +66,7 @@ const FOLEY = {
 
 // What the player's own finger did. These answer at once, even while the creatures of the
 // previous turn are still sounding off.
-const ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, aim: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1, page: 1 };
+const ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, aim: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1, page: 1, spot: 1 };
 
 // Repeated foley that gets a few milliseconds of loose timing when it is not already staggered.
 const LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1, emberStep: 1, gloamDrift: 1, beetleCrawl: 1 };
@@ -855,6 +855,18 @@ SOUNDS.page = function (k, t) {
   hiss(k, 'bandpass', 1900, 0.8, t + 0.08, 0.06, 0.03, 0.15);
   hiss(k, 'highpass', 5600, 0.7, t + 0.15, 0.02, 0.004, 0.06);
   tone(k, 'sine', 170, t + 0.2, 0.09, 0.008, 0.11);
+};
+
+// Spot: a hidden critter sketched (SPEC section 23). A soft two-note chirp, up a fourth, over a pencil scratch.
+SOUNDS.spot = function (k, t, p) {
+  const a = mtof(p.key + 19);
+  const b = mtof(p.key + 24);
+  hiss(k, 'bandpass', 4200, 1.2, t, 0.05, 0.01, 0.12);
+  const o1 = tone(k, 'sine', a, t + 0.02, 0.7, 0.004, 0.09);
+  o1.frequency.exponentialRampToValueAtTime(a * 1.06, t + 0.07);
+  const o2 = tone(k, 'sine', b, t + 0.12, 0.8, 0.004, 0.16);
+  o2.frequency.exponentialRampToValueAtTime(b * 1.04, t + 0.19);
+  tone(k, 'sine', b * 2, t + 0.12, 0.12, 0.003, 0.08);
 };
 
 // Hint: two gentle notes, a fifth leaning up to the tonic.

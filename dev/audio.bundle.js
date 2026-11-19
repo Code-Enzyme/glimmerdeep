@@ -69,7 +69,8 @@ var GAudio = (() => {
     "hint",
     "page",
     "creep",
-    "caught"
+    "caught",
+    "spot"
   ];
   var MASTER_LEVEL = 0.75;
   var MUSIC_LEVEL = 1;
@@ -125,8 +126,9 @@ var GAudio = (() => {
     ui: 0.115,
     hint: 0.185,
     page: 0.34,
-    creep: 0.3,
-    caught: 0.3
+    creep: 0.2,
+    caught: 0.5,
+    spot: 0.2
   };
   var FOLEY = {
     step: 1,
@@ -149,7 +151,7 @@ var GAudio = (() => {
     beetleCrawl: 1,
     beetleGlint: 1
   };
-  var ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, aim: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1, page: 1 };
+  var ACTIONS = { step: 1, blocked: 1, plant: 1, pickup: 1, aim: 1, wait: 1, undo: 1, restart: 1, ui: 1, hint: 1, page: 1, spot: 1 };
   var LOOSE = { step: 1, moth: 1, whelkMove: 1, stumpStep: 1, newtStep: 1, emberStep: 1, gloamDrift: 1, beetleCrawl: 1 };
   var PENT = [0, 2, 4, 7, 9];
   var CHAPTERS = [
@@ -828,6 +830,16 @@ var GAudio = (() => {
     hiss(k, "bandpass", 1900, 0.8, t + 0.08, 0.06, 0.03, 0.15);
     hiss(k, "highpass", 5600, 0.7, t + 0.15, 0.02, 4e-3, 0.06);
     tone(k, "sine", 170, t + 0.2, 0.09, 8e-3, 0.11);
+  };
+  SOUNDS.spot = function(k, t, p) {
+    const a = mtof(p.key + 19);
+    const b = mtof(p.key + 24);
+    hiss(k, "bandpass", 4200, 1.2, t, 0.05, 0.01, 0.12);
+    const o1 = tone(k, "sine", a, t + 0.02, 0.7, 4e-3, 0.09);
+    o1.frequency.exponentialRampToValueAtTime(a * 1.06, t + 0.07);
+    const o2 = tone(k, "sine", b, t + 0.12, 0.8, 4e-3, 0.16);
+    o2.frequency.exponentialRampToValueAtTime(b * 1.04, t + 0.19);
+    tone(k, "sine", b * 2, t + 0.12, 0.12, 3e-3, 0.08);
   };
   SOUNDS.hint = function(k, t, p) {
     const a = mtof(p.key + 7);

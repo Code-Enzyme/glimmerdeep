@@ -8,6 +8,7 @@ export const NIGHT = [
     name: 'Glass in the Dark',
     feature: '*L',
     par: 18,
+    critter: [3, 1],
     map: [
       '########',
       '###..*G#',
@@ -30,6 +31,7 @@ export const NIGHT = [
     name: 'Whelk Behind Glass',
     feature: 'S*',
     par: 23,
+    critter: [3, 4],
     map: [
       '#######',
       '#...###',
@@ -48,6 +50,7 @@ export const NIGHT = [
     name: 'Stumps and Shells',
     feature: 'TS*',
     par: 24,
+    critter: [2, 2],
     map: [
       '#######',
       '#..G###',
@@ -66,6 +69,7 @@ export const NIGHT = [
     name: 'Moth at the Window',
     feature: 'M*',
     par: 25,
+    critter: [4, 1],
     map: [
       '#########',
       '####....#',
@@ -83,6 +87,7 @@ export const NIGHT = [
     name: 'Beam Through Crystal',
     feature: 'R*A',
     par: 25,
+    critter: [3, 1],
     shutter: true,
     map: [
       '#########',
@@ -101,6 +106,7 @@ export const NIGHT = [
     name: 'The Sleeping Stump',
     feature: 'T*',
     par: 28,
+    critter: [5, 4],
     map: [
       '#########',
       '#..WA..##',
@@ -118,6 +124,7 @@ export const NIGHT = [
     name: 'Shadow by the Glass',
     feature: 'O*',
     par: 28,
+    critter: [3, 1],
     map: [
       '#########',
       '##..#.###',
@@ -137,6 +144,7 @@ export const NIGHT = [
     name: 'Newt in the Glasshouse',
     feature: 'D*',
     par: 30,
+    critter: [1, 2],
     map: [
       '#########',
       '###.A.*G#',
@@ -155,6 +163,7 @@ export const NIGHT = [
     name: 'Ember Behind Glass',
     feature: 'K*',
     par: 32,
+    critter: [3, 4],
     map: [
       '#########',
       '#..######',
@@ -173,6 +182,7 @@ export const NIGHT = [
     name: 'The Gloam\'s Glasshouse',
     feature: 'MH*',
     par: 29,
+    critter: [4, 1],
     gloam: true,
     map: [
       '#########',

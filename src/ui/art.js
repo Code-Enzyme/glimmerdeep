@@ -3,7 +3,7 @@
 // canvas), plus the star-moss mark as inline SVG.
 
 import { drawIcon, PALETTE } from '../sprites.js';
-import { drawTile, drawWren, drawCreature, drawGlow, drawLantern, charStyle } from '../chars.js';
+import { drawTile, drawWren, drawCreature, drawGlow, drawLantern, drawCritter, CRITTER_KINDS, charStyle } from '../chars.js';
 
 function paint(cssSize, scale, painter, cssHeight) {
   try {
@@ -113,7 +113,10 @@ export function portraitUrl(kind, accent) {
         }
         drawTile(g, 'hush', px, py, size, { t, seed: 3, neighbors: { n: false, s: false, e: false, w: true } });
         break;
-      default: break;
+      default:
+        // a hidden Journal critter (SPEC section 23), large on its patch of floor
+        if (CRITTER_KINDS.includes(kind)) drawCritter(g, kind, px, py, size, { t, found: true, large: true });
+        break;
     }
   });
   portraitCache.set(k, url);

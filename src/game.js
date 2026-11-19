@@ -13,7 +13,7 @@ import { NIGHT, GARDEN } from './levels/night.js';
 import { initAudio, setMuted, play, setAppHidden } from './audio.js';
 import { Session } from './ui/session.js';
 import {
-  loadSave, writeSave, recordResult, clearProgress, parseSave, newerSave, setSaveMirror, saveWrites, savedDurably,
+  loadSave, writeSave, recordResult, clearProgress, parseSave, adoptInto, setSaveMirror, saveWrites, savedDurably,
 } from './ui/store.js';
 import { BoardView } from './ui/board.js';
 import { applyIcons, setIcon, portraitUrl, sceneUrl, mossSvg, pipSvg, wayMoveSvg } from './ui/art.js';
@@ -21,6 +21,7 @@ import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { HintLadder, pieceText } from './ui/hints.js';
 import { previewOf } from './ui/preview.js';
 import { reducedMotion } from './ui/comfort.js';
+import { CRITTERS, critterKind, dailyCritterKind, isFound, markFound, critterJournal } from './ui/critters.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
   onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror,
@@ -39,6 +40,7 @@ const QUEUE_MAX = 2;       // inputs remembered while an animation runs
 const HINT_BUDGET = 150000;
 const STUCK_TEXT = 'Stuck? Hint helps a step at a time, and Undo steps back.';
 const OFF_WAY_TEXT = 'Off the way. Undo to get back on it.';
+const PEEK_TEXT = 'Something small peeks out of the dark. Tap it to sketch it.';   // SPEC section 23
 const WAY_SHOWN = 10;      // moves of the hint's way the status row shows at once (SPEC section 18)
 const MOVE_WORD = { N: 'north', E: 'east', S: 'south', W: 'west', L: 'lantern', Z: 'wait' };
 const STUCK_FOR = 4;       // moves the stuck nudge stays up
@@ -69,6 +71,7 @@ const KEYS = {
   z: 'undo', Z: 'undo', u: 'undo', U: 'undo', Backspace: 'undo',
   r: 'restart', R: 'restart',
   h: 'hint', H: 'hint',
+  c: 'sketch', C: 'sketch',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -112,6 +115,7 @@ let current = null;        // { def, chapter, adhoc, result }
 let panel = null;          // 'card' | 'result' | 'confirm' | null
 let walk = null;           // { path, tiles, i } while Wren follows a tapped path
 let message = '';          // passing line for the status row (hints)
+let critterNote = '';      // "Wren sketched a Dewmite for the Journal." until the next move (SPEC section 23)
 let moved = false;         // the first move of this visit was made (the tip goes away)
 let thinking = false;
 let hintToken = 0;
@@ -443,9 +447,8 @@ function renderJournal() {
   const list = $('journal-list');
   list.textContent = '';
   const creatures = journalTab === 'creatures';
-  $('tab-creatures').setAttribute('aria-selected', creatures ? 'true' : 'false');
-  $('tab-story').setAttribute('aria-selected', creatures ? 'false' : 'true');
-  list.setAttribute('aria-labelledby', creatures ? 'tab-creatures' : 'tab-story');
+  for (const tab of ['creatures', 'critters', 'story']) $('tab-' + tab).setAttribute('aria-selected', journalTab === tab ? 'true' : 'false');
+  list.setAttribute('aria-labelledby', 'tab-' + journalTab);
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -474,6 +477,34 @@ function renderJournal() {
         body.appendChild(el('span', 'kicker ink', `Chapter ${c.chapter.id}`));
         body.appendChild(el('h3', '', 'Not met yet'));
         body.appendChild(el('p', 'rule', `Somewhere in ${c.chapter.name}.`));
+      }
+      entry.appendChild(body);
+      list.appendChild(entry);
+    }
+  } else if (journalTab === 'critters') {
+    // the hidden critters (SPEC section 23)
+    const cj = critterJournal(save, [...CHAPTERS, GARDEN]);
+    $('journal-count').textContent = `${cj.found} of ${cj.total} found`;
+    for (const c of cj.entries) {
+      const entry = el('article', 'entry paper critter-entry' + (c.found ? ' met' : ' unmet'));
+      const art = el('span', 'entry-art');
+      art.setAttribute('aria-hidden', 'true');
+      if (c.found) {
+        const chapter = [...CHAPTERS, GARDEN].find((ch) => ch.id === c.chapter.id);
+        const url = portraitUrl(c.kind, chapter && chapter.accent);
+        art.style.backgroundImage = url ? `url(${url})` : 'none';
+      }
+      entry.appendChild(art);
+      const body = el('div', 'entry-body');
+      if (c.found) {
+        body.appendChild(el('span', 'kicker ink', `Found ${c.found} of ${c.total} in ${c.chapter.name}`));
+        body.appendChild(el('h3', '', c.name));
+        body.appendChild(el('p', 'note', c.note));
+        if (c.lore) body.appendChild(el('p', 'note lore', c.lore));
+      } else {
+        body.appendChild(el('span', 'kicker ink', typeof c.chapter.id === 'number' ? `Chapter ${c.chapter.id}` : GARDEN.kicker));
+        body.appendChild(el('h3', '', 'Not found yet'));
+        body.appendChild(el('p', 'rule', `Hiding in the dark corners of ${c.chapter.name}.`));
       }
       entry.appendChild(body);
       list.appendChild(entry);
@@ -510,9 +541,11 @@ function renderJournal() {
 // Starts a level. -> false when the definition does not parse.
 // day: the date of a Daily Glimmer cavern ('YYYY-MM-DD'); its levels are ad hoc for the chapters' records.
 function openLevel(def, adhoc, day) {
+  const loose = !!adhoc || !(LEVELS.includes(def) || NIGHT.includes(def));
   let fresh;
   try {
-    fresh = new Session(def);
+    // a chapter or Night Garden critter found on an earlier visit stays found (SPEC section 23)
+    fresh = new Session(def, { found: !day && !loose && isFound(save, def) });
   } catch (e) {
     return false;
   }
@@ -522,7 +555,8 @@ function openLevel(def, adhoc, day) {
   cancelWalk();
   queue.length = 0;
   session = fresh;
-  current = { def, chapter: day ? DAILY_CHAPTER : chapterOf(def), adhoc: !!adhoc || !(LEVELS.includes(def) || NIGHT.includes(def)), day: day || null, result: null };
+  current = { def, chapter: day ? DAILY_CHAPTER : chapterOf(def), adhoc: loose, day: day || null, result: null };
+  current.critterKind = (day ? dailyCritterKind(def, CHAPTERS) : critterKind(current.chapter)) || CRITTERS[0];
   // Tutorials and the stuck nudge are for a level's first visits: never solved, and the setting on.
   const guided = save.settings.tutorials && (day ? !save.daily[day] : !current.adhoc && !save.levels[def.id]);
   tutorial = guided && Array.isArray(def.tutorial) && def.tutorial.length ? new Tutorial(def.tutorial) : null;
@@ -533,10 +567,12 @@ function openLevel(def, adhoc, day) {
   window.clearTimeout(rewindTimer);
   moved = false;
   message = '';
+  critterNote = '';
   celebrating = false;
   lastBloom = -1;
   view.highContrast = save.settings.contrast;
-  view.setLevel(session.state, { accent: current.chapter.accent, facing: session.facing });
+  const critter = session.critter ? { ...session.critter, kind: current.critterKind.kind, found: session.found } : null;
+  view.setLevel(session.state, { accent: current.chapter.accent, facing: session.facing, critter });
   $('level-id').textContent = day ? `Daily Glimmer, ${dateLabel(day)}` : levelTitle(def);
   $('level-name').textContent = def.name || 'Unnamed cavern';
   clearHint();
@@ -625,6 +661,10 @@ function refreshStatus() {
     text = STUCK_TEXT;
   } else if (step && typeof step.say === 'string' && step.say) {
     text = step.say;
+  } else if (critterNote) {
+    text = critterNote;
+  } else if (peeking()) {
+    text = PEEK_TEXT;
   } else if (!moved && typeof def.tip === 'string' && def.tip) {
     text = def.tip;
   } else {
@@ -644,6 +684,30 @@ function refreshStatus() {
     statusEl.appendChild(span);
   }
   statusEl.appendChild(document.createTextNode(text));
+}
+
+// ---------------------------------------------------------------- hidden critters (SPEC section 23)
+
+// The first time ever a critter shows, with tutorials on, the status row says how to sketch it.
+function peeking() {
+  return save.settings.tutorials && !(save.critters && save.critters.length) && !session.solved
+    && !session.found && session.critterShows();
+}
+
+// A tap on the critter while it shows (or C). Not a move. -> true when it was sketched just now
+function sketchCritter() {
+  if (!session || session.solved || !session.sketch()) return false;
+  if (!current.adhoc && !current.day) {
+    markFound(save, current.def);
+    writeSave(save);
+  }
+  if (view.critter) view.critter.found = true;
+  view.addEffect({ type: 'sketch', x: session.critter.x, y: session.critter.y });
+  critterNote = `Wren sketched a ${current.critterKind.name} for the Journal.`;
+  sfx('spot');
+  buzz('tap');
+  refreshStatus();
+  return true;
 }
 
 // ---------------------------------------------------------------- tutorials (SPEC section 12)
@@ -711,6 +775,7 @@ function doAction(action) {
   }
   clearHint();
   moved = true;
+  critterNote = '';
   tutorialAfter(next);
   view.playTurn(prev, next, { facing: session.facing, speed: queue.length ? 1.5 : 1 });
   if (ladder && ladder.tier === 3) {
@@ -786,6 +851,7 @@ function undo() {
   const before = session.state;
   const bloomBefore = session.bloomCount();
   if (!session.undo()) return false;
+  critterNote = '';
   stopHintSearch();
   dismissStuck();
   clearHint();
@@ -808,6 +874,7 @@ function restart() {
   queue.length = 0;
   const before = session.state;
   if (!session.restart()) return false;
+  critterNote = '';
   stopHintSearch();
   dismissStuck();
   ladder = null;   // a restart is a fresh attempt with no hints used (SPEC section 18)
@@ -825,7 +892,11 @@ function restart() {
 // ---------------------------------------------------------------- tap to walk
 
 function tapTile(tile) {
-  if (!session || panel || celebrating || session.solved || session.caught) return;
+  if (!session || panel || celebrating || session.solved) return;
+  // the hidden critter, while it shows, comes before walking there or tapping Wren (SPEC section 23)
+  const c = session.critter;
+  if (c && c.x === tile.x && c.y === tile.y && sketchCritter()) return;
+  if (session.caught) return;
   const s = session.state;
   if (tile.x === s.wren.x && tile.y === s.wren.y) {
     userAction('L');
@@ -1083,10 +1154,12 @@ function showResult() {
   $('result-name').textContent = def.name || 'Unnamed cavern';
   const hasPar = typeof def.par === 'number';
   $('result-moves').textContent = `${r.moves} move${r.moves === 1 ? '' : 's'}` + (hasPar ? `  ·  par ${def.par}` : '');
+  const critterText = !session.critter ? 'No critter in this cavern'
+    : r.marks.critter ? `Found the ${current.critterKind.name}` : 'A critter hides in the dark';
   const marks = [
     [r.marks.solved, 'Solved'],
     [r.marks.par, hasPar ? 'At or under par' : 'Par'],
-    [r.marks.clean, 'No hints'],
+    [r.marks.critter, critterText],
   ];
   const list = $('result-marks');
   list.textContent = '';
@@ -1288,8 +1361,7 @@ async function restorePurchases() {
 // The second copy of the save was written more often (the app was killed before localStorage reached the disk):
 // take it, write it back, and redraw what shows the save. SPEC section 16.
 function adoptSave(other) {
-  if (newerSave(save, other) === save) return;
-  for (const k of ['levels', 'seen', 'shop', 'daily', 'settings', 'rev']) save[k] = other[k];
+  if (!adoptInto(save, other)) return;
   writeSave(save);
   syncSettings();
   if (screen === 'title') titleProgress();
@@ -1567,6 +1639,11 @@ onClick($('tab-story'), () => {
   journalTab = 'story';
   renderJournal();
 });
+onClick($('tab-critters'), () => {
+  play('ui');
+  journalTab = 'critters';
+  renderJournal();
+});
 
 onClick($('set-sound'), () => toggleSetting('sound'));
 onClick($('set-contrast'), () => toggleSetting('contrast'));
@@ -1644,6 +1721,7 @@ document.addEventListener('keydown', (e) => {
     else restart();
   } else if (panel) return;
   else if (what === 'hint') requestHint();
+  else if (what === 'sketch') sketchCritter();
   else userAction(what);
 });
 
@@ -1757,6 +1835,11 @@ window.__gd = {
   hintAt: () => (view.hint && view.hint.at ? { ...view.hint.at } : null),
   preview: () => (view.preview ? JSON.parse(JSON.stringify(view.preview)) : null),
   reduced: () => view.reduced,
+  // the hidden critter (SPEC section 23): where it is, whether it shows and whether it is found, or null
+  critter: () => (session && session.critter
+    ? { ...session.critter, shows: session.critterShows(), found: session.found, kind: current.critterKind.kind, name: current.critterKind.name }
+    : null),
+  sketch: () => sketchCritter(),
   hintStep: () => (ladder ? ladder.tier : 0),
   way: () => {
     const way = ladder && session && !session.solved ? ladder.following(session.state) : null;

@@ -530,6 +530,8 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .tabs { gap: 8px; }
 .tab {
   flex: 1 1 0;
+  min-width: 0;
+  padding: 0 4px;
   min-height: 56px;
   font: 700 16px/1 var(--sans);
   color: var(--paper-text);
@@ -580,6 +582,8 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   padding-left: 10px;
   border-left: 3px solid rgba(201, 132, 42, 0.55);
 }
+/* a hidden critter's lore line, once all of its chapter's are found (SPEC section 23) */
+.entry .note.lore { border-left-color: rgba(95, 191, 168, 0.75); font-style: normal; }
 .entry.unmet h3, .entry.dark h3 { color: #5A4660; }
 .entry.unmet .rule, .entry.dark .preview { font-style: italic; color: #5A4660; }
 .page-entry { display: block; }

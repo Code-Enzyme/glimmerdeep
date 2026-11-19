@@ -4,7 +4,7 @@
 
 import { DIRS, terrainAt, beamPath } from '../engine.js';
 import { drawDarkness, drawBackdrop, PALETTE } from '../sprites.js';
-import { drawTile, drawWren, drawLantern, drawCreature, drawGlow } from '../chars.js';
+import { drawTile, drawWren, drawLantern, drawCreature, drawGlow, drawCritter } from '../chars.js';
 
 const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',
@@ -57,6 +57,7 @@ export class BoardView {
     this.press = null;     // { x, y, t0 } while a finger rests on something that has a rule card
     this.preview = null;   // { x, y, to: { x, y } | null } a held creature's next step, while its card is open
     this.coach = null;     // { kind: 'wren' | 'creature' | 'tile', id?, x, y, gesture } a tutorial's pointer
+    this.critter = null;   // { x, y, kind, found } the level's hidden Journal critter (SPEC section 23), or null
     this.cssW = 0;
     this.cssH = 0;
     this.dpr = 1;
@@ -82,6 +83,7 @@ export class BoardView {
     this.press = null;
     this.preview = null;
     this.coach = null;
+    this.critter = (opts && opts.critter) || null;
     this.buildTiles(state);
     this.computeLayout();
   }
@@ -413,7 +415,7 @@ export class BoardView {
   }
 
   addEffect(fx, now) {
-    const dur = fx.type === 'bloom' ? 620 : fx.type === 'cross' ? 420 : fx.type === 'caught' ? 900 : 380;
+    const dur = fx.type === 'bloom' ? 620 : fx.type === 'cross' ? 420 : fx.type === 'caught' ? 900 : fx.type === 'sketch' ? 700 : 380;
     if (this.reduced && fx.type !== 'bloom' && fx.type !== 'cross' && fx.type !== 'caught') return;
     if (this.effects.length > 24) this.effects.shift();
     this.effects.push({ type: fx.type, x: fx.x, y: fx.y, grow: !!fx.grow, t0: now !== undefined ? now : performance.now(), dur });
@@ -654,6 +656,12 @@ export class BoardView {
       } else {
         drawTile(ctx, kind, ox + tile.x * size, oy + tile.y * size, size, o);
       }
+    }
+
+    // the hidden critter peeks out of its nook while its tile is lit, under anything standing there
+    const critter = this.critter;
+    if (critter && lit[critter.y * w + critter.x] === 1) {
+      drawCritter(ctx, critter.kind, ox + critter.x * size, oy + critter.y * size, size, { t: this.reduced ? 0.6 : t, found: critter.found });
     }
 
     for (let i = 0; i < things.length; i++) {
@@ -1030,6 +1038,20 @@ export class BoardView {
         ctx.lineWidth = line * 3 * (1 - p) + 0.5;
         ctx.strokeStyle = PALETTE.ink;
         ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (fx.type === 'sketch') {
+        // a critter sketched: pencil-bright specks fly out of the corner where it sits
+        const qx = x + size * 0.25;
+        const qy = y + size * 0.24;
+        ctx.globalAlpha = 1 - p;
+        ctx.fillStyle = PALETTE.flame;
+        for (let k = 0; k < 7; k++) {
+          const ang = (k / 7) * TAU + 0.4;
+          const d = size * (0.12 + 0.42 * e);
+          ctx.beginPath();
+          ctx.arc(qx + Math.cos(ang) * d, qy + Math.sin(ang) * d, size * 0.035 * (1 - p * 0.6), 0, TAU);
+          ctx.fill();
+        }
         ctx.globalAlpha = 1;
       } else if (fx.type === 'cross') {
         const k = size * 0.16;
