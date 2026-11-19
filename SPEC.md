@@ -989,3 +989,29 @@ made from two fixed word lists), which keeps it clear of moderation.
   caverns.
 - **The save** keeps your caverns as `save.workshop` (a list; anything malformed is dropped). Reset progress
   keeps them.
+
+## 27. Controls: arrows, a left hand, swipe length (decided 19 Nov 2026)
+
+The design doc's control and accessibility lists ask for an optional on-screen pad, a left-handed mirror
+and adjustable swipe sensitivity. They join the Comfort sheet (section 22), under Motion, as **Controls**.
+
+- **Arrows:** Off or On. On, every level shows a row of four arrow buttons between the board and the thumb
+  bar: west, north, south, east, in that order whichever hand. Each one is a move, exactly as a swipe that
+  way (queued like a swipe while the board is still moving, refused the same way). Their labels say "Step
+  west" and so on. Swipes, taps and keys still work. Off by default, so the board keeps its room.
+- **Hand:** Right or Left. Left mirrors a level's top bar (Back on the right, the move counter on the left)
+  and its thumb bar (Hint at the far left, Undo at the far right), so the buttons used most sit under the
+  left thumb. The arrows keep their order. Right is the default and changes nothing.
+- **Swipe:** Short, Normal or Long: how far a finger travels on the board before it counts as a step: 16, 24
+  or 40 px (Normal is the old 24). A shorter swipe suits a light touch; a longer one keeps a shaky finger
+  from stepping by accident. A tap may still wander 12 px. Once a drag has made its first step, the steps
+  after it go as before (about a tile each).
+- **The Comfort setting** on the map shows its text size as before; it shows as pressed whenever any
+  comfort or control choice is not its default.
+- **The sheet** has six choices now: the heading and Done stay put and the choices scroll between them on a
+  short screen.
+- **Saved** with the settings: `arrows` (default false), `hand` 'right' or 'left' (default 'right'),
+  `swipe` 'short', 'normal' or 'long' (default 'normal'). Anything else falls back to the default. Reset
+  progress keeps them.
+- `src/ui/comfort.js` (no DOM) adds `HANDS`, `SWIPES`, `SWIPE_PX`, `CONTROL_DEFAULTS`, `readControls(settings)`
+  and `swipeNeed(swipe)` (the pixels for a choice, 24 for anything unknown).

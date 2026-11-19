@@ -1901,7 +1901,7 @@ function paintGlow(g) {
 // Icons
 // ---------------------------------------------------------------------------
 
-const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort', 'glow', 'grid', 'share', 'brush'];
+const ICONS = ['undo', 'restart', 'wait', 'hint', 'lantern', 'map', 'sound', 'mute', 'star', 'lock', 'contrast', 'book', 'comfort', 'glow', 'grid', 'share', 'brush', 'arrow'];
 export const ICON_NAMES = ICONS.slice();
 
 function arrowHead(g, x, y, ang, len) {
@@ -2133,6 +2133,12 @@ function iconPath(g, name) {
       g.bezierCurveTo(0.3, 0.5, 0.24, 0.58, 0.24, 0.66);
       g.bezierCurveTo(0.24, 0.76, 0.18, 0.8, 0.12, 0.84);
       g.bezierCurveTo(0.3, 0.88, 0.48, 0.8, 0.5, 0.6);
+      break;
+    case 'arrow':
+      // a brush-stroke arrow pointing east; the page turns it for the other ways (SPEC section 27)
+      g.moveTo(0.18, 0.5);
+      g.lineTo(0.8, 0.5);
+      arrowHead(g, 0.82, 0.5, 0, 0.26);
       break;
     default:
       g.arc(0.5, 0.5, 0.08, 0, TAU);

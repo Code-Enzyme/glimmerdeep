@@ -4,6 +4,7 @@
 //   node dev/ui-check.cjs --no-build   reuse dist/glimmerdeep.html
 //   node dev/ui-check.cjs --shots      only take the screenshots (phone, small phone, tablet)
 //   node dev/ui-check.cjs --only=workshop   only the Workshop's checks (SPEC section 26), while working on it
+//   node dev/ui-check.cjs --only=controls   only the controls' checks (SPEC section 27)
 //
 // The page is opened from file://, in a 390 by 844 touch context. Any console error or page error fails
 // the run. Expectations about levels come from the real modules (levels, engine, solver) and the rule
@@ -296,6 +297,183 @@ async function main() {
     eq(`${label}: no text under 14 px`, a.small, []);
   };
   const earned = (h) => h.page.locator('#result-marks li.earned').count();
+
+  // ------------------------------------------------------------------ controls (SPEC section 27)
+  async function controlsChecks() {
+    console.log('controls');
+    const seen = ['prologue', ...CHAPTERS.map((c) => 'ch' + c.id)];
+    const c = await phone({ tag: 'controls', seed: { levels: {}, seen, critters: [], settings: { tutorials: false } } });
+    const txt = async (sel) => ((await c.page.locator(sel).textContent()) || '').trim();
+    const pressed = (sel) => c.page.locator(sel).getAttribute('aria-pressed');
+    const box = (sel) => c.page.locator(sel).boundingBox();
+    const openSheet = async () => {
+      await c.page.locator('#set-comfort').tap();
+      await c.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+    };
+    const choose = async (sel) => {
+      await c.page.locator(sel).scrollIntoViewIfNeeded();
+      await c.page.locator(sel).tap();
+    };
+    const openFirst = async () => {
+      await c.gd('loadLevel', first.id);
+      if ((await c.gd('panel')) === 'card') await c.page.keyboard.press('Escape');
+      await c.idle();
+    };
+    await c.open();
+    await c.toMap();
+    await openSheet();
+    eq('controls: the Comfort sheet has Arrows, Hand and Swipe', await c.page.evaluate(() => [...document.querySelectorAll('#comfort h4')].map((h) => h.textContent)),
+      ['Text size', 'Readable font', 'Motion', 'Arrows', 'Hand', 'Swipe']);
+    eq('controls: the defaults are pressed', await c.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[aria-pressed="true"]')].map((b) => b.dataset.arrows || b.dataset.hand || b.dataset.swipe).filter(Boolean)),
+      ['false', 'right', 'normal']);
+    eq('controls: the choices', await c.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[data-arrows], #comfort .choice[data-hand], #comfort .choice[data-swipe]')].map((b) => b.textContent)),
+      ['Off', 'On', 'Right', 'Left', 'Short', 'Normal', 'Long']);
+    await auditPage(c, 'controls sheet');
+
+    // the arrows
+    await c.page.keyboard.press('Escape');
+    await openFirst();
+    eq('controls: no arrows by default', await c.page.locator('#arrows').isVisible(), false);
+    const plain = await c.gd('layout');
+    await c.page.locator('#back').tap();
+    await c.page.waitForFunction(() => window.__gd.screen() === 'map');
+    await openSheet();
+    await choose('#comfort .choice[data-arrows="true"]');
+    eq('controls: arrows on, saved', [(await c.gd('save')).settings.arrows, await pressed('#comfort .choice[data-arrows="true"]')], [true, 'true']);
+    eq('controls: the Comfort setting shows a change', await pressed('#set-comfort'), 'true');
+    await c.page.keyboard.press('Escape');
+    await openFirst();
+    ok('controls: the arrows show in a level', await c.page.locator('#arrows').isVisible());
+    eq('controls: west, north, south, east', await c.page.locator('#arrows .arrow').evaluateAll((els) => els.map((e) => [e.dataset.dir, e.getAttribute('aria-label')])),
+      [['W', 'Step west'], ['N', 'Step north'], ['S', 'Step south'], ['E', 'Step east']]);
+    {
+      const canvas = await box('#board');
+      const arrows = await box('#arrows');
+      const bar = await box('.bar.tools');
+      ok('controls: the arrows sit between the board and the thumb bar', canvas.y + canvas.height <= arrows.y + 1 && arrows.y + arrows.height <= bar.y + 1, JSON.stringify({ canvas, arrows, bar }));
+      const one = await box('#arrows .arrow[data-dir="N"]');
+      ok('controls: each arrow is a good size', one.width >= 52 && one.height >= 52, JSON.stringify(one));
+      const L = await c.gd('layout');
+      ok('controls: the board still has room', L.size >= 36 && L.size <= plain.size, JSON.stringify({ with: L.size, without: plain.size }));
+    }
+    await auditPage(c, 'level with arrows');
+    await c.shot('controls-arrows');
+    {
+      const sol = solutionOf(first);
+      for (const m of sol) {
+        if (DIRV[m]) await c.page.locator(`#arrows .arrow[data-dir="${m}"]`).tap();
+        else if (m === 'L') await c.page.locator('#btn-lantern').tap();
+        else await c.page.locator('#btn-wait').tap();
+        await c.idle();
+      }
+      await waitResult(c);
+      eq('controls: a level solves with the arrows alone', [(await c.gd('state')).solved, await c.gd('moves')], [true, sol.length]);
+      await c.page.locator('#result-replay').tap();
+      await c.idle();
+    }
+    {
+      const before = (await c.gd('state')).wren;
+      const wall = engine.parseLevel(first).tiles[before.y][before.x - 1] === '#';
+      await c.page.locator('#arrows .arrow[data-dir="W"]').tap();
+      await c.idle();
+      if (wall) eq('controls: an arrow into a wall is refused like a swipe', [(await c.gd('state')).wren, await c.gd('moves')], [before, 0]);
+    }
+
+    // the left hand
+    await c.page.locator('#back').tap();
+    await c.page.waitForFunction(() => window.__gd.screen() === 'map');
+    await openSheet();
+    await choose('#comfort .choice[data-hand="left"]');
+    eq('controls: left hand, saved', (await c.gd('save')).settings.hand, 'left');
+    await c.page.keyboard.press('Escape');
+    await openFirst();
+    {
+      const back = await box('#back');
+      const counter = await box('#counter');
+      const hint = await box('#btn-hint');
+      const undo = await box('#btn-undo');
+      const w = await box('#arrows .arrow[data-dir="W"]');
+      const e = await box('#arrows .arrow[data-dir="E"]');
+      ok('controls: left hand puts Back on the right of the counter', back.x > counter.x, JSON.stringify({ back, counter }));
+      ok('controls: and Hint at the left, Undo at the right', hint.x < undo.x, JSON.stringify({ hint, undo }));
+      ok('controls: the arrows keep their order', w.x < e.x, JSON.stringify({ w, e }));
+      ok('controls: everything still on screen', back.x + back.width <= 390 && counter.x >= 0 && undo.x + undo.width <= 390 && hint.x >= 0);
+    }
+    await c.shot('controls-left');
+
+    // swipe length: a swipe of 30 px steps with Normal and Short, not with Long; 18 px only with Short
+    const steps = async (dist) => {
+      await c.page.keyboard.press('r');
+      await c.idle();
+      const from = { x: 195, y: (await c.tile(0, 0)).y + 30 };
+      await c.swipe('E', from, dist);
+      await c.page.waitForTimeout(150);
+      await c.idle();
+      return c.gd('moves');
+    };
+    const setSwipe = async (v) => {
+      await c.page.locator('#back').tap();
+      await c.page.waitForFunction(() => window.__gd.screen() === 'map');
+      await openSheet();
+      await choose(`#comfort .choice[data-swipe="${v}"]`);
+      await c.page.keyboard.press('Escape');
+      await openFirst();
+    };
+    const east = engine.step(engine.parseLevel(first), 'E');
+    if (east) {
+      eq('controls: Normal: 18 px is not a step, 30 px is', [await steps(18), await steps(30)], [0, 1]);
+      await setSwipe('long');
+      eq('controls: Long: 30 px is not a step, 48 px is', [await steps(30), await steps(48)], [0, 1]);
+      await setSwipe('short');
+      eq('controls: Short: 18 px is a step', await steps(18), 1);
+    } else {
+      ok('controls: the first level can step east from the start', false);
+    }
+
+    // kept over a reload, and by Reset progress
+    await c.page.reload();
+    await c.page.waitForFunction(() => window.__gd && window.__gd.screen());
+    await c.toMap();
+    const keep = async () => {
+      const s = (await c.gd('save')).settings;
+      return [s.arrows, s.hand, s.swipe];
+    };
+    eq('controls: kept over a reload', await keep(), [true, 'left', 'short']);
+    await c.page.locator('#set-reset').tap();
+    await c.page.locator('#confirm-yes').tap();
+    eq('controls: Reset progress keeps them', await keep(), [true, 'left', 'short']);
+    await c.close();
+
+    // a small phone: the sheet's heading and Done on screen, the last choice in reach
+    const sm = await phone({ tag: 'controls-small', viewport: { width: 360, height: 640 }, seed: { levels: {}, seen, critters: [], settings: { tutorials: false } } });
+    await sm.open();
+    await sm.toMap();
+    await sm.page.locator('#set-comfort').tap();
+    await sm.page.waitForFunction(() => window.__gd.panel() === 'comfort');
+    const within = async (sel) => {
+      const b = await sm.page.locator(sel).boundingBox();
+      return !!b && b.y >= 0 && b.y + b.height <= 640 ? true : `${sel} ${JSON.stringify(b)}`;
+    };
+    eq('controls: on a small phone the heading and Done are on screen', [await within('#comfort-title'), await within('#comfort-close')], [true, true]);
+    await sm.page.locator('#comfort .sheet-scroll').evaluate((el) => { el.scrollTop = el.scrollHeight; });
+    eq('controls: the last choice scrolls into view, Done still there', [await within('#comfort .choice[data-swipe="long"]'), await within('#comfort-close')], [true, true]);
+    await sm.shot('controls-small-sheet');
+    // with the arrows on, a small phone's board keeps tiles of 30 px or more
+    await sm.page.locator('#comfort .choice[data-arrows="true"]').scrollIntoViewIfNeeded();
+    await sm.page.locator('#comfort .choice[data-arrows="true"]').tap();
+    await sm.page.keyboard.press('Escape');
+    await sm.gd('loadLevel', first.id);
+    if ((await sm.gd('panel')) === 'card') await sm.page.keyboard.press('Escape');
+    {
+      const L = await sm.gd('layout');
+      ok('controls: small phone, arrows on: tiles of 30 px or more', L.size >= 30, JSON.stringify(L));
+      const arrows = await sm.page.locator('#arrows').boundingBox();
+      const bar = await sm.page.locator('.bar.tools').boundingBox();
+      ok('controls: small phone, arrows and bar on screen', arrows.y >= 0 && bar.y + bar.height <= 640 + 1, JSON.stringify({ arrows, bar }));
+    }
+    await sm.shot('controls-small-level');
+    await sm.close();
+  }
 
   // ------------------------------------------------------------------ the Workshop (SPEC section 26)
   async function workshopChecks() {
@@ -1253,7 +1431,8 @@ async function main() {
     await h.page.locator('#back').tap();
     await h.page.locator('#set-contrast').tap();
     await h.page.locator('#set-sound').tap();
-    eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow' });
+    eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow',
+      arrows: false, hand: 'right', swipe: 'normal' });
 
     // Unlock all skips the level order, never the purchase (SPEC section 14)
     const paidCount = LEVELS.filter((def) => !CHAPTERS.find((c) => c.id === 1).levels.includes(def)).length + NIGHT.length;
@@ -2450,7 +2629,7 @@ async function main() {
       ok('comfort: the sheet opens', await cf.page.locator('#comfort').isVisible());
       eq('comfort: Done has the focus', await cf.page.evaluate(() => document.activeElement && document.activeElement.id), 'comfort-close');
       eq('comfort: the defaults are pressed', await cf.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[aria-pressed="true"]')].map((b) => b.textContent)),
-        ['100%', 'Off', 'As phone']);
+        ['100%', 'Off', 'As phone', 'Off', 'Right', 'Normal']);   // the last three are the controls (SPEC section 27)
       await auditPage(cf, 'comfort sheet');
       await cf.shot('comfort-sheet');
       await cf.page.locator('#comfort .choice[data-size="2"]').tap();
@@ -2713,6 +2892,7 @@ async function main() {
   }
 
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'workshop')) await workshopChecks();
+  if (!SHOTS_ONLY && (!ONLY || ONLY === 'controls')) await controlsChecks();
 
   // ------------------------------------------------------------------ screenshots
   if (!ONLY) {

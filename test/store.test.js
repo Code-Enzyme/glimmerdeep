@@ -23,7 +23,22 @@ test('store: a fresh save has no levels, no seen story pages and the default set
   assert.deepEqual(save.seen, []);
   assert.deepEqual(save.settings, {
     sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow',
+    arrows: false, hand: 'right', swipe: 'normal',
   });
+});
+
+test('store: the control settings round-trip, and junk in them falls back to the defaults (SPEC section 27)', () => {
+  const data = withStorage();
+  const save = loadSave();
+  Object.assign(save.settings, { arrows: true, hand: 'left', swipe: 'long' });
+  writeSave(save);
+  const again = loadSave();
+  assert.deepEqual([again.settings.arrows, again.settings.hand, again.settings.swipe], [true, 'left', 'long']);
+  data.set(SAVE_KEY, JSON.stringify({ settings: { arrows: 'yes', hand: 'middle', swipe: 3, sound: false } }));
+  const junk = loadSave();
+  assert.deepEqual([junk.settings.arrows, junk.settings.hand, junk.settings.swipe, junk.settings.sound], [false, 'right', 'normal', false]);
+  clearProgress(again);
+  assert.deepEqual([again.settings.arrows, again.settings.hand, again.settings.swipe], [true, 'left', 'long'], 'Reset progress keeps them');
 });
 
 test('store: the comfort settings round-trip, and junk in them falls back to the defaults (SPEC section 22)', () => {

@@ -189,6 +189,14 @@
       <canvas id="board" role="img" aria-label="The cave board. Swipe to walk, tap Wren to use the lantern."></canvas>
     </div>
 
+    <!-- Arrows, when the Comfort sheet turns them on (SPEC section 27) -->
+    <div id="arrows" class="arrows" role="group" aria-label="Step" hidden>
+      <button class="arrow" type="button" data-dir="W" aria-label="Step west"><span class="ico" data-icon="arrow"></span></button>
+      <button class="arrow" type="button" data-dir="N" aria-label="Step north"><span class="ico" data-icon="arrow"></span></button>
+      <button class="arrow" type="button" data-dir="S" aria-label="Step south"><span class="ico" data-icon="arrow"></span></button>
+      <button class="arrow" type="button" data-dir="E" aria-label="Step east"><span class="ico" data-icon="arrow"></span></button>
+    </div>
+
     <nav class="bar tools" aria-label="Actions">
       <button id="btn-undo" class="tool" type="button" aria-label="Undo">
         <span class="ico" data-icon="undo"></span><span class="lbl">Undo</span>
@@ -350,32 +358,59 @@
   <aside id="comfort" class="sheet paper comfort" role="dialog" aria-modal="true" aria-labelledby="comfort-title" hidden>
     <span class="kicker ink">Settings</span>
     <h3 id="comfort-title">Comfort</h3>
-    <section class="opt">
-      <h4 id="opt-text">Text size</h4>
-      <p class="opt-note">For tips, field notes, the story and the journal.</p>
-      <div class="choices" role="group" aria-labelledby="opt-text">
-        <button class="choice" type="button" data-size="1" aria-pressed="true" aria-label="Text size 100%">100%</button>
-        <button class="choice" type="button" data-size="1.5" aria-pressed="false" aria-label="Text size 150%">150%</button>
-        <button class="choice" type="button" data-size="2" aria-pressed="false" aria-label="Text size 200%">200%</button>
-      </div>
-    </section>
-    <section class="opt">
-      <h4 id="opt-font">Readable font</h4>
-      <p class="opt-note">A plain, upright font with more room between letters.</p>
-      <div class="choices" role="group" aria-labelledby="opt-font">
-        <button class="choice" type="button" data-readable="false" aria-pressed="true" aria-label="Readable font off">Off</button>
-        <button class="choice" type="button" data-readable="true" aria-pressed="false" aria-label="Readable font on">On</button>
-      </div>
-    </section>
-    <section class="opt">
-      <h4 id="opt-motion">Motion</h4>
-      <p class="opt-note">As phone follows your phone's reduce-motion setting.</p>
-      <div class="choices" role="group" aria-labelledby="opt-motion">
-        <button class="choice" type="button" data-motion="system" aria-pressed="true" aria-label="Motion as the phone sets it">As phone</button>
-        <button class="choice" type="button" data-motion="reduced" aria-pressed="false" aria-label="Reduced motion">Reduced</button>
-        <button class="choice" type="button" data-motion="full" aria-pressed="false" aria-label="Full motion">Full</button>
-      </div>
-    </section>
+    <div class="sheet-scroll">
+      <section class="opt">
+        <h4 id="opt-text">Text size</h4>
+        <p class="opt-note">For tips, field notes, the story and the journal.</p>
+        <div class="choices" role="group" aria-labelledby="opt-text">
+          <button class="choice" type="button" data-size="1" aria-pressed="true" aria-label="Text size 100%">100%</button>
+          <button class="choice" type="button" data-size="1.5" aria-pressed="false" aria-label="Text size 150%">150%</button>
+          <button class="choice" type="button" data-size="2" aria-pressed="false" aria-label="Text size 200%">200%</button>
+        </div>
+      </section>
+      <section class="opt">
+        <h4 id="opt-font">Readable font</h4>
+        <p class="opt-note">A plain, upright font with more room between letters.</p>
+        <div class="choices" role="group" aria-labelledby="opt-font">
+          <button class="choice" type="button" data-readable="false" aria-pressed="true" aria-label="Readable font off">Off</button>
+          <button class="choice" type="button" data-readable="true" aria-pressed="false" aria-label="Readable font on">On</button>
+        </div>
+      </section>
+      <section class="opt">
+        <h4 id="opt-motion">Motion</h4>
+        <p class="opt-note">As phone follows your phone's reduce-motion setting.</p>
+        <div class="choices" role="group" aria-labelledby="opt-motion">
+          <button class="choice" type="button" data-motion="system" aria-pressed="true" aria-label="Motion as the phone sets it">As phone</button>
+          <button class="choice" type="button" data-motion="reduced" aria-pressed="false" aria-label="Reduced motion">Reduced</button>
+          <button class="choice" type="button" data-motion="full" aria-pressed="false" aria-label="Full motion">Full</button>
+        </div>
+      </section>
+      <section class="opt">
+        <h4 id="opt-arrows">Arrows</h4>
+        <p class="opt-note">Four arrow buttons under the board, as well as swiping.</p>
+        <div class="choices" role="group" aria-labelledby="opt-arrows">
+          <button class="choice" type="button" data-arrows="false" aria-pressed="true" aria-label="Arrows off">Off</button>
+          <button class="choice" type="button" data-arrows="true" aria-pressed="false" aria-label="Arrows on">On</button>
+        </div>
+      </section>
+      <section class="opt">
+        <h4 id="opt-hand">Hand</h4>
+        <p class="opt-note">Left mirrors a level's buttons for your left thumb.</p>
+        <div class="choices" role="group" aria-labelledby="opt-hand">
+          <button class="choice" type="button" data-hand="right" aria-pressed="true" aria-label="Right hand">Right</button>
+          <button class="choice" type="button" data-hand="left" aria-pressed="false" aria-label="Left hand">Left</button>
+        </div>
+      </section>
+      <section class="opt">
+        <h4 id="opt-swipe">Swipe</h4>
+        <p class="opt-note">How far a finger moves before Wren steps.</p>
+        <div class="choices" role="group" aria-labelledby="opt-swipe">
+          <button class="choice" type="button" data-swipe="short" aria-pressed="false" aria-label="Short swipe">Short</button>
+          <button class="choice" type="button" data-swipe="normal" aria-pressed="true" aria-label="Normal swipe">Normal</button>
+          <button class="choice" type="button" data-swipe="long" aria-pressed="false" aria-label="Long swipe">Long</button>
+        </div>
+      </section>
+    </div>
     <div class="buttons">
       <button id="comfort-close" class="btn primary" type="button" aria-label="Close comfort settings">Done</button>
     </div>

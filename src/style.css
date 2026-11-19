@@ -1250,3 +1250,45 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   .editor .status { min-height: 28px; }
   .cavern { min-height: 68px; }
 }
+
+/* ------------------------------------------------------------------ controls (SPEC section 27) */
+
+/* four arrows between the board and the thumb bar, when the Comfort sheet turns them on */
+.arrows {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px 0;
+  background: #241832;
+  border-top: 2px solid var(--ink);
+}
+.arrow {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--plum-soft);
+  border: 2px solid var(--plum-line);
+  border-radius: var(--wobble-small);
+  box-shadow: 0 3px 0 #120C1C;
+}
+.arrow:nth-child(even) { border-radius: 16px 12px 17px 13px / 12px 17px 13px 16px; }
+.arrow:active { transform: translateY(2px); box-shadow: 0 1px 0 #120C1C; }
+.arrow .ico { width: 30px; height: 30px; }
+.arrow[data-dir="N"] .ico { transform: rotate(-90deg); }
+.arrow[data-dir="S"] .ico { transform: rotate(90deg); }
+.arrow[data-dir="W"] .ico { transform: rotate(180deg); }
+.arrows + .bar { border-top: 0; }
+@media (max-height: 660px) {
+  .arrow { min-height: 52px; }
+}
+
+/* a left hand: a level's top bar and thumb bar mirrored (the arrows keep their order) */
+.app.left-hand .level .topbar, .app.left-hand .level .bar.tools { flex-direction: row-reverse; }
+
+/* the Comfort sheet: the heading and Done stay put; the choices scroll between them on a short screen */
+.comfort { display: flex; flex-direction: column; overflow: hidden; }
+.comfort > * { flex: none; }
+.comfort > .sheet-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px 4px; }

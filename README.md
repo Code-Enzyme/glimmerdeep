@@ -55,6 +55,10 @@ short code that anyone can type into Play a code. The code holds the whole caver
 and nothing anyone types is ever shown to anyone else; a cavern's name comes from two fixed word lists.
 A code plays only when the solver lights it at exactly its par (SPEC section 26).
 
+The Comfort sheet also holds the controls: four arrow buttons under the board for anyone who would rather
+not swipe, a left-handed layout that mirrors a level's buttons, and a short, normal or long swipe
+(SPEC section 27).
+
 The save lives in `localStorage`. In the Android app every save is also written to a file
 (`android/.../SaveFilePlugin.java`), on disk before a purchase is confirmed, so an app swiped away right
 after a purchase still has it when it opens again (SPEC section 16).

@@ -23,7 +23,7 @@ import { LANTERNS, lanternInUse, isUnlocked as styleUnlocked, starMoss } from '.
 import { RULE_CARDS, cardKindAt } from './ui/cards.js';
 import { HintLadder, pieceText } from './ui/hints.js';
 import { previewOf } from './ui/preview.js';
-import { reducedMotion } from './ui/comfort.js';
+import { reducedMotion, swipeNeed } from './ui/comfort.js';
 import { CRITTERS, critterKind, dailyCritterKind, isFound, markFound, critterJournal } from './ui/critters.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
@@ -42,7 +42,6 @@ import {
 import { encodeCavern, decodeCavern } from './ui/codes.js';
 import { EditorView, toolIconUrl } from './ui/editor.js';
 
-const SWIPE = 24;          // px a finger travels before it counts as a swipe
 const TAP_SLOP = 12;       // px a finger may wander and still be a tap or a hold
 const HOLD_MS = 450;       // long-press for a rule card
 const QUEUE_MAX = 2;       // inputs remembered while an animation runs
@@ -1539,15 +1538,22 @@ function syncSettings() {
   view.highContrast = s.contrast;
   setMuted(!s.sound);
   // Comfort (SPEC section 22)
-  set('set-comfort', s.textSize !== 1 || s.readable || s.motion !== 'system', `${Math.round(s.textSize * 100)}%`);
+  const controlled = s.arrows || s.hand !== 'right' || s.swipe !== 'normal';   // SPEC section 27
+  set('set-comfort', s.textSize !== 1 || s.readable || s.motion !== 'system' || controlled, `${Math.round(s.textSize * 100)}%`);
   app.style.setProperty('--ts', String(s.textSize));
   app.classList.toggle('readable', s.readable);
   app.classList.toggle('motion-reduced', s.motion === 'reduced');
   app.classList.toggle('motion-full', s.motion === 'full');
+  app.classList.toggle('left-hand', s.hand === 'left');
+  $('arrows').hidden = !s.arrows;
   for (const b of $('comfort').querySelectorAll('.choice')) {
-    const on = b.dataset.size !== undefined ? Number(b.dataset.size) === s.textSize
-      : b.dataset.readable !== undefined ? (b.dataset.readable === 'true') === s.readable
-        : b.dataset.motion === s.motion;
+    const d = b.dataset;
+    const on = d.size !== undefined ? Number(d.size) === s.textSize
+      : d.readable !== undefined ? (d.readable === 'true') === s.readable
+        : d.motion !== undefined ? d.motion === s.motion
+          : d.arrows !== undefined ? (d.arrows === 'true') === s.arrows
+            : d.hand !== undefined ? d.hand === s.hand
+              : d.swipe === s.swipe;
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   syncMotion();
@@ -1623,7 +1629,7 @@ canvas.addEventListener('pointermove', (e) => {
   }
   if (g.held || g.stopOnly) return;
   // The first step needs a short swipe; keep dragging and Wren keeps walking, about a tile per step.
-  const need = g.swipes === 0 ? SWIPE : Math.max(44, view.layout ? view.layout.size * 0.9 : 44);
+  const need = g.swipes === 0 ? swipeNeed(save.settings.swipe) : Math.max(44, view.layout ? view.layout.size * 0.9 : 44);   // SPEC section 27
   if (dist >= need) {
     g.swipes++;
     g.x = e.clientX;
@@ -1746,11 +1752,17 @@ onClick($('comfort-close'), () => {
 });
 for (const b of $('comfort').querySelectorAll('.choice')) {
   onClick(b, () => {
-    if (b.dataset.size !== undefined) setComfort({ textSize: Number(b.dataset.size) });
-    else if (b.dataset.readable !== undefined) setComfort({ readable: b.dataset.readable === 'true' });
-    else setComfort({ motion: b.dataset.motion });
+    const d = b.dataset;
+    if (d.size !== undefined) setComfort({ textSize: Number(d.size) });
+    else if (d.readable !== undefined) setComfort({ readable: d.readable === 'true' });
+    else if (d.motion !== undefined) setComfort({ motion: d.motion });
+    else if (d.arrows !== undefined) setComfort({ arrows: d.arrows === 'true' });   // the controls (SPEC section 27)
+    else if (d.hand !== undefined) setComfort({ hand: d.hand });
+    else setComfort({ swipe: d.swipe });
   });
 }
+// the arrows step Wren exactly as a swipe that way (SPEC section 27)
+for (const b of $('arrows').querySelectorAll('.arrow')) onClick(b, () => userAction(b.dataset.dir));
 onClick($('btn-journal'), () => {
   play('ui');
   showJournal('creatures');
