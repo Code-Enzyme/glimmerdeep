@@ -26,6 +26,7 @@ import { previewOf } from './ui/preview.js';
 import { reducedMotion, swipeNeed } from './ui/comfort.js';
 import { describeBoard, describeTurn, describeRefusal, describeBack } from './ui/talk.js';
 import { levelOpen, lockedWhy, othersOpen } from './ui/paths.js';
+import { NEWS, newsDue } from './ui/news.js';
 import { CRITTERS, critterKind, dailyCritterKind, isFound, markFound, critterJournal } from './ui/critters.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
@@ -1327,8 +1328,8 @@ function chooseLantern(style) {
 }
 
 // the Workshop's sheets go by short names
-const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet', talk: 'talk-sheet' };
-const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code', 'talk'];   // sheets over a screen, on the store's scrim
+const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet', talk: 'talk-sheet', news: 'news-sheet' };
+const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code', 'talk', 'news'];   // sheets over a screen, on the store's scrim
 const panelEl = (name) => $(PANEL_EL[name] || name);
 
 function openPanel(name) {
@@ -1344,7 +1345,7 @@ function openPanel(name) {
     ? ($('result-next').hidden ? $('result-replay') : $('result-next'))
     : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : name === 'comfort' ? $('comfort-close')
       : name === 'lanterns' ? $('lanterns-close') : name === 'cavern' ? $('cavern-close') : name === 'share' ? $('share-copy')
-        : name === 'code' ? $('code-input') : name === 'talk' ? $('talk-close') : $('confirm-no');
+        : name === 'code' ? $('code-input') : name === 'talk' ? $('talk-close') : name === 'news' ? $('news-close') : $('confirm-no');
   try {
     focus.focus({ preventScroll: true });
   } catch (e) {
@@ -1361,6 +1362,7 @@ function closePanel() {
   panel = null;
   if (was === 'card') view.preview = null;
   if (was === 'talk') hush();
+  if (was === 'news') newsSeen();
   // closing a tutorial's meet card finishes that step
   const step = was === 'card' ? coachStep() : null;
   if (step && step.card) {
@@ -1787,9 +1789,53 @@ onClick($('result-map'), () => {
 
 function startPlaying() {
   play('ui');
-  openBook(storyDue(save, CHAPTERS, { at: 'play' }), { then: showMap });
+  openBook(storyDue(save, CHAPTERS, { at: 'play' }), {
+    then: () => {
+      showMap();
+      openNews(newsDue(save.news));   // what changed since the last visit (SPEC section 30)
+    },
+  });
 }
 onClick($('btn-play'), startPlaying);
+
+// ---------------------------------------------------------------- What's new (SPEC section 30)
+
+const NEWS_SHOWN = 6;   // the title button's sheet: the newest six, seen or not
+
+function openNews(notes) {
+  if (!notes.length) return;
+  if (panel) closePanel();
+  const list = $('news-list');
+  list.textContent = '';
+  for (const n of notes) {
+    const li = document.createElement('li');
+    const title = document.createElement('h4');
+    title.textContent = n.title;
+    const text = document.createElement('p');
+    text.textContent = n.text;
+    li.append(title, text);
+    list.appendChild(li);
+  }
+  openPanel('news');
+  $('news-sheet').querySelector('.sheet-scroll').scrollTop = 0;
+}
+
+// Closing the sheet marks every note seen, whichever were shown.
+function newsSeen() {
+  const unseen = NEWS.filter((n) => !save.news.includes(n.id));
+  if (!unseen.length) return;
+  for (const n of unseen) save.news.push(n.id);
+  writeSave(save);
+}
+
+onClick($('btn-news'), () => {
+  play('ui');
+  openNews(NEWS.slice(0, NEWS_SHOWN));
+});
+onClick($('news-close'), () => {
+  play('ui');
+  closePanel();
+});
 
 onClick($('story-next'), () => nextPage());
 onClick($('btn-shop'), () => {
@@ -2389,7 +2435,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (screen === 'title') {
     const onButton = e.target && e.target.closest && e.target.closest('button');
-    if (!onButton && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
+    if (!panel && !onButton && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {   // not under a sheet
       e.preventDefault();
       startPlaying();
     }
@@ -2508,6 +2554,12 @@ window.__gd = {
   spoken: () => spoken,                         // Board talk (SPEC section 28)
   boardTalk: () => $('board-talk').textContent,
   boardLabel: () => canvas.getAttribute('aria-label'),
+  // What's new (SPEC section 30): the sheet's note titles while it is open, and the notes seen
+  news: () => ({
+    open: panel === 'news',
+    titles: [...$('news-list').querySelectorAll('h4')].map((t) => t.textContent),
+    seen: save.news.slice(),
+  }),
   act: (action) => {
     if (!session) return false;
     settleNow();

@@ -233,6 +233,19 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   color: #D9C7A6;
 }
 .hc .title-progress { color: #FFFFFF; }
+/* What's new (SPEC section 30): a quiet button under Play */
+.btn.title-news {
+  min-height: 44px;
+  padding: 8px 20px;
+  font: 600 16px/1.1 var(--sans);
+  color: #F3E6CC;
+  background: rgba(23, 15, 34, 0.55);
+  border: 2px solid rgba(243, 230, 204, 0.5);
+  border-radius: 999px;
+  box-shadow: none;
+}
+.btn.title-news:active { transform: translate(0, 1px); box-shadow: none; }
+.hc .btn.title-news { color: #FFFFFF; background: #000000; border-color: #FFFFFF; }
 
 /* ------------------------------------------------------------------ map screen */
 
@@ -1292,6 +1305,17 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .comfort { display: flex; flex-direction: column; overflow: hidden; }
 .comfort > * { flex: none; }
 .comfort > .sheet-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px 4px; }
+
+/* What's new (SPEC section 30): a note a line, its title in bold; the heading and Done stay put */
+.news { z-index: 8; display: flex; flex-direction: column; overflow: hidden; }
+.news > * { flex: none; }
+.news > .sheet-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 10px -6px 0; padding: 0 6px 4px; }
+.news-list { list-style: none; margin: 0; padding: 0; }
+.news-list li { padding: 9px 0; border-top: 1.5px dashed rgba(36, 22, 46, 0.25); }
+.news-list li:first-child { border-top: none; padding-top: 0; }
+.news-list h4 { margin: 0 0 3px; font: 700 calc(17px * var(--ts))/1.25 var(--serif); color: var(--ink); overflow-wrap: anywhere; }
+.news-list p { margin: 0; font: calc(15px * var(--ts))/1.4 var(--sans); color: var(--ink); overflow-wrap: anywhere; }
+.app.readable .news-list p { letter-spacing: 0.03em; word-spacing: 0.12em; }
 
 /* Board talk (SPEC section 28): the board in words, a sentence a line; the heading and Done stay put */
 .talk { z-index: 8; display: flex; flex-direction: column; overflow: hidden; }

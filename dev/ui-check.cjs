@@ -5,6 +5,7 @@
 //   node dev/ui-check.cjs --shots      only take the screenshots (phone, small phone, tablet)
 //   node dev/ui-check.cjs --only=workshop   only the Workshop's checks (SPEC section 26), while working on it
 //   node dev/ui-check.cjs --only=controls   only the controls' checks (SPEC section 27)
+//   node dev/ui-check.cjs --only=news       only What's new (SPEC section 30); also talk, paths
 //
 // The page is opened from file://, in a 390 by 844 touch context. Any console error or page error fails
 // the run. Expectations about levels come from the real modules (levels, engine, solver) and the rule
@@ -92,6 +93,7 @@ async function main() {
   const hints = await import(pathToFileURL(path.join(ROOT, 'src/ui/hints.js')).href);
   const { previewOf } = await import(pathToFileURL(path.join(ROOT, 'src/ui/preview.js')).href);
   const talkWords = await import(pathToFileURL(path.join(ROOT, 'src/ui/talk.js')).href);
+  const { NEWS, NEWS_IDS } = await import(pathToFileURL(path.join(ROOT, 'src/ui/news.js')).href);
   // A legal move from `state` that leaves the hint's way (SPEC section 18) and from which the level still solves.
   const offTheWay = (def, state) => {
     const ladder = new hints.HintLadder(engine.parseLevel(def), solutionOf(def), def.feature);
@@ -126,7 +128,9 @@ async function main() {
     // opts.seed: a save the check writes once, before the app first starts. (An init script that writes a save
     // whenever it finds none can, now and then, find none in a new tab of headless Chromium and write over the
     // real one.) The app writes nothing until something changes, so loading it once to reach its storage is safe.
-    let seed = opts.seed ? JSON.stringify(opts.seed) : null;
+    // A seed that says nothing about What's new has seen every note (SPEC section 30), so the sheet does not
+    // open over every other check; the news checks pass news themselves (undefined: a save from before it).
+    let seed = opts.seed ? JSON.stringify('news' in opts.seed ? opts.seed : { ...opts.seed, news: NEWS_IDS }) : null;
     const watch = (pg) => {
       pg.on('console', (m) => {
         if (m.type() === 'error') errors.push(`[${tag}] console: ${m.text()}`);
@@ -3159,10 +3163,128 @@ async function main() {
     await r.close();
   }
 
+  // ------------------------------------------------------------------ What's new (SPEC section 30)
+  async function newsChecks() {
+    console.log("what's new");
+    const titles = (notes) => notes.map((n) => n.title);
+    const news = (ph) => ph.gd('news');
+    const toStoryEnd = async (ph) => {
+      for (let i = 0; i < 12 && (await ph.gd('screen')) === 'story'; i++) await ph.page.locator('#story-next').tap();
+    };
+    // where the sheet and its Done sit, and whether the notes scroll
+    const sheetBox = (ph) => ph.page.evaluate(() => {
+      const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+      const s = r('#news-sheet');
+      const d = r('#news-close');
+      const list = document.querySelector('#news-sheet .sheet-scroll');
+      return {
+        inside: s.top >= 0 && s.bottom <= window.innerHeight + 0.5 && s.left >= 0 && s.right <= window.innerWidth + 0.5,
+        done: d.top >= s.top && d.bottom <= window.innerHeight + 0.5 && d.height >= 44,
+        scrolls: list.scrollHeight > list.clientHeight + 1,
+        focus: document.activeElement && document.activeElement.id,
+      };
+    });
+
+    // a save from before What's new (no news in it), with a story page due: the page, then the map, then the notes
+    const o = await phone({ tag: 'news', seed: { levels: {}, seen: [], critters: [], news: undefined, settings: { tutorials: false } } });
+    await o.open();
+    {
+      const b = await o.page.locator('#btn-news').boundingBox();
+      const p = await o.page.locator('#btn-play').boundingBox();
+      ok("news: What's new sits under Play, on screen, at least 44 px tall", b && p && b.y >= p.y + p.height && b.y + b.height <= 844 && b.height >= 44, JSON.stringify(b));
+      eq("news: the button says What's new", (await o.page.locator('#btn-news').textContent()).trim(), "What's new");
+    }
+    await o.page.locator('#btn-play').tap();
+    eq('news: story pages that are due come first', [await o.gd('screen'), (await news(o)).open], ['story', false]);
+    await toStoryEnd(o);
+    await o.page.waitForTimeout(350);
+    eq('news: then the map, with the three newest notes', [await o.gd('screen'), (await news(o)).open, (await news(o)).titles],
+      ['map', true, titles(NEWS.slice(0, 3))]);
+    {
+      const box = await sheetBox(o);
+      ok('news: the sheet is on screen, Done in reach and focused', box.inside && box.done && box.focus === 'news-close', JSON.stringify(box));
+      const text = await o.page.locator('#news-list li').first().locator('p').textContent();
+      eq("news: each note's text is under its title", text, NEWS[0].text);
+    }
+    await auditPage(o, 'news');
+    await o.page.locator('#news-close').tap();
+    eq('news: Done closes it and marks every note seen, saved', [(await news(o)).open, (await o.gd('save')).news], [false, NEWS_IDS]);
+    await o.page.keyboard.press('Escape');
+    eq('news: Back to the title', await o.gd('screen'), 'title');
+    await o.page.locator('#btn-play').tap();
+    await o.page.waitForFunction(() => window.__gd.screen() === 'map');
+    await o.page.waitForTimeout(350);
+    eq('news: Play again, no notes', (await news(o)).open, false);
+    // coming back from a level never shows it
+    await o.reopen();
+    await o.toMap();
+    await o.page.waitForTimeout(350);
+    eq('news: and not after the app starts again', (await news(o)).open, false);
+    await o.page.keyboard.press('Escape');
+
+    // the title button: the newest six, seen or not; a tap outside closes it
+    eq('news: on the title again', await o.gd('screen'), 'title');
+    await o.page.locator('#btn-news').tap();
+    await o.page.waitForTimeout(350);
+    eq("news: the title's What's new shows the newest six", [await o.gd('screen'), (await news(o)).open, (await news(o)).titles],
+      ['title', true, titles(NEWS.slice(0, 6))]);
+    await o.page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await o.page.keyboard.press('Enter');
+    eq('news: Enter under the sheet does not start playing', [await o.gd('screen'), (await news(o)).open], ['title', true]);
+    await o.page.touchscreen.tap(195, 30);
+    eq('news: a tap outside closes it', [(await news(o)).open, await o.gd('screen')], [false, 'title']);
+    await o.page.locator('#btn-news').tap();
+    await o.page.keyboard.press('Escape');
+    eq('news: Escape (Back) closes it too', [(await news(o)).open, await o.gd('screen')], [false, 'title']);
+    await o.close();
+
+    // an old save that had seen the newest note: only the ones after it
+    const q = await phone({ tag: 'news-some', seed: { levels: {}, seen: ['prologue'], critters: [], news: [NEWS_IDS[0]], settings: { tutorials: false } } });
+    await q.open();
+    await q.toMap();
+    await q.page.waitForTimeout(350);
+    eq('news: only notes not seen yet, newest first, at most three', (await news(q)).titles, titles(NEWS.slice(1, 4)));
+    await q.page.touchscreen.tap(195, 30);
+    eq('news: a tap outside marks them all seen as well', (await q.gd('save')).news.slice().sort(), NEWS_IDS.slice().sort());
+    await q.close();
+
+    // a new player sees none, and has every note seen
+    const f = await phone({ tag: 'news-fresh' });
+    await f.open();
+    await f.toMap();
+    await f.page.waitForTimeout(350);
+    eq('news: a new save shows no notes after Play', (await news(f)).open, false);
+    eq('news: a new save has seen them all', (await f.gd('save')).news, NEWS_IDS);
+    await f.close();
+
+    // a small phone at twice the text size: Play and the button fit, the notes scroll between the heading and Done
+    const sm = await phone({ tag: 'news-small', viewport: { width: 360, height: 640 }, seed: { levels: {}, seen: [], critters: [], settings: { tutorials: false, textSize: 2 } } });
+    await sm.open();
+    {
+      const r = await sm.page.evaluate(() => {
+        const box = (sel) => document.querySelector(sel).getBoundingClientRect();
+        const p = box('#btn-play');
+        const n = box('#btn-news');
+        const t = box('#screen-title h1');
+        return { play: p.top >= 0 && p.bottom <= 640, news: n.top >= p.bottom && n.bottom <= 640, name: t.bottom <= p.top };
+      });
+      eq('news small: Play, the button and the name all fit', r, { play: true, news: true, name: true });
+    }
+    await sm.page.locator('#btn-news').tap();
+    await sm.page.waitForTimeout(400);
+    {
+      const box = await sheetBox(sm);
+      ok('news small: the sheet fits, Done in reach, the notes scroll', box.inside && box.done && box.scrolls, JSON.stringify(box));
+    }
+    await sm.page.screenshot({ path: path.join(SHOTS, 'news-small.png') });
+    await sm.close();
+  }
+
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'workshop')) await workshopChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'controls')) await controlsChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'talk')) await talkChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'paths')) await pathsChecks();
+  if (!SHOTS_ONLY && (!ONLY || ONLY === 'news')) await newsChecks();
 
   // ------------------------------------------------------------------ screenshots
   if (!ONLY) {

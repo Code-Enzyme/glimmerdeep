@@ -1106,3 +1106,24 @@ open." The map keeps its one trail per chapter; what changes is how far ahead it
 - `src/ui/paths.js` (no DOM): `AHEAD` (3), `levelOpen(def, chapters, records)` (the order alone, no
   purchase), `lockedWhy(def, chapters)` (the label's sentence) and `othersOpen(def, levels, isOpen,
   records)` (how many caverns other than `def` are open and not lit, for the stuck nudge).
+
+## 30. What's new: short notes after an update (decided 20 Nov 2026)
+
+The design doc's community list: "short patch notes in game". A player who comes back after an update learns
+what changed without leaving the game, and a new player is not shown notes about things they never had.
+
+- **The notes** (`src/ui/news.js`, no DOM): `NEWS`, newest first, each `{ id, title, text }`: a title of a few
+  words and one or two short sentences, in the game's voice, with no gendered pronouns. A new note goes at the
+  top with a new id; old notes are never edited into new ones.
+- **Seen notes** are saved as `save.news`, a list of ids. A **new save starts with every note seen**, so a
+  new player sees none. A save from before this section has none seen. Anything that is not a list of
+  strings reads as none seen. Reset progress keeps it.
+- **When:** Play, after any story pages that are due (section 13), shows the map and then, when some notes
+  are not seen, the **What's new** sheet with the newest of them, at most three. Done, Back or a tap
+  outside closes it and marks **every** note seen. Coming back to the map from a level never shows it.
+- **Any time:** a quiet **What's new** button on the title screen, under Play, opens the same sheet with the
+  newest six notes, seen or not (closing it also marks every note seen).
+- **The sheet:** kicker "Glimmerdeep", heading "What's new", each note's title in bold and its text under
+  it; the heading and Done stay put and the notes scroll between them on a short screen.
+- `newsDue(seen)` -> the notes not in `seen`, newest first, at most three. `readNews(value)` -> the saved
+  list, or `[]`. `NEWS_IDS` -> every note's id (what a new save starts with).

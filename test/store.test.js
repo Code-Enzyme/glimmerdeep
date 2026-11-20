@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   loadSave, writeSave, recordResult, clearProgress, SAVE_KEY, parseSave, newerSave, setSaveMirror, savedDurably, saveWrites, adoptInto,
 } from '../src/ui/store.js';
+import { NEWS_IDS } from '../src/ui/news.js';
 
 function withStorage(initial) {
   const data = new Map(initial === undefined ? [] : [[SAVE_KEY, initial]]);
@@ -314,4 +315,20 @@ test('store: Workshop caverns round-trip, junk is dropped, an old save has none,
   const mine = { ...parseSave(null), rev: 1 };
   adoptInto(mine, other);
   assert.deepEqual(mine.workshop, [cavern], 'a newer copy brings its caverns');
+});
+
+test('store: a new save has seen every note, an old save none; seen notes round-trip and survive a reset (SPEC section 30)', () => {
+  const data = withStorage();
+  const fresh = loadSave();
+  assert.deepEqual(fresh.news, NEWS_IDS);
+  data.set(SAVE_KEY, JSON.stringify({ levels: { '1-1': { moves: 5, stars: 3 } } }));
+  const old = loadSave();
+  assert.deepEqual(old.news, []);
+  old.news = [NEWS_IDS[0]];
+  writeSave(old);
+  assert.deepEqual(loadSave().news, [NEWS_IDS[0]]);
+  data.set(SAVE_KEY, JSON.stringify({ news: 'junk' }));
+  assert.deepEqual(loadSave().news, []);
+  clearProgress(old);
+  assert.deepEqual(old.news, [NEWS_IDS[0]], 'Reset progress keeps it');
 });

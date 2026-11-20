@@ -9,6 +9,7 @@ import { readDaily } from './daily.js';
 import { COMFORT_DEFAULTS, readComfort, CONTROL_DEFAULTS, readControls, readTalk } from './comfort.js';
 import { DEFAULT_LANTERN, readLantern } from './lanterns.js';
 import { readWorkshop } from './workshop.js';
+import { NEWS_IDS, readNews } from './news.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
@@ -17,12 +18,12 @@ const SETTING_DEFAULTS = {
 };
 
 function freshSave() {
-  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, workshop: [], settings: { ...SETTING_DEFAULTS }, rev: 0 };
+  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, workshop: [], news: NEWS_IDS.slice(), settings: { ...SETTING_DEFAULTS }, rev: 0 };
 }
 
 // -> { levels: { [id]: { moves, stars } }, seen: [story page id], critters: [level id] (section 23),
 //      shop: { full, glimmer, freeAt, paid },
-//      daily: { [YYYY-MM-DD]: { moves, stars } }, workshop: [cavern] (section 26),
+//      daily: { [YYYY-MM-DD]: { moves, stars } }, workshop: [cavern] (section 26), news: [note id] (section 30),
 //      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion, lantern, arrows, hand, swipe }, rev }
 export function loadSave() {
   let raw = null;
@@ -40,7 +41,7 @@ export function parseSave(raw) {
   try {
     if (!raw) return data;
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return data;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return data;
     if (parsed.levels && typeof parsed.levels === 'object') {
       for (const id of Object.keys(parsed.levels)) {
         const r = parsed.levels[id];
@@ -64,6 +65,7 @@ export function parseSave(raw) {
     data.shop = readShop(parsed.shop);
     data.daily = readDaily(parsed.daily);
     data.workshop = readWorkshop(parsed.workshop);   // SPEC section 26
+    data.news = readNews(parsed.news);               // SPEC section 30: a save from before it has seen none
     if (parsed.settings && typeof parsed.settings === 'object') {
       for (const k of Object.keys(SETTING_DEFAULTS)) {
         if (typeof parsed.settings[k] === 'boolean' && typeof SETTING_DEFAULTS[k] === 'boolean') data.settings[k] = parsed.settings[k];
@@ -118,7 +120,7 @@ export function writeSave(data) {
   writes += 1;
   const json = JSON.stringify({
     levels: data.levels, seen: data.seen || [], critters: data.critters || [], shop: data.shop || freshShop(), daily: data.daily || {},
-    workshop: data.workshop || [], settings: data.settings, rev: data.rev,
+    workshop: data.workshop || [], news: data.news || [], settings: data.settings, rev: data.rev,
   });
   let ok = false;
   try {
@@ -150,7 +152,7 @@ export function recordResult(data, id, moves, stars) {
 }
 
 // Reset progress: every level, the story, the found critters and the Daily Glimmer records start over; the settings,
-// the shop, the Workshop's caverns and the revision stay (the revision never goes back, SPEC section 16).
+// the shop, the Workshop's caverns, the seen notes and the revision stay (the revision never goes back, SPEC section 16).
 export function clearProgress(data) {
   data.levels = {};
   data.seen = [];

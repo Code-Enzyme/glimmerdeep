@@ -26,6 +26,7 @@
     <div class="title-foot">
       <button id="btn-play" class="btn primary play" type="button" aria-label="Play">Play</button>
       <p id="title-progress" class="title-progress" hidden></p>
+      <button id="btn-news" class="btn title-news" type="button" aria-label="What's new">What's new</button>
     </div>
   </main>
 
@@ -354,6 +355,18 @@
     <div class="buttons">
       <button id="code-play" class="btn primary" type="button" aria-label="Play this code">Play</button>
       <button id="code-close" class="btn" type="button" aria-label="Close play a code">Cancel</button>
+    </div>
+  </aside>
+
+  <!-- What's new: short notes after an update (SPEC section 30) -->
+  <aside id="news-sheet" class="sheet paper news" role="dialog" aria-modal="true" aria-labelledby="news-title" hidden>
+    <span class="kicker ink">Glimmerdeep</span>
+    <h3 id="news-title">What's new</h3>
+    <div class="sheet-scroll">
+      <ul id="news-list" class="news-list"></ul>
+    </div>
+    <div class="buttons">
+      <button id="news-close" class="btn primary" type="button" aria-label="Close what's new">Done</button>
     </div>
   </aside>
 
