@@ -41,7 +41,7 @@ the last six days too, so a missed day can be mended (SPEC section 15).
 Each chapter ends with a Gloam encounter: the Gloam's Hush creeps a tile a turn over every dark floor tile
 beside it, and only light holds it back. If it reaches Wren, three moves go back (SPEC section 17).
 
-After the story comes the Night Garden: deep puzzles that mix every creature, all built round crystal
+After the story comes the Night Garden: thirty deep puzzles that mix every creature, all built round crystal
 walls, which let light through but nothing that walks. It is part of the Full Expedition and opens once
 the last chapter is lit and the chapters have earned 100 star moss (SPEC sections 19 and 20).
 

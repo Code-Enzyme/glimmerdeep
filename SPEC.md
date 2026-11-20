@@ -737,12 +737,16 @@ and light what lies beyond, and has to find another way round to get there.
 
 Deep puzzles for after the story (design doc sections 3 and 6): longer caverns that mix the creatures of
 every chapter, all of them built round crystal walls. Numbers marked [PLACEHOLDER - PLAYTEST] are starting
-points; the design aims at 30 deep puzzles.
+points. There are **30 deep puzzles** (decided 20 Nov 2026).
 
 - **Levels:** `src/levels/night.js` exports `NIGHT`, levels in the section 6 format with ids `N-1`, `N-2`, …
   Like every level, each solves at exactly its par, needs its featured elements and keeps to the size limit
   (`npm run verify`). Every deep puzzle has `*` in its feature, its par is from 16 to 40, and `N-1` opens
-  with the Crystal card (tutorial `card: '*'`).
+  with the Crystal card (tutorial `card: '*'`). `N-1` to `N-10` bring crystal in with one creature at a time
+  (and the Hush). From `N-11` to `N-30` they mix: each needs the crystal and at least two kinds of
+  creature, its par is from 22 to 40, and they go from the shortest par to the longest. Each has a
+  designer's `note` and a short `tip` that gives nothing away, and none is a near copy of another level (at
+  least 6 tiles differ). They are found by `dev/levels-gen.js` and chosen by `dev/night-grow.mjs`.
 - **Opening:** the Night Garden is part of the Full Expedition. Its first puzzle opens once level `7-11`, the
   end of the story, is lit and the chapters have earned at least 100 star moss [PLACEHOLDER - PLAYTEST]
   between them; after that the usual order holds (a puzzle opens when it or the one before it is lit). The
@@ -751,7 +755,7 @@ points; the design aims at 30 deep puzzles.
 - **Map:** the last section, after chapter 7: "Deep puzzles" over "The Night Garden", in the garden's own
   night blue, its puzzles as nodes on a trail like a chapter's. Before it opens, the section says what it
   waits for: "Opens when the story is done and you have 100 star moss. You have 64." (or "…star moss. You
-  have it." once there is enough). Once open, its tally reads "3 of 10 lit".
+  have it." once there is enough). Once open, its tally reads "3 of 30 lit".
 - **Playing:** the level screen and the result panel say "Night Garden 3" in place of "Level N-3". Results
   are saved and earn star moss like any level's; Next level goes on through the garden, and the last
   puzzle has none.

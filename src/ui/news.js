@@ -3,6 +3,11 @@
 
 export const NEWS = [
   {
+    id: 'garden-thirty',
+    title: 'A deeper Night Garden',
+    text: 'The Night Garden now holds 30 deep puzzles. The twenty new ones each mix two creatures with crystal walls.',
+  },
+  {
     id: 'daily-year',
     title: 'A year of Daily Glimmers',
     text: 'The Daily Glimmer now has 365 caverns, so each one comes back only once a year.',
