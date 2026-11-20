@@ -7,8 +7,8 @@ import { LEVELS } from '../src/levels/index.js';
 
 const creatures = (def) => def.feature.replace(/[LA]/g, '').split('').sort().join('');
 
-test('daily pool: a few dozen caverns, ids D-01 onward, every name its own', () => {
-  assert.ok(DAILY.length >= 28, `${DAILY.length} caverns`);
+test('daily pool: 365 caverns, one for every day of a year, ids D-01 onward, every name its own', () => {
+  assert.equal(DAILY.length, 365);
   assert.deepEqual(DAILY.map((d) => d.id), DAILY.map((d, i) => `D-${String(i + 1).padStart(2, '0')}`));
   const names = [...LEVELS, ...DAILY].map((d) => d.name);
   for (const d of DAILY) {
@@ -40,5 +40,29 @@ test('daily pool: consecutive days, the last back round to the first, never feat
     const a = DAILY[i];
     const b = DAILY[(i + 1) % DAILY.length];
     assert.notEqual(creatures(a), creatures(b), `${a.id} and ${b.id} both feature ${creatures(a)}`);
+  }
+});
+
+test('daily pool: every par is 12 to 26', () => {
+  for (const d of DAILY) assert.ok(d.par >= 12 && d.par <= 26, `${d.id} par ${d.par}`);
+});
+
+test('daily pool: each of the six creatures is needed in at least 20 caverns', () => {
+  for (const c of 'MSTDKO') {
+    const n = DAILY.filter((d) => d.feature.includes(c)).length;
+    assert.ok(n >= 20, `${c} is needed in only ${n} caverns`);
+  }
+});
+
+test('daily pool: no near copies: two caverns of one size differ in at least 6 tiles, and none is a chapter level', () => {
+  const differ = (a, b) => {
+    if (a.map.length !== b.map.length || a.map[0].length !== b.map[0].length) return Infinity;
+    let n = 0;
+    for (let y = 0; y < a.map.length; y++) for (let x = 0; x < a.map[0].length; x++) if (a.map[y][x] !== b.map[y][x]) n++;
+    return n;
+  };
+  for (let i = 0; i < DAILY.length; i++) {
+    for (const l of LEVELS) assert.ok(differ(DAILY[i], l) >= 6, `${DAILY[i].id} is close to ${l.id}`);
+    for (let j = i + 1; j < DAILY.length; j++) assert.ok(differ(DAILY[i], DAILY[j]) >= 6, `${DAILY[i].id} and ${DAILY[j].id} are near copies`);
   }
 });

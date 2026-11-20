@@ -3,6 +3,11 @@
 
 export const NEWS = [
   {
+    id: 'daily-year',
+    title: 'A year of Daily Glimmers',
+    text: 'The Daily Glimmer now has 365 caverns, so each one comes back only once a year.',
+  },
+  {
     id: 'bramble',
     title: 'Bramble flies along',
     text: "Once 1-1 is lit, Wren's moth flutters by the lantern, cheers you on and flies to each hint. Comfort can keep Bramble home.",

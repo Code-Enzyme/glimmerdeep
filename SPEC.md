@@ -586,8 +586,13 @@ Numbers marked [PLACEHOLDER - PLAYTEST] are starting points.
   or the Mirrorbeetle, so every daily cavern can be played without learning to aim. No daily cavern has a
   tutorial; instead, when a cavern not lit yet opens with a creature the player has not met in the chapters
   (no level of theirs with it is lit), that creature's rule card opens first. Consecutive days never feature
-  the same set of creatures. The pool starts with [PLACEHOLDER - PLAYTEST] a few dozen
-  caverns found by `dev/levels-gen.js` and sifted by `dev/daily-pick.mjs`; the design aims at 365.
+  the same set of creatures. The pool holds **365 caverns** (D-01 to D-365), so a cavern
+  comes back once a year (decided 20 Nov 2026; the first 34 kept their places). They are found by
+  `dev/levels-gen.js`, sifted by `dev/daily-pick.mjs` and chosen and ordered by `dev/daily-grow.mjs`: every
+  par is 12 to 26, no cavern is a near copy of another or of a chapter level (at least 6 tiles differ), and
+  each of the six creatures (Fluffmoth, Shellwhelk, Stumpcap, Dozer newt, Emberwick, Gloamling) is needed in
+  at least 20 caverns. Growing the pool moves which cavern falls on a date; records are kept by date, so
+  nothing earned is lost.
 - **Which cavern:** the date is the player's local calendar date, written `YYYY-MM-DD`. Its day number
   counts days from `2026-01-01` (day 0), and the day's cavern is `DAILY[dayNumber mod DAILY.length]`
   (always a non-negative index, so dates before 2026 work too).
