@@ -5,7 +5,7 @@
 //   node dev/ui-check.cjs --shots      only take the screenshots (phone, small phone, tablet)
 //   node dev/ui-check.cjs --only=workshop   only the Workshop's checks (SPEC section 26), while working on it
 //   node dev/ui-check.cjs --only=controls   only the controls' checks (SPEC section 27)
-//   node dev/ui-check.cjs --only=news       only What's new (SPEC section 30); also talk, paths
+//   node dev/ui-check.cjs --only=news       only What's new (SPEC section 30); also talk, paths, bramble
 //
 // The page is opened from file://, in a 390 by 844 touch context. Any console error or page error fails
 // the run. Expectations about levels come from the real modules (levels, engine, solver) and the rule
@@ -329,7 +329,7 @@ async function main() {
     await c.toMap();
     await openSheet();
     eq('controls: the Comfort sheet has Arrows, Hand and Swipe', await c.page.evaluate(() => [...document.querySelectorAll('#comfort h4')].map((h) => h.textContent)),
-      ['Text size', 'Readable font', 'Motion', 'Arrows', 'Hand', 'Swipe', 'Board talk']);   // Board talk: SPEC section 28
+      ['Text size', 'Readable font', 'Motion', 'Arrows', 'Hand', 'Swipe', 'Board talk', 'Bramble']);   // Board talk: SPEC section 28, Bramble: 31
     eq('controls: the defaults are pressed', await c.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[aria-pressed="true"]')].map((b) => b.dataset.arrows || b.dataset.hand || b.dataset.swipe).filter(Boolean)),
       ['false', 'right', 'normal']);
     eq('controls: the choices', await c.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[data-arrows], #comfort .choice[data-hand], #comfort .choice[data-swipe]')].map((b) => b.textContent)),
@@ -1439,7 +1439,7 @@ async function main() {
     await h.page.locator('#set-contrast').tap();
     await h.page.locator('#set-sound').tap();
     eq('contrast: toggles off again', (await h.gd('save')).settings, { sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow',
-      arrows: false, hand: 'right', swipe: 'normal', talk: false });   // talk: SPEC section 28
+      arrows: false, hand: 'right', swipe: 'normal', talk: false, bramble: true });   // talk: SPEC section 28, bramble: 31
 
     // Unlock all skips the level order, never the purchase (SPEC section 14)
     const paidCount = LEVELS.filter((def) => !CHAPTERS.find((c) => c.id === 1).levels.includes(def)).length + NIGHT.length;
@@ -1711,15 +1711,24 @@ async function main() {
       const hasClass = (id, cls) => t.page.evaluate(([i, c]) => document.getElementById(i).classList.contains(c), [id, cls]);
       // 1-1 is lit here, so 1-2 is open and not lit: the nudge points at it (SPEC section 29)
       const STUCK = 'Stuck? Hint helps a step at a time, and one other cavern is open on the map.';
-      // pixels of the coach colour in the 3 x 3 tiles around (x, y): the pointer is really drawn
+      // pixels of the coach colour in the 3 x 3 tiles around (x, y): the pointer is really drawn. Bramble (SPEC
+      // section 31), once 1-1 is lit, flutters by Wren with mint markings of its own: its box is left out.
       const coachPixels = (x, y) => t.page.evaluate(([tx, ty]) => {
         const L = window.__gd.layout();
         const c = document.querySelector('#screen-level canvas');
         const k = L.dpr;
-        const d = c.getContext('2d').getImageData(Math.round((L.ox + (tx - 1) * L.size) * k), Math.round((L.oy + (ty - 1) * L.size) * k),
-          Math.round(L.size * 3 * k), Math.round(L.size * 3 * k)).data;
+        const x0 = Math.round((L.ox + (tx - 1) * L.size) * k);
+        const y0 = Math.round((L.oy + (ty - 1) * L.size) * k);
+        const W = Math.round(L.size * 3 * k);
+        const d = c.getContext('2d').getImageData(x0, y0, W, Math.round(L.size * 3 * k)).data;
+        const b = window.__gd.bramble().at;
+        const bx = b ? (L.ox + b.x * L.size) * k - x0 : -1e9;
+        const by = b ? (L.oy + b.y * L.size) * k - y0 : -1e9;
+        const br = 0.45 * L.size * k;
         let n = 0;
         for (let i = 0; i < d.length; i += 4) {
+          const p = i / 4;
+          if (Math.abs((p % W) - bx) < br && Math.abs(Math.floor(p / W) - by) < br) continue;
           if (Math.abs(d[i] - 0x9C) < 26 && Math.abs(d[i + 1] - 0xF5) < 26 && Math.abs(d[i + 2] - 0xE3) < 26) n++;
         }
         return n;
@@ -2637,7 +2646,7 @@ async function main() {
       ok('comfort: the sheet opens', await cf.page.locator('#comfort').isVisible());
       eq('comfort: Done has the focus', await cf.page.evaluate(() => document.activeElement && document.activeElement.id), 'comfort-close');
       eq('comfort: the defaults are pressed', await cf.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[aria-pressed="true"]')].map((b) => b.textContent)),
-        ['100%', 'Off', 'As phone', 'Off', 'Right', 'Normal', 'Off']);   // then the controls (SPEC section 27) and Board talk (28)
+        ['100%', 'Off', 'As phone', 'Off', 'Right', 'Normal', 'Off', 'Flies along']);   // then the controls (SPEC section 27), Board talk (28), Bramble (31)
       await auditPage(cf, 'comfort sheet');
       await cf.shot('comfort-sheet');
       await cf.page.locator('#comfort .choice[data-size="2"]').tap();
@@ -2937,7 +2946,11 @@ async function main() {
     await t.open();
     await t.toMap();
     await openSheet();
-    eq('talk: Board talk is the last choice on the Comfort sheet', await t.page.evaluate(() => [...document.querySelectorAll('#comfort h4')].map((h) => h.textContent).pop()), 'Board talk');
+    // Board talk comes after Swipe (Bramble, SPEC section 31, follows it)
+    eq('talk: Board talk follows Swipe on the Comfort sheet', await t.page.evaluate(() => {
+      const names = [...document.querySelectorAll('#comfort h4')].map((h) => h.textContent);
+      return names[names.indexOf('Swipe') + 1];
+    }), 'Board talk');
     eq('talk: Off and On, Off pressed', await t.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[data-talk]')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])),
       [['Off', 'true'], ['On', 'false']]);
     await t.page.keyboard.press('Escape');
@@ -3280,11 +3293,165 @@ async function main() {
     await sm.close();
   }
 
+  // ------------------------------------------------------------------ Bramble, Wren's moth (SPEC section 31)
+  async function brambleChecks() {
+    console.log('bramble');
+    const { PERCH } = await import(pathToFileURL(path.join(ROOT, 'src/ui/bramble.js')).href);
+    const seen = ['prologue', ...CHAPTERS.map((c) => 'ch' + c.id)];
+    const lit1 = { [first.id]: { moves: first.par, stars: 3 } };
+    const bram = (ph) => ph.gd('bramble');
+    const open = async (ph, def) => {
+      if (typeof def === 'string') await ph.gd('loadLevel', def);
+      else await ph.gd('loadLevelDef', def);
+      if ((await ph.gd('panel')) === 'card') await ph.page.keyboard.press('Escape');
+      await ph.idle();
+      await ph.page.waitForTimeout(450);
+    };
+    // bright pixels in a box of 1.2 tiles round a point in tiles
+    const pixels = (ph, at) => ph.page.evaluate((p) => {
+      const L = window.__gd.layout();
+      const c = document.querySelector('#screen-level canvas');
+      const k = L.dpr;
+      const d = c.getContext('2d').getImageData(Math.round((L.ox + (p.x - 0.6) * L.size) * k), Math.round((L.oy + (p.y - 0.6) * L.size) * k),
+        Math.round(L.size * 1.2 * k), Math.round(L.size * 1.2 * k)).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
+      return sum / (d.length / 4);
+    }, at);
+
+    // a new player: no Bramble in the first lesson
+    const f = await phone({ tag: 'bramble-first', seed: { levels: {}, seen, critters: [], settings: { tutorials: false } } });
+    await f.open();
+    await open(f, first.id);
+    eq('bramble: not in 1-1 before it is lit', [(await bram(f)).on, (await bram(f)).at], [false, null]);
+    await f.close();
+
+    // 1-1 lit: Bramble flutters beside the lantern Wren carries
+    const b = await phone({ tag: 'bramble', seed: { levels: lit1, seen, critters: [], settings: { tutorials: false } } });
+    await b.open();
+    const second = CHAPTERS[0].levels[1];
+    await open(b, second.id);
+    {
+      const r = await bram(b);
+      const w = (await b.gd('state')).wren;
+      ok('bramble: flies once 1-1 is lit', r.on && r.at, JSON.stringify(r));
+      eq('bramble: its spot is the light Wren carries', r.spot, { x: w.x, y: w.y });
+      const home = { x: w.x + 0.5 + PERCH.x, y: w.y + 0.5 + PERCH.y };
+      ok('bramble: within half a tile of its perch, above and right of Wren', r.at && Math.hypot(r.at.x - home.x, r.at.y - home.y) <= 0.5 && r.at.x > w.x + 0.5 && r.at.y < w.y + 0.5,
+        JSON.stringify({ at: r.at, home }));
+      await b.page.waitForTimeout(400);
+      const r2 = await bram(b);
+      ok('bramble: it drifts', Math.hypot(r2.at.x - r.at.x, r2.at.y - r.at.y) > 0.01, JSON.stringify([r.at, r2.at]));
+      ok('bramble: Board talk never names it', !/Bramble/i.test(await b.gd('boardLabel')));
+    }
+    await auditPage(b, 'bramble level');
+    // bumping a wall: a shiver
+    {
+      const s0 = await b.gd('state');
+      const wall = ['N', 'E', 'S', 'W'].find((d) => engine.step(s0, d) === null);
+      if (wall) {
+        eq('bramble: a refused move is refused', await b.gd('act', wall), false);
+        eq('bramble: and Bramble shivers', (await bram(b)).reaction, 'shiver');
+      } else {
+        ok(`bramble: ${second.id} has a wall beside Wren at the start`, false);
+      }
+    }
+    // a hint: Bramble flies to it, and back when it goes
+    await b.page.locator('#btn-hint').tap();
+    await b.page.waitForFunction(() => window.__gd.hint() !== null, null, { timeout: 8000 });
+    await b.page.waitForTimeout(700);
+    {
+      const r = await bram(b);
+      const key = await b.gd('hintAt');
+      const w = (await b.gd('state')).wren;
+      const hint = await b.gd('hint');
+      const want = key || (engine.DIRS[hint] ? { x: w.x + engine.DIRS[hint][0], y: w.y + engine.DIRS[hint][1] } : { x: w.x, y: w.y });
+      eq('bramble: flies to the hint', r.spot, want);
+      ok('bramble: and gets there', r.at && Math.hypot(r.at.x - (want.x + 0.5 + PERCH.x), r.at.y - (want.y + 0.5 + PERCH.y)) <= 0.5, JSON.stringify({ at: r.at, want }));
+    }
+    {
+      const s0 = await b.gd('state');
+      const move = ['N', 'E', 'S', 'W', 'Z'].find((d) => engine.step(s0, d) !== null);
+      await b.gd('act', move);
+      await b.idle();
+      await b.page.waitForTimeout(500);
+      const w = (await b.gd('state')).wren;
+      eq('bramble: back by Wren when the hint goes', [await b.gd('hint'), (await bram(b)).spot], [null, { x: w.x, y: w.y }]);
+    }
+    // 1-1 again: the moth settling into the puddle is happy, the lit cavern cheers
+    await open(b, first.id);
+    {
+      const moves = solutionOf(first);
+      const reactions = [];
+      let s = engine.parseLevel(first);
+      for (const m of moves) {
+        const next = engine.step(s, m);
+        await b.gd('act', m);
+        const r = (await bram(b)).reaction;
+        if (next.events.some((e) => e.type === 'settle')) reactions.push(r);
+        await b.idle();
+        s = next;
+      }
+      eq('bramble: happy when the moth makes a bridge', reactions.includes('happy'), true);
+      const cheered = await b.page.waitForFunction(() => window.__gd.bramble().reaction === 'cheer', null, { timeout: 4000 }).then(() => true, () => false);
+      ok('bramble: a cheer when the cavern is lit', cheered);
+      await waitResult(b);
+    }
+    await b.close();
+
+    // the Hush reaches Wren: Bramble hides in the hood, and comes out when the moves go back
+    const g = await phone({ tag: 'bramble-hush', seed: { levels: lit1, seen, critters: [], settings: { tutorials: false } } });
+    await g.open();
+    await open(g, { id: 'T-G', name: 'Creep Test', par: 9, feature: 'H', gloam: true, map: ['#########', '#H...W..#', '#######L#', '#G#######'] });
+    for (let i = 0; i < 4; i++) {
+      await g.gd('act', 'Z');
+      if (i < 3) await g.idle();
+    }
+    await g.page.waitForTimeout(300);
+    eq('bramble: hides when the Hush reaches Wren', [await g.gd('caught'), (await bram(g)).hidden, (await bram(g)).at], [true, true, null]);
+    await g.page.waitForFunction(() => !window.__gd.caught(), null, { timeout: 5000 }).catch(() => {});
+    await g.idle();
+    await g.page.waitForTimeout(400);
+    ok('bramble: and comes out when the moves go back', !(await bram(g)).hidden && (await bram(g)).at !== null, JSON.stringify(await bram(g)));
+    await g.close();
+
+    // motion reduced: perched still; it is really drawn, and Stays home takes it off the board
+    const m = await phone({ tag: 'bramble-still', reducedMotion: 'reduce', seed: { levels: lit1, seen, critters: [], settings: { tutorials: false } } });
+    await m.open();
+    await m.toMap();
+    await open(m, second.id);
+    const still = await bram(m);
+    await m.page.waitForTimeout(400);
+    eq('bramble: with motion reduced it perches still', (await bram(m)).at, still.at);
+    const shown = await pixels(m, still.at);
+    await m.page.locator('#back').tap();
+    await m.page.waitForFunction(() => window.__gd.screen() === 'map');
+    await m.page.locator('#set-comfort').tap();
+    await m.page.locator('#comfort .choice[data-bramble="false"]').scrollIntoViewIfNeeded();
+    eq('bramble: Comfort offers Flies along and Stays home, Flies along pressed', await m.page.evaluate(() => [...document.querySelectorAll('#comfort .choice[data-bramble]')].map((x) => [x.textContent, x.getAttribute('aria-pressed')])),
+      [['Flies along', 'true'], ['Stays home', 'false']]);
+    await m.page.locator('#comfort .choice[data-bramble="false"]').tap();
+    eq('bramble: Stays home is saved', (await m.gd('save')).settings.bramble, false);
+    await m.page.locator('#comfort-close').tap();
+    await open(m, second.id);
+    eq('bramble: staying home, it is not on the board', [(await bram(m)).on, (await bram(m)).at], [false, null]);
+    const gone = await pixels(m, still.at);
+    ok('bramble: it was really drawn there', Math.abs(shown - gone) > 3, JSON.stringify({ shown, gone }));
+    await m.page.locator('#back').tap();
+    await m.page.waitForFunction(() => window.__gd.screen() === 'map');
+    await m.page.locator('#set-comfort').tap();
+    await m.page.locator('#comfort .choice[data-bramble="true"]').scrollIntoViewIfNeeded();
+    await m.page.locator('#comfort .choice[data-bramble="true"]').tap();
+    eq('bramble: flies along again', (await m.gd('save')).settings.bramble, true);
+    await m.close();
+  }
+
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'workshop')) await workshopChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'controls')) await controlsChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'talk')) await talkChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'paths')) await pathsChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'news')) await newsChecks();
+  if (!SHOTS_ONLY && (!ONLY || ONLY === 'bramble')) await brambleChecks();
 
   // ------------------------------------------------------------------ screenshots
   if (!ONLY) {

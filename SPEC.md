@@ -1127,3 +1127,38 @@ what changed without leaving the game, and a new player is not shown notes about
   it; the heading and Done stay put and the notes scroll between them on a short screen.
 - `newsDue(seen)` -> the notes not in `seen`, newest first, at most three. `readNews(value)` -> the saved
   list, or `[]`. `NEWS_IDS` -> every note's id (what a new save starts with).
+
+## 31. Bramble, Wren's moth (decided 20 Nov 2026)
+
+The design doc's companion: "Bramble, a Fluffmoth who imprints on Wren's lantern in level 1. Bramble flutters
+around the lantern, reacts to good and bad moves, and acts as the in-game hint giver." The prologue already
+names Bramble; now Bramble is on the board.
+
+- **Not a piece.** Bramble is drawn by the board and nothing else: not in the engine's state, never blocks,
+  lights or weighs anything, is never named by Board talk (section 28) or a hold (section 21), and a tap or a
+  hold on Bramble acts on the tile underneath. Bramble has no face, like every character (section 10).
+- **When:** in every cavern (chapters, Daily Glimmer, Night Garden, the Workshop) once 1-1 is lit. 1-1 itself
+  has no Bramble, so the first lesson has only one moth in it. **Comfort** has a **Bramble** choice after
+  Board talk: **Flies along** (the default) or **Stays home**, saved as `bramble` (true or false; anything else
+  is true). Reset progress keeps it.
+- **Looks:** a Fluffmoth drawn at 0.7 of a tile, drawn over the darkness with a soft glow of its own, so it is
+  always seen and always smaller than any moth on the board.
+- **Where it flies:** beside the light: above and to the right of the lantern, whether Wren carries it or it
+  is planted. It drifts in a small figure of eight round that spot and follows when the spot moves, without
+  overshooting. Its flight stays within half a tile of the spot. While the lantern is smothered (the Hush, a
+  Gloamling's shadow) Bramble hides in Wren's hood and is not drawn, and comes out when the light does.
+- **Reactions**, from a played turn (`reactionTo(prev, next)`):
+  - **Cheer** when the cavern is lit: a loop round the lantern while the light spreads.
+  - **Hide** when the Hush reaches Wren (section 17): into the hood until the moves go back.
+  - **Happy** when the turn made a bridge, opened a gate, bloomed a bud or caught an Emberwick: a quick hop.
+  - Otherwise nothing. A refused move (bumping a wall) makes Bramble **shiver** side to side.
+- **The hint giver:** while a hint shows (section 18), Bramble flies to it: to the key creature or tile (step
+  one), to the tile Wren should step to (step two, and each step of the whole way), or stays by Wren for "wait"
+  and the lantern. It flies back when the hint goes.
+- **Motion:** with motion reduced (section 22) Bramble perches beside the lantern without drifting, moves to a
+  new spot at once, and does no loop, hop or shiver; it still hides.
+- `src/ui/bramble.js` holds the rules (no DOM): `BRAMBLE_SIZE`, `brambleShown(levels, settings)`,
+  `readBramble(settings)`, `reactionTo(prev, next)` -> 'cheer' | 'hide' | 'happy' | null,
+  `spotOf(lantern, hint, wren)` -> where Bramble goes, in tiles, `hover(t, still)` -> the drift round it,
+  `follow(pos, target, dt, still)` -> one frame's flight, and `pose(kind, p, still)` -> a reaction's offset and
+  size at p (0 to 1), back to none at the end.

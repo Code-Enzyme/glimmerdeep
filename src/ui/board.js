@@ -5,6 +5,7 @@
 import { DIRS, terrainAt, beamPath } from '../engine.js';
 import { drawDarkness, drawBackdrop, PALETTE } from '../sprites.js';
 import { drawTile, drawWren, drawLantern, drawCreature, drawGlow, drawCritter, lanternStyle } from '../chars.js';
+import { BRAMBLE_SIZE, PERCH, REACTION_MS, reactionTo, spotOf, hover, follow, pose } from './bramble.js';
 
 const KIND = {
   '#': 'wall', '.': 'floor', '~': 'puddle', G: 'bud', H: 'hush',
@@ -58,6 +59,8 @@ export class BoardView {
     this.preview = null;   // { x, y, to: { x, y } | null } a held creature's next step, while its card is open
     this.coach = null;     // { kind: 'wren' | 'creature' | 'tile', id?, x, y, gesture } a tutorial's pointer
     this.critter = null;   // { x, y, kind, found } the level's hidden Journal critter (SPEC section 23), or null
+    // Bramble, Wren's moth (SPEC section 31): drawn here and nowhere else, never a piece
+    this.bramble = { on: false, pos: null, last: 0, reaction: null, hidden: false, at: null, spot: null };
     this.cssW = 0;
     this.cssH = 0;
     this.dpr = 1;
@@ -84,6 +87,7 @@ export class BoardView {
     this.preview = null;
     this.coach = null;
     this.critter = (opts && opts.critter) || null;
+    this.resetBramble();
     this.buildTiles(state);
     this.computeLayout();
   }
@@ -234,6 +238,11 @@ export class BoardView {
       settled: false,
     };
     const cue = (at, sound, fx) => a.cues.push({ at, sound, fx });
+    // Bramble: undo and restart bring it out of the hood; a played turn may make it react once things settle
+    if (tween) {
+      this.bramble.hidden = false;
+      this.bramble.reaction = null;
+    }
     const heard = new Set();
     const once = (at, sound) => {
       if (!sound || heard.has(sound)) return;
@@ -338,6 +347,11 @@ export class BoardView {
       }
     }
     a.cues.sort((p, q) => p.at - q.at);
+    if (!tween) {
+      const r = reactionTo(prev, next);
+      if (r === 'hide') this.bramble.hidden = true;
+      else if (r === 'happy') this.brambleReacts('happy', a.t0 + a.settleAt / a.speed);
+    }
     a.endAt = Math.max(a.settleAt + (a.ghosts.length ? T.drop : 0), tween ? 0 : T.hold);
     a.doneAt = Math.max(a.endAt, a.radius ? 240 : 0, a.cues.length ? a.cues[a.cues.length - 1].at : 0, a.creep ? a.creepAt + CREEP_FADE : 0);
     this.anim = a;
@@ -423,6 +437,7 @@ export class BoardView {
 
   // A tiny shake of Wren for a move that is not allowed. dir is 'N' | 'E' | 'S' | 'W' or null.
   nudge(dir) {
+    this.brambleReacts('shiver', performance.now());
     if (this.reduced) return;
     this.shake = { d: dir ? DIRS[dir] : null, t0: performance.now(), dur: 170 };
   }
@@ -445,6 +460,66 @@ export class BoardView {
       shown: -1,
       told: false,
     };
+    this.brambleReacts('cheer', this.celebration.t0);
+  }
+
+  // ---------------------------------------------------------------- Bramble (SPEC section 31)
+
+  setBramble(on) {
+    this.bramble.on = !!on;
+    this.resetBramble();
+  }
+
+  resetBramble() {
+    const b = this.bramble;
+    b.pos = null;
+    b.reaction = null;
+    b.hidden = false;
+    b.at = null;
+    b.spot = null;
+  }
+
+  brambleReacts(kind, t0) {
+    if (this.bramble.on && REACTION_MS[kind]) this.bramble.reaction = { kind, t0 };
+  }
+
+  // Flies one frame toward its spot and draws it, over the darkness. light: where the lantern is drawn, or null
+  // while it is smothered (Bramble hides in Wren's hood then).
+  drawBramble(ctx, L, now, t, light, wren) {
+    const b = this.bramble;
+    b.at = null;
+    if (!b.on || !this.state) return;
+    const still = this.reduced;
+    const spot = spotOf(light || wren, this.celebration ? null : this.hint, { x: Math.round(wren.x), y: Math.round(wren.y) });
+    b.spot = spot;
+    const dt = b.pos ? (now - b.last) / 1000 : 0;
+    b.pos = b.pos ? follow(b.pos, spot, dt, still) : { x: spot.x, y: spot.y };
+    b.last = now;
+    if (b.hidden || !light) return;
+    let pz = { x: 0, y: 0, scale: 1 };
+    const r = b.reaction;
+    if (r) {
+      const p = (now - r.t0) / REACTION_MS[r.kind];
+      if (p >= 1) b.reaction = null;
+      else pz = pose(r.kind, p, still);
+    }
+    const h = hover(t, still);
+    const x = b.pos.x + 0.5 + PERCH.x + h.x + pz.x;
+    const y = b.pos.y + 0.5 + PERCH.y + h.y + pz.y;
+    b.at = { x, y };
+    const size = L.size;
+    const cx = L.ox + x * size;
+    const cy = L.oy + y * size;
+    const bs = BRAMBLE_SIZE * size * pz.scale;
+    // a soft glow of its own, so it shows over the dark
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, bs * 0.95);
+    glow.addColorStop(0, 'rgba(255, 222, 160, 0.42)');
+    glow.addColorStop(1, 'rgba(255, 222, 160, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, bs * 0.95, 0, TAU);
+    ctx.fill();
+    drawCreature(ctx, 'M', cx - bs / 2, cy - bs / 2, bs, { t, lit: true, awake: false, dir: 'S' });
   }
 
   endCelebration() {
@@ -702,6 +777,9 @@ export class BoardView {
         });
       }
     }
+
+    const light = smothered && !cel ? null : s.lantern.carried ? { x: wx, y: wy } : { x: s.lantern.x + share * 0.27, y: s.lantern.y + share * 0.07 };
+    this.drawBramble(ctx, L, now, t, light, { x: wx, y: wy });
 
     this.drawOverlays(ctx, L, now, t, wx, wy, celT);
 

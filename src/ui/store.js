@@ -10,11 +10,12 @@ import { COMFORT_DEFAULTS, readComfort, CONTROL_DEFAULTS, readControls, readTalk
 import { DEFAULT_LANTERN, readLantern } from './lanterns.js';
 import { readWorkshop } from './workshop.js';
 import { NEWS_IDS, readNews } from './news.js';
+import { readBramble } from './bramble.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
 const SETTING_DEFAULTS = {
-  sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS, lantern: DEFAULT_LANTERN, ...CONTROL_DEFAULTS, talk: false,
+  sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS, lantern: DEFAULT_LANTERN, ...CONTROL_DEFAULTS, talk: false, bramble: true,
 };
 
 function freshSave() {
@@ -24,7 +25,7 @@ function freshSave() {
 // -> { levels: { [id]: { moves, stars } }, seen: [story page id], critters: [level id] (section 23),
 //      shop: { full, glimmer, freeAt, paid },
 //      daily: { [YYYY-MM-DD]: { moves, stars } }, workshop: [cavern] (section 26), news: [note id] (section 30),
-//      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion, lantern, arrows, hand, swipe }, rev }
+//      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion, lantern, arrows, hand, swipe, talk, bramble }, rev }
 export function loadSave() {
   let raw = null;
   try {
@@ -74,6 +75,7 @@ export function parseSave(raw) {
       data.settings.lantern = readLantern(parsed.settings.lantern);  // SPEC section 24
       Object.assign(data.settings, readControls(parsed.settings));  // SPEC section 27
       data.settings.talk = readTalk(parsed.settings);                // SPEC section 28
+      data.settings.bramble = readBramble(parsed.settings);          // SPEC section 31
     }
     const rev = Number(parsed.rev);
     if (Number.isFinite(rev) && rev > 0) data.rev = Math.floor(rev);

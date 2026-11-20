@@ -27,6 +27,7 @@ import { reducedMotion, swipeNeed } from './ui/comfort.js';
 import { describeBoard, describeTurn, describeRefusal, describeBack } from './ui/talk.js';
 import { levelOpen, lockedWhy, othersOpen } from './ui/paths.js';
 import { NEWS, newsDue } from './ui/news.js';
+import { brambleShown } from './ui/bramble.js';
 import { CRITTERS, critterKind, dailyCritterKind, isFound, markFound, critterJournal } from './ui/critters.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
@@ -626,6 +627,7 @@ function openLevel(def, adhoc, day, from) {
   view.highContrast = save.settings.contrast;
   applyLantern();
   const critter = session.critter ? { ...session.critter, kind: current.critterKind.kind, found: session.found } : null;
+  view.setBramble(brambleShown(save.levels, save.settings));   // Wren's moth, once 1-1 is lit (SPEC section 31)
   view.setLevel(session.state, { accent: current.chapter.accent, facing: session.facing, critter });
   $('level-id').textContent = day ? `Daily Glimmer, ${dateLabel(day)}` : levelTitle(def);
   $('level-name').textContent = def.name || 'Unnamed cavern';
@@ -1619,7 +1621,7 @@ function syncSettings() {
   view.highContrast = s.contrast;
   setMuted(!s.sound);
   // Comfort (SPEC section 22)
-  const controlled = s.arrows || s.hand !== 'right' || s.swipe !== 'normal' || s.talk;   // SPEC sections 27, 28
+  const controlled = s.arrows || s.hand !== 'right' || s.swipe !== 'normal' || s.talk || !s.bramble;   // SPEC sections 27, 28, 31
   set('set-comfort', s.textSize !== 1 || s.readable || s.motion !== 'system' || controlled, `${Math.round(s.textSize * 100)}%`);
   app.style.setProperty('--ts', String(s.textSize));
   app.classList.toggle('readable', s.readable);
@@ -1636,7 +1638,8 @@ function syncSettings() {
           : d.arrows !== undefined ? (d.arrows === 'true') === s.arrows
             : d.hand !== undefined ? d.hand === s.hand
               : d.talk !== undefined ? (d.talk === 'true') === s.talk
-                : d.swipe === s.swipe;
+                : d.bramble !== undefined ? (d.bramble === 'true') === s.bramble
+                  : d.swipe === s.swipe;
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   syncMotion();
@@ -1886,6 +1889,7 @@ for (const b of $('comfort').querySelectorAll('.choice')) {
     else if (d.arrows !== undefined) setComfort({ arrows: d.arrows === 'true' });   // the controls (SPEC section 27)
     else if (d.hand !== undefined) setComfort({ hand: d.hand });
     else if (d.talk !== undefined) setTalk(d.talk === 'true');   // Board talk (SPEC section 28)
+    else if (d.bramble !== undefined) setComfort({ bramble: d.bramble === 'true' });   // Bramble (SPEC section 31)
     else setComfort({ swipe: d.swipe });
   });
 }
@@ -2554,6 +2558,12 @@ window.__gd = {
   spoken: () => spoken,                         // Board talk (SPEC section 28)
   boardTalk: () => $('board-talk').textContent,
   boardLabel: () => canvas.getAttribute('aria-label'),
+  // Bramble (SPEC section 31): whether it is on, where it is drawn (tiles, null when not drawn), where it is
+  // going, and its reaction
+  bramble: () => {
+    const b = view.bramble;
+    return { on: b.on, at: b.at && { ...b.at }, spot: b.spot && { ...b.spot }, reaction: b.reaction ? b.reaction.kind : null, hidden: b.hidden };
+  },
   // What's new (SPEC section 30): the sheet's note titles while it is open, and the notes seen
   news: () => ({
     open: panel === 'news',

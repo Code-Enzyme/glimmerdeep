@@ -3,6 +3,11 @@
 
 export const NEWS = [
   {
+    id: 'bramble',
+    title: 'Bramble flies along',
+    text: "Once 1-1 is lit, Wren's moth flutters by the lantern, cheers you on and flies to each hint. Comfort can keep Bramble home.",
+  },
+  {
     id: 'open-ahead',
     title: 'More ways forward',
     text: 'From chapter 2, every lit cavern opens the three after it, so a stuck cavern can wait while you try another.',

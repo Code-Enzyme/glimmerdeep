@@ -69,6 +69,11 @@ and south, open to the east and west."). Board talk, on the Comfort sheet, speak
 phone's own voice (`android/.../SpeechPlugin.java`) and adds Describe to every cavern, which shows and says
 the whole board. The words come from `src/ui/talk.js` (SPEC section 28).
 
+Bramble, the Fluffmoth that follows Wren's lantern from the first cavern on, flutters beside the light on
+every board once 1-1 is lit. It is never a piece: it hops when a turn makes a bridge or blooms a bud, loops
+when a cavern is lit, shivers at a bumped wall, hides in Wren's hood when the Hush comes, and flies to each
+hint. Comfort can keep Bramble home (SPEC section 31, `src/ui/bramble.js`).
+
 After an update, Play shows the map and then What's new: the newest notes a player has not seen, at most
 three, in a sheet that closes with Done. A new player sees none. The title's What's new button shows the
 newest six any time. The notes live in `src/ui/news.js`, newest first (SPEC section 30).
@@ -115,7 +120,7 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |
-| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the Daily Glimmer's date rules (`ui/daily.js`), the Workshop's rules and share codes (`ui/workshop.js`, `ui/codes.js`), the board in words (`ui/talk.js`), the order caverns open in (`ui/paths.js`), What's new (`ui/news.js`), the app-shell bridge (`ui/native.js`) |
+| `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the Daily Glimmer's date rules (`ui/daily.js`), the Workshop's rules and share codes (`ui/workshop.js`, `ui/codes.js`), the board in words (`ui/talk.js`), the order caverns open in (`ui/paths.js`), What's new (`ui/news.js`), Bramble's flight (`ui/bramble.js`), the app-shell bridge (`ui/native.js`) |
 | `tools/` | Build, level verifier, icon maker |
 | `dev/` | Browser and device checks, plus the level-design search scripts |
 | `android/` | The Capacitor Android project |

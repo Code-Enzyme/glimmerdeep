@@ -24,7 +24,7 @@ test('store: a fresh save has no levels, no seen story pages and the default set
   assert.deepEqual(save.seen, []);
   assert.deepEqual(save.settings, {
     sound: true, contrast: false, unlockAll: false, tutorials: true, textSize: 1, readable: false, motion: 'system', lantern: 'tallow',
-    arrows: false, hand: 'right', swipe: 'normal', talk: false,
+    arrows: false, hand: 'right', swipe: 'normal', talk: false, bramble: true,
   });
 });
 
@@ -41,6 +41,22 @@ test('store: Board talk round-trips, junk reads as off, and a reset keeps it (SP
   }
   clearProgress(again);
   assert.equal(again.settings.talk, true, 'Reset progress keeps it');
+});
+
+test('store: Bramble flies along unless it stays home; junk flies; a reset keeps it (SPEC section 31)', () => {
+  const data = withStorage();
+  const save = loadSave();
+  assert.equal(save.settings.bramble, true);
+  save.settings.bramble = false;
+  writeSave(save);
+  const again = loadSave();
+  assert.equal(again.settings.bramble, false);
+  for (const junk of ['no', 0, null, {}]) {
+    data.set(SAVE_KEY, JSON.stringify({ settings: { bramble: junk } }));
+    assert.equal(loadSave().settings.bramble, true, `bramble: ${JSON.stringify(junk)}`);
+  }
+  clearProgress(again);
+  assert.equal(again.settings.bramble, false, 'Reset progress keeps it');
 });
 
 test('store: the control settings round-trip, and junk in them falls back to the defaults (SPEC section 27)', () => {
