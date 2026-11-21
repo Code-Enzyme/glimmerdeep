@@ -14,18 +14,25 @@ import { readBramble } from './bramble.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
+// SPEC section 32: the chapters grew from 11 caverns to 19, and each Gloam encounter moved from x-11 to x-19.
+// A save without layout 2 is from before: its x-11 records and found critters move to x-19.
+export const LAYOUT = 2;
+const OLD_ENCOUNTER = /^(\d+)-11$/;
+const moved = (id) => id.replace(OLD_ENCOUNTER, '$1-19');
+
 const SETTING_DEFAULTS = {
   sound: true, contrast: false, unlockAll: false, tutorials: true, ...COMFORT_DEFAULTS, lantern: DEFAULT_LANTERN, ...CONTROL_DEFAULTS, talk: false, bramble: true,
 };
 
 function freshSave() {
-  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, workshop: [], news: NEWS_IDS.slice(), settings: { ...SETTING_DEFAULTS }, rev: 0 };
+  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, workshop: [], news: NEWS_IDS.slice(), settings: { ...SETTING_DEFAULTS }, layout: LAYOUT, rev: 0 };
 }
 
 // -> { levels: { [id]: { moves, stars } }, seen: [story page id], critters: [level id] (section 23),
 //      shop: { full, glimmer, freeAt, paid },
 //      daily: { [YYYY-MM-DD]: { moves, stars } }, workshop: [cavern] (section 26), news: [note id] (section 30),
-//      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion, lantern, arrows, hand, swipe, talk, bramble }, rev }
+//      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion, lantern, arrows, hand, swipe, talk, bramble },
+//      layout (section 32), rev }
 export function loadSave() {
   let raw = null;
   try {
@@ -43,6 +50,7 @@ export function parseSave(raw) {
     if (!raw) return data;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return data;
+    const idOf = parsed.layout === LAYOUT ? (id) => id : moved;   // SPEC section 32
     if (parsed.levels && typeof parsed.levels === 'object') {
       for (const id of Object.keys(parsed.levels)) {
         const r = parsed.levels[id];
@@ -50,7 +58,7 @@ export function parseSave(raw) {
         const moves = Number(r.moves);
         const stars = Number(r.stars);
         if (!Number.isFinite(moves) || !Number.isFinite(stars) || moves < 1) continue;
-        data.levels[id] = { moves: Math.floor(moves), stars: Math.max(1, Math.min(3, Math.floor(stars))) };
+        data.levels[idOf(id)] = { moves: Math.floor(moves), stars: Math.max(1, Math.min(3, Math.floor(stars))) };
       }
     }
     if (Array.isArray(parsed.seen)) {
@@ -60,7 +68,7 @@ export function parseSave(raw) {
     }
     if (Array.isArray(parsed.critters)) {
       for (const id of parsed.critters) {
-        if (typeof id === 'string' && id && !data.critters.includes(id)) data.critters.push(id);
+        if (typeof id === 'string' && id && !data.critters.includes(idOf(id))) data.critters.push(idOf(id));
       }
     }
     data.shop = readShop(parsed.shop);
@@ -122,7 +130,7 @@ export function writeSave(data) {
   writes += 1;
   const json = JSON.stringify({
     levels: data.levels, seen: data.seen || [], critters: data.critters || [], shop: data.shop || freshShop(), daily: data.daily || {},
-    workshop: data.workshop || [], news: data.news || [], settings: data.settings, rev: data.rev,
+    workshop: data.workshop || [], news: data.news || [], settings: data.settings, layout: LAYOUT, rev: data.rev,
   });
   let ok = false;
   try {

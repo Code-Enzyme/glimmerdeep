@@ -3,6 +3,11 @@
 
 export const NEWS = [
   {
+    id: 'chapters-19',
+    title: 'Longer chapters',
+    text: 'Every chapter now has 19 caverns, with eight new ones before its Gloam encounter. Everything you have lit stays lit.',
+  },
+  {
     id: 'garden-thirty',
     title: 'A deeper Night Garden',
     text: 'The Night Garden now holds 30 deep puzzles. The twenty new ones each mix two creatures with crystal walls.',

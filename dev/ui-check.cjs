@@ -94,6 +94,7 @@ async function main() {
   const { previewOf } = await import(pathToFileURL(path.join(ROOT, 'src/ui/preview.js')).href);
   const talkWords = await import(pathToFileURL(path.join(ROOT, 'src/ui/talk.js')).href);
   const { NEWS, NEWS_IDS } = await import(pathToFileURL(path.join(ROOT, 'src/ui/news.js')).href);
+  const { LAYOUT } = await import(pathToFileURL(path.join(ROOT, 'src/ui/store.js')).href);
   // A legal move from `state` that leaves the hint's way (SPEC section 18) and from which the level still solves.
   const offTheWay = (def, state) => {
     const ladder = new hints.HintLadder(engine.parseLevel(def), solutionOf(def), def.feature);
@@ -130,7 +131,9 @@ async function main() {
     // real one.) The app writes nothing until something changes, so loading it once to reach its storage is safe.
     // A seed that says nothing about What's new has seen every note (SPEC section 30), so the sheet does not
     // open over every other check; the news checks pass news themselves (undefined: a save from before it).
-    let seed = opts.seed ? JSON.stringify('news' in opts.seed ? opts.seed : { ...opts.seed, news: NEWS_IDS }) : null;
+    // A seed is written for today's chapters of 19 (layout 2, SPEC section 32) unless it says otherwise.
+    const seedOf = (s) => ({ ...s, ...('news' in s ? {} : { news: NEWS_IDS }), ...('layout' in s ? {} : { layout: LAYOUT }) });
+    let seed = opts.seed ? JSON.stringify(seedOf(opts.seed)) : null;
     const watch = (pg) => {
       pg.on('console', (m) => {
         if (m.type() === 'error') errors.push(`[${tag}] console: ${m.text()}`);
@@ -703,7 +706,7 @@ async function main() {
     await w.page.locator('#editor-options').tap();
     await w.panelIs('cavern');
     eq('size: it shows the size', [await w.txt('#width-val'), await w.txt('#height-val')], ['7', '7']);
-    eq('size: the Gloam option once a Gloam encounter is lit (1-11), no shutter option before one is met',
+    eq('size: the Gloam option once a Gloam encounter is lit (1-19), no shutter option before one is met',
       [await w.page.locator('#opt-gloam-box').isVisible(), await w.page.locator('#opt-shutter-box').isVisible()], [met.gloam, met.shutter]);
     ok('size: Mossmouth has its Gloam encounter and no shutter', met.gloam && !met.shutter, JSON.stringify(met));
     await w.page.locator('#width-more').tap();
@@ -2527,22 +2530,28 @@ async function main() {
         for (const e of document.querySelectorAll('*')) if (e.scrollTop) e.scrollTop = 0;
       });
 
-      // bought, the story done, but one star moss a cavern: not enough
-      const poor = await phone({ tag: 'garden-closed', seed: seeded(allLit(1), true, true) });
+      // bought, the story done, but not enough star moss: chapter 1, then every third cavern of the others (open
+      // ahead, SPEC section 29), the encounters among them, at one star moss each. (With the chapters of 19,
+      // every cavern lit at one star moss is already 133.)
+      const skipped = Object.fromEntries(CHAPTERS.flatMap((c, k) => c.levels.filter((d, i) => k === 0 || i % 3 === 0))
+        .map((d) => [d.id, { moves: d.par, stars: 1 }]));
+      const few = Object.keys(skipped).length;
+      ok('garden: the skipping save has the story done and under 100 star moss', !!skipped[CHAPTERS[CHAPTERS.length - 1].levels.at(-1).id] && few < 100, few);
+      const poor = await phone({ tag: 'garden-closed', seed: seeded(skipped, true, true) });
       let txt = at(poor);
       await poor.open();
-      eq('garden: deep puzzles do not count toward the caverns lit', await txt('#title-progress'), `${LEVELS.length} of ${LEVELS.length} caverns lit`);
+      eq('garden: deep puzzles do not count toward the caverns lit', await txt('#title-progress'), `${few} of ${LEVELS.length} caverns lit`);
       await poor.toMap();
       eq('garden: the last section of the map', await poor.page.evaluate(() => {
         const all = document.querySelectorAll('.chapter');
         return all[all.length - 1].id;
       }), 'garden');
       eq('garden: "Deep puzzles" over "The Night Garden"', [await txt('#garden .kicker'), await txt('#garden h2')], ['Deep puzzles', 'The Night Garden']);
-      eq('garden: says what it waits for', await txt('#garden-note'), note(LEVELS.length));
+      eq('garden: says what it waits for', await txt('#garden-note'), note(few));
       eq('garden: no tally while closed', await poor.page.locator('#garden .tally').count(), 0);
       eq('garden: a node for each puzzle', await poor.page.locator('#garden .node').count(), NIGHT.length);
       eq('garden: its first puzzle is locked, and says why', await poor.page.locator(`.node[data-level="${n1.id}"]`).getAttribute('aria-label'),
-        `Night Garden 1, locked. ${note(LEVELS.length)}`);
+        `Night Garden 1, locked. ${note(few)}`);
       await poor.page.locator(`.node[data-level="${n1.id}"]`).tap({ force: true });   // aria-disabled, but a finger can still tap it
       eq('garden: a closed puzzle does not open', [await poor.gd('screen'), await poor.gd('panel')], ['map', null]);
       await toTop(poor);
@@ -3174,6 +3183,25 @@ async function main() {
       }
     }
     await r.close();
+
+    // a save from the chapters of 11 (no layout, SPEC section 32): Mossmouth and its encounter, then 2-1, lit
+    const oldIds = [...ch1.slice(0, 10).map((d) => d.id), '1-11', '2-1'];
+    const old = await phone({
+      tag: 'paths-old-save',
+      seed: { levels: Object.fromEntries(oldIds.map((id) => [id, { moves: 30, stars: 2 }])), seen, critters: ['1-11'], shop, layout: undefined, settings: { tutorials: false } },
+    });
+    await old.open();
+    await old.toMap();
+    const solved = (def) => old.page.locator(`.node[data-level="${def.id}"]`).evaluate((n) => n.classList.contains('solved'));
+    const enc1 = ch1[ch1.length - 1];
+    eq('old save: the encounter it lit moves to its new place, and stays lit', [enc1.id, enc1.gloam, await solved(enc1)], ['1-19', true, true]);
+    eq('old save: the first new cavern waits, open, after 1-10', [await solved(ch1[10]), (await nodeState(old, ch1[10])).locked, (await nodeState(old, ch1[10])).next],
+      [false, false, true]);
+    eq('old save: the ones after it keep chapter 1\'s order', (await nodeState(old, ch1[11])).locked, true);
+    eq('old save: chapter 2 stays open, its lit cavern lit', [(await nodeState(old, ch2[0])).locked, await solved(ch2[0]), (await nodeState(old, ch2[1])).locked],
+      [false, true, false]);
+    eq('old save: the found critter moved with its cavern', (await old.gd('save')).critters, ['1-19']);
+    await old.close();
   }
 
   // ------------------------------------------------------------------ What's new (SPEC section 30)

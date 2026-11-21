@@ -646,7 +646,7 @@ There is no combat. Each chapter ends with a Gloam encounter, the design doc's s
 creeps toward Wren one tile a turn, and only light holds it back. Plant the lantern to hold a choke point,
 run ahead in the dark, and get back to the light before the Hush gets there.
 
-- **Level:** an encounter is the last level of its chapter (`'1-11'` to `'7-11'`) and has `gloam: true`.
+- **Level:** an encounter is the last level of its chapter (`'1-19'` to `'7-19'`, section 32) and has `gloam: true`.
   It must have at least one Hush tile (`parseLevel` throws otherwise). In an encounter every Hush tile creeps.
   Its `feature` lists `H`, and it uses the chapter's creature too.
 - **Creep** (phase 7 of a turn, section 2): when the level is not solved, every **floor** tile (`.` terrain:
@@ -747,7 +747,7 @@ points. There are **30 deep puzzles** (decided 20 Nov 2026).
   creature, its par is from 22 to 40, and they go from the shortest par to the longest. Each has a
   designer's `note` and a short `tip` that gives nothing away, and none is a near copy of another level (at
   least 6 tiles differ). They are found by `dev/levels-gen.js` and chosen by `dev/night-grow.mjs`.
-- **Opening:** the Night Garden is part of the Full Expedition. Its first puzzle opens once level `7-11`, the
+- **Opening:** the Night Garden is part of the Full Expedition. Its first puzzle opens once level `7-19`, the
   end of the story, is lit and the chapters have earned at least 100 star moss [PLACEHOLDER - PLAYTEST]
   between them; after that the usual order holds (a puzzle opens when it or the one before it is lit). The
   **Unlock all** setting skips the order and the star moss, never the purchase; the developer links work as
@@ -942,7 +942,7 @@ cavern, so there is no server, no gallery and no typed text that anyone else eve
 made from two fixed word lists), which keeps it clear of moderation.
 
 - **Where:** a **Workshop** card on the map, after the Night Garden. It opens once Mossmouth's last cavern
-  (1-11) is lit, or with Unlock all; until then it says "Opens when Mossmouth is lit." It opens the Workshop
+  (1-19) is lit, or with Unlock all; until then it says "Opens when Mossmouth is lit." It opens the Workshop
   screen: "Make your own caverns and share them with a code.", your caverns (at most 12, "3 of 12"), **New
   cavern** and **Play a code**. Each cavern row shows its picture (a square per tile, a dot per thing), its
   name, its size and its check: "Not checked", "Lights in 14 moves", "Can't be lit" or "Too big to check".
@@ -1171,3 +1171,27 @@ names Bramble; now Bramble is on the board.
   `spotOf(lantern, hint, wren)` -> where Bramble goes, in tiles, `hover(t, still)` -> the drift round it,
   `follow(pos, target, dt, still)` -> one frame's flight, and `pose(kind, p, still)` -> a reaction's offset and
   size at p (0 to 1), back to none at the end.
+
+## 32. Longer chapters (decided 21 Nov 2026)
+
+The design doc plans 20 to 24 caverns a chapter, about 130 in all; the chapters had 11 each. Each chapter now
+has **19 caverns**, 133 in all: its first ten as before, **eight new caverns** (`x-11` to `x-18`), then its Gloam
+encounter, which moves from `x-11` to `x-19`.
+
+- **The new caverns** are the design doc's twist and master stretch, before the encounter's set piece. Each
+  one, like every level, solves at exactly its par, needs its featured elements and keeps to the size limit.
+  Its `feature` holds the chapter's creature, and it uses only what the player has met by then: creatures of
+  this chapter or an earlier one, never crystal (section 19) or a creeping Hush, Hush pools only from chapter
+  5, roots and gates only from chapter 2, and the shutter only in chapter 7. Its par is from 16 to 36, it has a
+  name of its own, a designer's `note` and a hidden critter, no tutorial, and it is no near copy of another
+  level (at least 6 tiles differ). They rise in difficulty with a breather after each harder cavern: four
+  have a par under 19 + the chapter's number and four at or over it, and the eight are sorted by par and
+  taken shortest, fifth, second, sixth, third, seventh, fourth, eighth.
+- **Found and chosen** by `dev/levels-gen.js` (the chapter specs in `dev/gen-specs/ch*.json`) and
+  `dev/chapter-grow.mjs`, which writes them into `src/levels/chN.js` and renumbers the encounter.
+- **Old saves:** the save gains `layout`, 2 for the chapters of 19. A save without it is from the chapters
+  of 11: on loading, each chapter's `x-11` record and found critter move to `x-19`, so a lit encounter stays
+  lit, the next chapter and the story pages stay open, and the new caverns wait, open, after `x-10`. A new
+  save starts at 2. Reset progress keeps 2.
+- **Opening** follows section 29 unchanged: in chapter 1 one at a time, from chapter 2 any of the three
+  before. The Workshop opens with Mossmouth's last cavern, now 1-19, and the Night Garden with 7-19.

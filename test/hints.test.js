@@ -55,7 +55,7 @@ test('hints: from a later position the key piece is about the rest of the way', 
 });
 
 test('hints: L in the feature points at where the lantern is next planted', () => {
-  const { start, moves } = way(level('1-11'));
+  const { start, moves } = way(level('1-19'));
   const states = walk(start, moves);
   const i = states.findIndex((s, n) => n > 0 && s.events.some((e) => e.type === 'plant'));
   const plant = states[i].events.find((e) => e.type === 'plant');
@@ -72,7 +72,7 @@ test('hints: A in the feature points at the lantern where it is next aimed', () 
 });
 
 test('hints: the Hush is never the key piece; then any creature that acts, then a planting, then the Glowbud', () => {
-  const enc = way(level('1-11'));
+  const enc = way(level('1-19'));
   const moth = enc.start.creatures.find((c) => c.type === 'M');
   assert.deepEqual(keyPiece(enc.start, enc.moves, 'H'), { kind: 'creature', id: moth.id, type: 'M', x: moth.x, y: moth.y });
   // a feature naming a species that does nothing on the way falls back the same way

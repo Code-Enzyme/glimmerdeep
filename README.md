@@ -117,7 +117,7 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `SPEC.md` | The rules contract: board, turn order, creatures, light, level format, module contracts |
 | `docs/glimmerdeep-design.md` | The full game design document |
 | `src/engine.js`, `src/solver.js` | Rules and the shortest-solution solver (pure) |
-| `src/levels/` | The levels, by chapter (77 in seven chapters, each ending with its Gloam encounter), and the Daily Glimmer's 365 caverns (`daily.js`) |
+| `src/levels/` | The levels, by chapter (133 in seven chapters of 19, each ending with its Gloam encounter), and the Daily Glimmer's 365 caverns (`daily.js`) |
 | `src/chars/glowmark.js` | Character art (faceless Glowmark style) |
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |

@@ -166,10 +166,11 @@ test('workshop: the tools and options you have met', () => {
   assert.deepEqual(metInWorkshop({ levels: {} }, levels, true), { tools: TOOLS.map((t) => t.id), gloam: true, shutter: true });
 });
 
-test('workshop: it opens once 1-11 is lit, or with Unlock all', () => {
+test('workshop: it opens once Mossmouth\'s last cavern, 1-19, is lit, or with Unlock all', () => {
   assert.equal(workshopOpen({ levels: {} }, false), false);
-  assert.equal(workshopOpen({ levels: { '1-10': { moves: 1, stars: 1 } } }, false), false);
-  assert.equal(workshopOpen({ levels: { '1-11': { moves: 1, stars: 1 } } }, false), true);
+  assert.equal(workshopOpen({ levels: { '1-18': { moves: 1, stars: 1 } } }, false), false);
+  assert.equal(workshopOpen({ levels: { '1-11': { moves: 1, stars: 1 } } }, false), false, 'now an ordinary cavern');
+  assert.equal(workshopOpen({ levels: { '1-19': { moves: 1, stars: 1 } } }, false), true);
   assert.equal(workshopOpen({ levels: {} }, true), true);
 });
 

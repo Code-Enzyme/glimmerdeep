@@ -10,7 +10,7 @@ const levels = (pairs) => Object.fromEntries(pairs.map(([id, stars]) => [id, { m
 test('garden: the story ends with the last chapter\'s last level, and the garden needs 100 star moss', () => {
   const last = CHAPTERS[CHAPTERS.length - 1];
   assert.equal(STORY_END, last.levels[last.levels.length - 1].id);
-  assert.equal(STORY_END, '7-11');
+  assert.equal(STORY_END, '7-19');
   assert.equal(GARDEN_MOSS, 100);
 });
 

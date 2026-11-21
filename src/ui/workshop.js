@@ -4,6 +4,7 @@
 import { parseLevel } from '../engine.js';
 import { solve } from '../solver.js';
 import { SYMBOLS, decodeCavern } from './codes.js';
+import { CHAPTERS } from '../levels/index.js';
 import { PALETTE } from '../sprites.js';
 
 export const MAX_CAVERNS = 12;
@@ -163,9 +164,10 @@ export function metInWorkshop(save, levels, unlockAll) {
   return { tools, gloam, shutter };
 }
 
-// The Workshop opens once Mossmouth's last cavern is lit, or with Unlock all.
+// The Workshop opens once Mossmouth's last cavern (its Gloam encounter) is lit, or with Unlock all.
+const MOSSMOUTH = CHAPTERS[0].levels;
 export function workshopOpen(save, unlockAll) {
-  return !!unlockAll || !!(save && save.levels && save.levels['1-11']);
+  return !!unlockAll || !!(save && save.levels && save.levels[MOSSMOUTH[MOSSMOUTH.length - 1].id]);
 }
 
 function goodMap(map) {

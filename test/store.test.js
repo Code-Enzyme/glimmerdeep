@@ -348,3 +348,35 @@ test('store: a new save has seen every note, an old save none; seen notes round-
   clearProgress(old);
   assert.deepEqual(old.news, [NEWS_IDS[0]], 'Reset progress keeps it');
 });
+
+test('store: a save from the chapters of 11 moves each x-11 to x-19; a new save is layout 2 (SPEC section 32)', () => {
+  const data = withStorage();
+  assert.equal(loadSave().layout, 2, 'a new save');
+  const old = {
+    levels: { '1-10': { moves: 26, stars: 3 }, '1-11': { moves: 20, stars: 2 }, '3-11': { moves: 30, stars: 1 }, '7-11': { moves: 18, stars: 3 }, 'N-11': { moves: 22, stars: 1 } },
+    critters: ['1-11', '2-4', '7-11', 'N-11'],
+    rev: 7,
+  };
+  data.set(SAVE_KEY, JSON.stringify(old));
+  const save = loadSave();
+  assert.equal(save.layout, 2);
+  assert.deepEqual(save.levels, {
+    '1-10': { moves: 26, stars: 3 }, '1-19': { moves: 20, stars: 2 }, '3-19': { moves: 30, stars: 1 }, '7-19': { moves: 18, stars: 3 }, 'N-11': { moves: 22, stars: 1 },
+  }, 'the encounters move; deep puzzles and other caverns stay');
+  assert.deepEqual([...save.critters].sort(), ['1-19', '2-4', '7-19', 'N-11']);
+  writeSave(save);
+  const again = loadSave();
+  assert.deepEqual(again.levels, save.levels, 'a layout 2 save is never moved again');
+  assert.deepEqual(again.critters, save.critters);
+  assert.equal(JSON.parse(data.get(SAVE_KEY)).layout, 2);
+  // a layout 2 save keeps a lit x-11 (a new cavern) where it is
+  data.set(SAVE_KEY, JSON.stringify({ layout: 2, levels: { '2-11': { moves: 20, stars: 1 } }, critters: ['2-11'] }));
+  assert.deepEqual(loadSave().levels, { '2-11': { moves: 20, stars: 1 } });
+  assert.deepEqual(loadSave().critters, ['2-11']);
+  // junk in layout reads as an old save; a reset keeps layout 2
+  data.set(SAVE_KEY, JSON.stringify({ layout: 'x', levels: { '5-11': { moves: 17, stars: 2 } } }));
+  assert.deepEqual(loadSave().levels, { '5-19': { moves: 17, stars: 2 } });
+  const reset = loadSave();
+  clearProgress(reset);
+  assert.equal(reset.layout, 2);
+});
