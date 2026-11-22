@@ -3372,7 +3372,12 @@ async function main() {
     await o.page.evaluate(() => document.activeElement && document.activeElement.blur());
     await o.page.keyboard.press('Enter');
     eq('news: Enter under the sheet does not start playing', [await o.gd('screen'), (await news(o)).open], ['title', true]);
-    await o.page.touchscreen.tap(195, 30);
+    // with six notes and a wide font the sheet grows to its full height, which still leaves a strip above it
+    {
+      const top = (await o.page.locator('#news-sheet').boundingBox()).y;
+      ok('news: the sheet leaves room above it to tap', top >= 12, `top ${top}`);
+      await o.page.touchscreen.tap(195, Math.max(1, top / 2));
+    }
     eq('news: a tap outside closes it', [(await news(o)).open, await o.gd('screen')], [false, 'title']);
     await o.page.locator('#btn-news').tap();
     await o.page.keyboard.press('Escape');
