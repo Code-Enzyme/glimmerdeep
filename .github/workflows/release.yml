@@ -19,10 +19,11 @@ jobs:
     name: Signed app bundle for Google Play
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    env:
-      GLIMMERDEEP_VERSION_CODE: ${{ github.run_number + 100 }}
-      GLIMMERDEEP_VERSION_NAME: 1.0.${{ github.run_number }}
     steps:
+      - name: This run's version (expressions cannot add, so the shell does)
+        run: |
+          echo "GLIMMERDEEP_VERSION_CODE=$((GITHUB_RUN_NUMBER + 100))" >> "$GITHUB_ENV"
+          echo "GLIMMERDEEP_VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: gradle/actions/wrapper-validation@v4
       - uses: actions/setup-node@v4
