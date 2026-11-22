@@ -11,6 +11,7 @@ import { DEFAULT_LANTERN, readLantern } from './lanterns.js';
 import { readWorkshop } from './workshop.js';
 import { NEWS_IDS, readNews } from './news.js';
 import { readBramble } from './bramble.js';
+import { readNotes } from './notes.js';
 
 export const SAVE_KEY = 'glimmerdeep.v1';
 
@@ -25,12 +26,13 @@ const SETTING_DEFAULTS = {
 };
 
 function freshSave() {
-  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, workshop: [], news: NEWS_IDS.slice(), settings: { ...SETTING_DEFAULTS }, layout: LAYOUT, rev: 0 };
+  return { levels: {}, seen: [], critters: [], shop: freshShop(), daily: {}, workshop: [], news: NEWS_IDS.slice(), notes: {}, settings: { ...SETTING_DEFAULTS }, layout: LAYOUT, rev: 0 };
 }
 
 // -> { levels: { [id]: { moves, stars } }, seen: [story page id], critters: [level id] (section 23),
 //      shop: { full, glimmer, freeAt, paid },
 //      daily: { [YYYY-MM-DD]: { moves, stars } }, workshop: [cavern] (section 26), news: [note id] (section 30),
+//      notes: { [level id]: { visits, solves, undos, restarts, hints, seconds } } (section 33),
 //      settings: { sound, contrast, unlockAll, tutorials, textSize, readable, motion, lantern, arrows, hand, swipe, talk, bramble },
 //      layout (section 32), rev }
 export function loadSave() {
@@ -75,6 +77,7 @@ export function parseSave(raw) {
     data.daily = readDaily(parsed.daily);
     data.workshop = readWorkshop(parsed.workshop);   // SPEC section 26
     data.news = readNews(parsed.news);               // SPEC section 30: a save from before it has seen none
+    data.notes = readNotes(parsed.notes);            // SPEC section 33: tester notes
     if (parsed.settings && typeof parsed.settings === 'object') {
       for (const k of Object.keys(SETTING_DEFAULTS)) {
         if (typeof parsed.settings[k] === 'boolean' && typeof SETTING_DEFAULTS[k] === 'boolean') data.settings[k] = parsed.settings[k];
@@ -130,7 +133,7 @@ export function writeSave(data) {
   writes += 1;
   const json = JSON.stringify({
     levels: data.levels, seen: data.seen || [], critters: data.critters || [], shop: data.shop || freshShop(), daily: data.daily || {},
-    workshop: data.workshop || [], news: data.news || [], settings: data.settings, layout: LAYOUT, rev: data.rev,
+    workshop: data.workshop || [], news: data.news || [], notes: data.notes || {}, settings: data.settings, layout: LAYOUT, rev: data.rev,
   });
   let ok = false;
   try {
@@ -168,4 +171,5 @@ export function clearProgress(data) {
   data.seen = [];
   data.critters = [];
   data.daily = {};
+  data.notes = {};
 }

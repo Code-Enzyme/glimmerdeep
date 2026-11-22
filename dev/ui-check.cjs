@@ -6,6 +6,7 @@
 //   node dev/ui-check.cjs --only=workshop   only the Workshop's checks (SPEC section 26), while working on it
 //   node dev/ui-check.cjs --only=controls   only the controls' checks (SPEC section 27)
 //   node dev/ui-check.cjs --only=news       only What's new (SPEC section 30); also talk, paths, bramble
+//   node dev/ui-check.cjs --only=about      only About and the tester notes (SPEC section 33)
 //
 // The page is opened from file://, in a 390 by 844 touch context. Any console error or page error fails
 // the run. Expectations about levels come from the real modules (levels, engine, solver) and the rule
@@ -3204,6 +3205,105 @@ async function main() {
     await old.close();
   }
 
+  // ------------------------------------------------------------------ About and tester notes (SPEC section 33)
+  async function aboutChecks() {
+    console.log('about');
+    const PRIVACY = 'Glimmerdeep collects nothing and sends nothing. Your progress stays on this phone, and purchases go through Google Play.';
+    const shop = { full: false, glimmer: 3, freeAt: 0, paid: [] };
+    const a = await phone({ tag: 'about', seed: { levels: {}, seen: STORY.map((pg) => pg.id), critters: [], shop, settings: { tutorials: false } } });
+    const t = async (sel) => ((await a.page.locator(sel).textContent()) || '').trim();
+    await a.open();
+    {
+      const b = await a.page.locator('#btn-about').boundingBox();
+      const n = await a.page.locator('#btn-news').boundingBox();
+      const pl = await a.page.locator('#btn-play').boundingBox();
+      ok("about: About sits under Play beside What's new, on screen, at least 44 px tall",
+        b && n && pl && b.y >= pl.y + pl.height && Math.abs(b.y - n.y) < 2 && b.y + b.height <= 844 && b.height >= 44
+          && (b.x >= n.x + n.width || b.x + b.width <= n.x), JSON.stringify({ b, n }));
+      eq('about: its words and label', [await t('#btn-about'), await a.page.locator('#btn-about').getAttribute('aria-label')], ['About', 'About Glimmerdeep']);
+    }
+    await a.page.locator('#btn-about').tap();
+    await a.page.waitForFunction(() => window.__gd.panel() === 'about');
+    eq('about: the title, the version in a browser, the privacy line', [await t('#about-title'), await t('#about-version'), await t('#about-privacy')],
+      ['About', 'Web build', PRIVACY]);
+    eq('about: no notes yet, nothing to copy', [await t('#about-notes'), await a.page.locator('#about-copy').isDisabled()],
+      ['None yet. Play a cavern first.', true]);
+    await a.page.waitForTimeout(400);   // the sheet's rise has finished
+    {
+      const box = await a.page.evaluate(() => {
+        const s = document.getElementById('about-sheet').getBoundingClientRect();
+        const d = document.getElementById('about-close').getBoundingClientRect();
+        return {
+          inside: s.top >= 0 && s.bottom <= window.innerHeight + 0.5 && s.left >= 0 && s.right <= window.innerWidth + 0.5,
+          done: d.bottom <= window.innerHeight + 0.5 && d.height >= 44,
+          focus: document.activeElement && document.activeElement.id,
+        };
+      });
+      ok('about: the sheet is on screen, Done in reach and focused', box.inside && box.done && box.focus === 'about-close', JSON.stringify(box));
+    }
+    await auditPage(a, 'about');
+    await a.shot('about-empty');
+    await a.page.locator('#about-close').tap();
+    eq('about: Done closes it', await a.gd('panel'), null);
+
+    // play 1-1: an undo, a restart, a hint, then light it; back to the title
+    const def = LEVELS[0];
+    await a.toMap();
+    await a.gd('loadLevel', def.id);
+    await a.idle();
+    const sol = solutionOf(def);
+    await playByKeys(a, sol.slice(0, 1));
+    await a.gd('undo');
+    await playByKeys(a, sol.slice(0, 1));
+    await a.gd('restart');
+    await a.idle();
+    await a.page.locator('#btn-hint').tap();
+    await a.page.waitForFunction(() => window.__gd.hint() !== null);
+    {
+      const n = (await a.gd('save')).notes[def.id];
+      eq('notes: counted while playing', n && [n.visits, n.solves, n.undos, n.restarts, n.hints], [1, 0, 1, 1, 1]);
+    }
+    await playByKeys(a, sol);
+    await waitResult(a);
+    await a.page.locator('#result-map').tap();
+    await a.page.waitForFunction(() => window.__gd.screen() === 'map');
+    const saved = (await a.gd('save')).notes[def.id];
+    eq('notes: a visit, a solve, an undo, a restart, a hint, saved on leaving', saved && [saved.visits, saved.solves, saved.undos, saved.restarts, saved.hints],
+      [1, 1, 1, 1, 1]);
+    ok('notes: its seconds on the screen, a few', saved && saved.seconds >= 0 && saved.seconds < 120, JSON.stringify(saved));
+    await a.page.keyboard.press('Escape');
+    await a.page.waitForFunction(() => window.__gd.screen() === 'title');
+    // copying, with a clipboard that works
+    await a.page.evaluate(() => {
+      const writeText = (s) => { window.__copied = s; return Promise.resolve(); };
+      try { Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); } catch (e) { navigator.clipboard.writeText = writeText; }
+    });
+    await a.page.locator('#btn-about').tap();
+    await a.page.waitForFunction(() => window.__gd.panel() === 'about');
+    eq('about: the notes count the caverns played', [await t('#about-notes'), await a.page.locator('#about-copy').isDisabled()], ['1 cavern played.', false]);
+    await a.page.locator('#about-copy').tap();
+    await a.page.waitForFunction(() => document.getElementById('about-status').textContent === 'Copied.', null, { timeout: 2000 }).catch(() => {});
+    const copied = await a.page.evaluate(() => window.__copied);
+    eq('about: Copy copies the report and says so', [await t('#about-status'), (copied || '').split('\n').slice(0, 1)[0], (copied || '').split('\n')[1]],
+      ['Copied.', 'Glimmerdeep tester notes', 'Web build']);
+    ok('about: the report has the cavern\'s line', (copied || '').split('\n')[3] === `${def.id} ${def.name}: 1 visit, lit 1 time, best ${def.par} (par ${def.par}), 1 undo, 1 restart, 1 hint, under 1 min`, copied);
+    // copying refused: the notes show, to press and hold
+    await a.page.evaluate(() => {
+      const writeText = () => Promise.reject(new Error('no'));
+      try { Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); } catch (e) { navigator.clipboard.writeText = writeText; }
+    });
+    await a.page.locator('#about-copy').tap();
+    await a.page.waitForFunction(() => !document.getElementById('about-report').hidden, null, { timeout: 2000 }).catch(() => {});
+    eq('about: when copying fails, the notes show to copy by hand', [await t('#about-status'), await a.page.locator('#about-report').isVisible(), (await t('#about-report')).split('\n')[0]],
+      ['Press and hold the notes to copy them.', true, 'Glimmerdeep tester notes']);
+    await auditPage(a, 'about notes');
+    await a.shot('about-notes');
+    // the notes survive a relaunch; a reset clears them
+    await a.reopen();
+    eq('notes: kept in the save', (await a.gd('save')).notes[def.id].solves, 1);
+    await a.close();
+  }
+
   // ------------------------------------------------------------------ What's new (SPEC section 30)
   async function newsChecks() {
     console.log("what's new");
@@ -3479,6 +3579,7 @@ async function main() {
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'talk')) await talkChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'paths')) await pathsChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'news')) await newsChecks();
+  if (!SHOTS_ONLY && (!ONLY || ONLY === 'about')) await aboutChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'bramble')) await brambleChecks();
 
   // ------------------------------------------------------------------ screenshots

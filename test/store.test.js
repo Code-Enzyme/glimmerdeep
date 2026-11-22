@@ -380,3 +380,20 @@ test('store: a save from the chapters of 11 moves each x-11 to x-19; a new save 
   clearProgress(reset);
   assert.equal(reset.layout, 2);
 });
+
+test('store: tester notes round-trip, junk is dropped, an old save has none, a reset clears them (SPEC section 33)', () => {
+  const data = withStorage();
+  const save = loadSave();
+  assert.deepEqual(save.notes, {});
+  save.notes['1-4'] = { visits: 2, solves: 1, undos: 7, restarts: 1, hints: 1, seconds: 300 };
+  writeSave(save);
+  assert.deepEqual(loadSave().notes, { '1-4': { visits: 2, solves: 1, undos: 7, restarts: 1, hints: 1, seconds: 300 } });
+  data.set(SAVE_KEY, JSON.stringify({ layout: 2, notes: { '1-4': { visits: 'x', undos: 2 }, '': {} } }));
+  assert.deepEqual(loadSave().notes, { '1-4': { visits: 0, solves: 0, undos: 2, restarts: 0, hints: 0, seconds: 0 } });
+  data.set(SAVE_KEY, JSON.stringify({ layout: 2, levels: {} }));
+  assert.deepEqual(loadSave().notes, {}, 'an old save');
+  const reset = loadSave();
+  reset.notes['1-1'] = { visits: 1, solves: 0, undos: 0, restarts: 0, hints: 0, seconds: 5 };
+  clearProgress(reset);
+  assert.deepEqual(reset.notes, {});
+});

@@ -28,10 +28,11 @@ import { describeBoard, describeTurn, describeRefusal, describeBack } from './ui
 import { levelOpen, lockedWhy, othersOpen } from './ui/paths.js';
 import { NEWS, newsDue } from './ui/news.js';
 import { brambleShown } from './ui/bramble.js';
+import { noteAdd, notesReport, versionLabel } from './ui/notes.js';
 import { CRITTERS, critterKind, dailyCritterKind, isFound, markFound, critterJournal } from './ui/critters.js';
 import { renderMap, layoutMap } from './ui/map.js';
 import {
-  onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror, speak,
+  onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror, speak, appVersion,
 } from './ui/native.js';
 import { PRODUCTS, CATALOG, FREE_CHAPTER, chapterOpen, hintCost, payHint, hintLabel, minutesWord, settle } from './ui/shop.js';
 import { TitleArt } from './ui/title.js';
@@ -305,6 +306,7 @@ function sfx(name) {
 // ---------------------------------------------------------------- screens
 
 function showScreen(name) {
+  if (name !== 'level') visitEnd();   // tester notes (SPEC section 33)
   screen = name;
   app.dataset.screen = name;
   titleEl.hidden = name !== 'title';
@@ -609,7 +611,9 @@ function openLevel(def, adhoc, day, from) {
   queue.length = 0;
   session = fresh;
   playFrom = from || null;
+  visitEnd();
   current = { def, chapter: day ? DAILY_CHAPTER : chapterOf(def), adhoc: loose, day: day || null, result: null };
+  visitStart();
   current.critterKind = (day ? dailyCritterKind(def, CHAPTERS) : critterKind(current.chapter)) || CRITTERS[0];
   // Tutorials and the stuck nudge are for a level's first visits: never solved, and the setting on.
   const guided = save.settings.tutorials && (day ? !save.daily[day] : !current.adhoc && !save.levels[def.id]);
@@ -912,6 +916,7 @@ function undo() {
   const before = session.state;
   const bloomBefore = session.bloomCount();
   if (!session.undo()) return false;
+  note('undos');
   critterNote = '';
   stopHintSearch();
   dismissStuck();
@@ -936,6 +941,7 @@ function restart() {
   queue.length = 0;
   const before = session.state;
   if (!session.restart()) return false;
+  note('restarts');
   critterNote = '';
   stopHintSearch();
   dismissStuck();
@@ -1039,6 +1045,7 @@ function requestHint() {
     queue.length = 0;
     dismissStuck();
     play('hint');
+    note('hints');
     showStep(ladder.climb(session.state));
     refreshHintLabel();
     return;
@@ -1055,6 +1062,7 @@ function requestHint() {
   queue.length = 0;
   thinking = true;
   session.hints++;
+  note('hints');
   dismissStuck();
   btn.hint.classList.add('thinking');
   btn.hint.querySelector('.lbl').textContent = 'Thinking';
@@ -1183,6 +1191,7 @@ function beginCelebration() {
   const stars = session.stars();
   const moves = session.moves;
   const result = { marks, stars, moves, best: null, firstTime: false, improved: false, glimmer: 0 };
+  note('solves');
   if (current.day) {
     const old = save.daily[current.day];
     const daily = finishDaily(save.daily, save.shop, current.day, today(), moves, stars);
@@ -1198,6 +1207,7 @@ function beginCelebration() {
     result.best = recordResult(save, def.id, moves, stars);
     writeSave(save);
   }
+  if (current.day || !current.adhoc) notesDirty = false;   // that write carried the notes
   current.result = result;
   view.startCelebration();
   play('solve');
@@ -1330,8 +1340,8 @@ function chooseLantern(style) {
 }
 
 // the Workshop's sheets go by short names
-const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet', talk: 'talk-sheet', news: 'news-sheet' };
-const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code', 'talk', 'news'];   // sheets over a screen, on the store's scrim
+const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet', talk: 'talk-sheet', news: 'news-sheet', about: 'about-sheet' };
+const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code', 'talk', 'news', 'about'];   // sheets over a screen, on the store's scrim
 const panelEl = (name) => $(PANEL_EL[name] || name);
 
 function openPanel(name) {
@@ -1347,7 +1357,8 @@ function openPanel(name) {
     ? ($('result-next').hidden ? $('result-replay') : $('result-next'))
     : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : name === 'comfort' ? $('comfort-close')
       : name === 'lanterns' ? $('lanterns-close') : name === 'cavern' ? $('cavern-close') : name === 'share' ? $('share-copy')
-        : name === 'code' ? $('code-input') : name === 'talk' ? $('talk-close') : name === 'news' ? $('news-close') : $('confirm-no');
+        : name === 'code' ? $('code-input') : name === 'talk' ? $('talk-close') : name === 'news' ? $('news-close')
+          : name === 'about' ? $('about-close') : $('confirm-no');
   try {
     focus.focus({ preventScroll: true });
   } catch (e) {
@@ -1802,6 +1813,118 @@ function startPlaying() {
 onClick($('btn-play'), startPlaying);
 
 // ---------------------------------------------------------------- What's new (SPEC section 30)
+
+// ---------------------------------------------------------------- tester notes and About (SPEC section 33)
+
+const VISIT_MAX_S = 30 * 60;
+let noted = null;          // the visit being counted: { id, since (ms, 0 while paused), counted (s) }
+let notesDirty = false;    // counts not yet written
+let versionInfo = null;    // { version, build } from the app shell, or null in a browser
+appVersion().then((v) => {
+  versionInfo = v;
+  if (panel === 'about') renderAbout();
+}, () => {});
+
+// The id the notes count a cavern under: chapter, Night Garden and Daily Glimmer caverns, not the Workshop's.
+function notedId() {
+  if (!current) return null;
+  return current.day || !current.adhoc ? String(current.def.id) : null;
+}
+
+function note(kind) {
+  const id = notedId();
+  if (!id) return;
+  noteAdd(save.notes, id, kind);
+  notesDirty = true;
+}
+
+function clockStop() {
+  if (!noted || !noted.since) return;
+  const s = Math.min((Date.now() - noted.since) / 1000, VISIT_MAX_S - noted.counted);
+  noted.since = 0;
+  if (s >= 1) {
+    noteAdd(save.notes, noted.id, 'seconds', s);
+    noted.counted += Math.floor(s);
+    notesDirty = true;
+  }
+}
+
+function clockStart() {
+  if (noted && !noted.since && screen === 'level') noted.since = Date.now();
+}
+
+function visitStart() {
+  const id = notedId();
+  noted = null;
+  if (!id) return;
+  noteAdd(save.notes, id, 'visits');
+  notesDirty = true;
+  noted = { id, since: Date.now(), counted: 0 };
+}
+
+// Ends the visit (leaving the cavern) and writes any new counts.
+function visitEnd() {
+  clockStop();
+  noted = null;
+  notesSave();
+}
+
+function notesSave() {
+  if (!notesDirty) return;
+  notesDirty = false;
+  writeSave(save);
+}
+
+const NOTED_LEVELS = () => [...LEVELS, ...NIGHT, ...DAILY];
+
+function aboutReport() {
+  return notesReport(save.notes, save.levels, NOTED_LEVELS(), { version: versionInfo, date: today() });
+}
+
+function renderAbout() {
+  $('about-version').textContent = versionLabel(versionInfo);
+  const known = new Set(NOTED_LEVELS().map((d) => String(d.id)));
+  const played = Object.keys(save.notes).filter((id) => known.has(id)).length;
+  $('about-notes').textContent = played
+    ? `${played} ${played === 1 ? 'cavern' : 'caverns'} played.`
+    : 'None yet. Play a cavern first.';
+  $('about-copy').disabled = !played;
+}
+
+function openAbout() {
+  if (panel) closePanel();
+  renderAbout();
+  $('about-status').textContent = '';
+  $('about-report').hidden = true;
+  $('about-report').textContent = '';
+  openPanel('about');
+  $('about-sheet').querySelector('.sheet-scroll').scrollTop = 0;
+}
+
+onClick($('btn-about'), () => {
+  play('ui');
+  openAbout();
+});
+onClick($('about-copy'), () => {
+  const text = aboutReport();
+  const done = (copied) => {
+    $('about-status').textContent = copied ? 'Copied.' : 'Press and hold the notes to copy them.';
+    if (!copied) {
+      $('about-report').textContent = text;
+      $('about-report').hidden = false;
+    }
+    sfx(copied ? 'ui' : 'blocked');
+  };
+  try {
+    navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
+  } catch (e) {
+    done(false);
+  }
+});
+onClick($('about-close'), () => {
+  play('ui');
+  closePanel();
+});
 
 const NEWS_SHOWN = 6;   // the title button's sheet: the newest six, seen or not
 
@@ -2475,7 +2598,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     stopLoop();
     titleArt.stop();
+    clockStop();   // tester notes: the clock stops while the app is away, and the counts are written
+    notesSave();
   } else {
+    clockStart();
     startLoop();
     if (screen === 'title') titleArt.start();
   }
@@ -2484,12 +2610,15 @@ document.addEventListener('visibilitychange', () => {
 onAppState((active) => {
   setAppHidden(!active);
   if (active) {
+    clockStart();
     startLoop();
     if (screen === 'title') titleArt.start();
     if (screen === 'map') drawMap();   // the Daily Glimmer may be a new day
   } else {
     stopLoop();
     titleArt.stop();
+    clockStop();
+    notesSave();
   }
 });
 
@@ -2565,6 +2694,7 @@ window.__gd = {
     return { on: b.on, at: b.at && { ...b.at }, spot: b.spot && { ...b.spot }, reaction: b.reaction ? b.reaction.kind : null, hidden: b.hidden };
   },
   // What's new (SPEC section 30): the sheet's note titles while it is open, and the notes seen
+  about: () => ({ open: panel === 'about', report: aboutReport() }),
   news: () => ({
     open: panel === 'news',
     titles: [...$('news-list').querySelectorAll('h4')].map((t) => t.textContent),

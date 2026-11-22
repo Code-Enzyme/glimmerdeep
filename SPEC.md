@@ -1195,3 +1195,45 @@ encounter, which moves from `x-11` to `x-19`.
   save starts at 2. Reset progress keeps 2.
 - **Opening** follows section 29 unchanged: in chapter 1 one at a time, from chapter 2 any of the three
   before. The Workshop opens with Mossmouth's last cavern, now 1-19, and the Night Garden with 7-19.
+
+## 33. Ready for a closed test: About and tester notes (decided 23 Nov 2026)
+
+The design doc wants each level's solve rate, hint use and undo count from the first closed test. The game
+has no server and collects nothing, so the numbers stay on the phone until a tester copies them into their
+feedback.
+
+- **About:** under Play, beside What's new, an **About** button (aria-label "About Glimmerdeep") opens the
+  About sheet: the kicker "Glimmerdeep", the title "About", the version, the privacy line, the tester
+  notes and **Done**. The version reads "Version 1.0, build 12" in the app (from the app shell) and "Web
+  build" in a browser. The privacy line: "Glimmerdeep collects nothing and sends nothing. Your progress
+  stays on this phone, and purchases go through Google Play."
+- **Tester notes:** for each chapter, Night Garden and Daily Glimmer cavern played (not the Workshop's or a
+  shared one), the game counts on the phone: **visits** (times it was opened), **solves** (times it was
+  lit), **undos**, **restarts**, **hints** (each press of Hint that shows a hint) and **seconds** on its
+  screen (while it shows and the app is in front, at most 30 minutes a visit).
+- **Saved** as `save.notes: { [level id]: { visits, solves, undos, restarts, hints, seconds } }`, whole
+  numbers from 0; anything else is dropped, and an old save has none. They are written with the save when
+  a cavern is lit, and when the player leaves a cavern or the app goes to the background with new counts.
+  Reset progress clears them.
+- **The sheet**, under the heading "Tester notes", says "3 caverns played." (or "None yet. Play a cavern
+  first.") and "Copy them into your feedback. Nothing is sent." Its **Copy tester notes** button (a row of
+  its own, above Done) copies the report
+  and says "Copied." or, when copying fails, "Press and hold the notes to copy them." and shows the report
+  in a box. With no notes the button is disabled.
+- **The report** is plain text: `Glimmerdeep tester notes`, `Version 1.0, build 12` (or `Web build`), the
+  date (`2026-11-23`), then one line per cavern played, in map order (the chapters, the Night Garden, the
+  Daily Glimmer), such as
+  `1-4 Two Pools: 3 visits, lit 2 times, best 17 (par 15), 12 undos, 2 restarts, 1 hint, 6 min`.
+  "best" appears when the save has a best for that id; minutes are rounded, and under a minute reads
+  "under 1 min".
+- `src/ui/notes.js` (no DOM): `NOTE_KINDS`, `readNotes(value)`, `noteAdd(notes, id, kind, n)` and
+  `notesReport(notes, records, levels, { version, date })`; `src/ui/native.js` adds `appVersion()`, a
+  Promise of `{ version, build }`, or null in a browser.
+- **The store kit** (`store/`), for the Play listing: `listing/en-US/title.txt` (at most 30 characters),
+  `short_description.txt` (at most 80) and `full_description.txt` (at most 4000). The full description's
+  numbers match the game (caverns, chapters, Night Garden puzzles, Daily Glimmer caverns), it says plainly
+  what is free and what is paid, and it carries the privacy line word for word. `privacy-policy.md` opens
+  with the privacy line, and names Google Play as where purchases go. The images: the 512 by 512 icon
+  (`icon-512.png`, from `tools/make-icons.cjs`), a 1024 by 500 feature graphic and four to eight phone
+  screenshots of 1080 by 1920 in `listing/en-US/images/`, all JPEG (Play takes no transparency in them),
+  drawn from the game itself by `node tools/store-art.cjs`. `docs/RELEASE.md` walks through the release.

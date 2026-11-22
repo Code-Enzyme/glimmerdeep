@@ -1,0 +1,76 @@
+name: Release
+
+# The app bundle for Google Play (docs/RELEASE.md): run it by hand (Actions -> Release -> Run workflow) or
+# push a tag such as v1.0.3. It checks the game, builds the release bundle signed with the upload key from
+# this repository's secrets, and uploads it as the artifact glimmerdeep-release-aab, to be uploaded to a
+# testing track in the Play Console. Every run gets a higher version code (its run number plus 100).
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    name: Signed app bundle for Google Play
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GLIMMERDEEP_VERSION_CODE: ${{ github.run_number + 100 }}
+      GLIMMERDEEP_VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - name: Unit tests and the level check
+        run: npm test && npm run verify
+      - name: The upload key is set up
+        env:
+          KEYSTORE_BASE64: ${{ secrets.GLIMMERDEEP_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.GLIMMERDEEP_UPLOAD_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.GLIMMERDEEP_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::The upload key secrets are missing. docs/RELEASE.md says how to make the key and add them."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          echo "GLIMMERDEEP_UPLOAD_STORE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+      - name: Build the game and copy it into the app
+        run: npm run android:sync
+      - name: Release bundle, signed with the upload key
+        working-directory: android
+        env:
+          GLIMMERDEEP_UPLOAD_STORE_PASSWORD: ${{ secrets.GLIMMERDEEP_UPLOAD_STORE_PASSWORD }}
+          GLIMMERDEEP_UPLOAD_KEY_ALIAS: ${{ secrets.GLIMMERDEEP_UPLOAD_KEY_ALIAS }}
+          GLIMMERDEEP_UPLOAD_KEY_PASSWORD: ${{ secrets.GLIMMERDEEP_UPLOAD_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease
+      - name: Signed, and with this run's version
+        run: |
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          jarsigner -verify "$AAB" | tail -1
+          jarsigner -verify "$AAB" | grep -q "jar verified" || { echo "::error::The bundle is not signed"; exit 1; }
+          keytool -printcert -jarfile "$AAB" | grep -E "Owner|SHA256" | head -2
+          echo "version code $GLIMMERDEEP_VERSION_CODE, name $GLIMMERDEEP_VERSION_NAME"
+      - name: Forget the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks"
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: glimmerdeep-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30

@@ -14,8 +14,8 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 
-const PKG = 'com.codeenzyme.glimmerdeep';
-const ACTIVITY = `${PKG}/.MainActivity`;
+const PKG = 'com.codeenzyme.glimmerdeep.debug';   // debug builds carry the .debug suffix (docs/RELEASE.md)
+const ACTIVITY = `${PKG}/com.codeenzyme.glimmerdeep.MainActivity`;
 
 function fail(msg) {
   console.error('FAIL ' + msg);

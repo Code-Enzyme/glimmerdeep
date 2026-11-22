@@ -3,6 +3,11 @@
 
 export const NEWS = [
   {
+    id: 'about-notes',
+    title: 'About and tester notes',
+    text: 'About, under Play, shows the version and what each cavern took you. Copy your tester notes into your feedback; nothing is sent.',
+  },
+  {
     id: 'chapters-19',
     title: 'Longer chapters',
     text: 'Every chapter now has 19 caverns, with eight new ones before its Gloam encounter. Everything you have lit stays lit.',

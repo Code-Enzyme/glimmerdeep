@@ -25,6 +25,17 @@ export function onAppState(fn) {
   App.addListener('appStateChange', (st) => fn(!!(st && st.isActive))).catch(() => {});
 }
 
+// The app's version and build number (SPEC section 33): a Promise of { version, build }, or null in a browser.
+export async function appVersion() {
+  if (!isNative()) return null;
+  try {
+    const info = await App.getInfo();
+    return info && info.version ? { version: String(info.version), build: String(info.build || '') } : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export function exitApp() {
   if (isNative()) App.exitApp().catch(() => {});
 }

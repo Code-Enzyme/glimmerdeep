@@ -26,7 +26,10 @@
     <div class="title-foot">
       <button id="btn-play" class="btn primary play" type="button" aria-label="Play">Play</button>
       <p id="title-progress" class="title-progress" hidden></p>
-      <button id="btn-news" class="btn title-news" type="button" aria-label="What's new">What's new</button>
+      <div class="title-links">
+        <button id="btn-news" class="btn title-news" type="button" aria-label="What's new">What's new</button>
+        <button id="btn-about" class="btn title-news" type="button" aria-label="About Glimmerdeep">About</button>
+      </div>
     </div>
   </main>
 
@@ -367,6 +370,25 @@
     </div>
     <div class="buttons">
       <button id="news-close" class="btn primary" type="button" aria-label="Close what's new">Done</button>
+    </div>
+  </aside>
+
+  <!-- About: the version, privacy, and tester notes to copy into feedback (SPEC section 33) -->
+  <aside id="about-sheet" class="sheet paper about" role="dialog" aria-modal="true" aria-labelledby="about-title" hidden>
+    <span class="kicker ink">Glimmerdeep</span>
+    <h3 id="about-title">About</h3>
+    <div class="sheet-scroll">
+      <p id="about-version" class="about-version"></p>
+      <p id="about-privacy" class="about-privacy">Glimmerdeep collects nothing and sends nothing. Your progress stays on this phone, and purchases go through Google Play.</p>
+      <h4>Tester notes</h4>
+      <p id="about-notes" class="about-notes"></p>
+      <p class="about-hint">Copy them into your feedback. Nothing is sent.</p>
+      <p id="about-status" class="about-status" role="status" aria-live="polite"></p>
+      <pre id="about-report" class="about-report" tabindex="0" hidden></pre>
+    </div>
+    <div class="buttons">
+      <button id="about-copy" class="btn" type="button" aria-label="Copy tester notes">Copy tester notes</button>
+      <button id="about-close" class="btn primary" type="button" aria-label="Close about">Done</button>
     </div>
   </aside>
 

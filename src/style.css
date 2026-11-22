@@ -245,6 +245,7 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
   box-shadow: none;
 }
 .btn.title-news:active { transform: translate(0, 1px); box-shadow: none; }
+.title-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .hc .btn.title-news { color: #FFFFFF; background: #000000; border-color: #FFFFFF; }
 
 /* ------------------------------------------------------------------ map screen */
@@ -1316,6 +1317,34 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .news-list h4 { margin: 0 0 3px; font: 700 calc(17px * var(--ts))/1.25 var(--serif); color: var(--ink); overflow-wrap: anywhere; }
 .news-list p { margin: 0; font: calc(15px * var(--ts))/1.4 var(--sans); color: var(--ink); overflow-wrap: anywhere; }
 .app.readable .news-list p { letter-spacing: 0.03em; word-spacing: 0.12em; }
+
+/* About (SPEC section 33): the version, privacy and the tester notes; the heading and the buttons stay put */
+.about { z-index: 8; display: flex; flex-direction: column; overflow: hidden; }
+.about > * { flex: none; }
+.about > .sheet-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 10px -6px 0; padding: 0 6px 4px; }
+.about p { margin: 0 0 8px; font: calc(15px * var(--ts))/1.4 var(--sans); color: var(--ink); overflow-wrap: anywhere; }
+.about h4 { margin: 12px 0 4px; font: 700 calc(17px * var(--ts))/1.25 var(--serif); color: var(--ink); }
+.about .about-version { font-weight: 700; }
+.about .about-status:empty { display: none; }
+.about-report {
+  margin: 0;
+  max-height: 40vh;
+  overflow: auto;
+  padding: 8px 10px;
+  font: calc(14px * var(--ts))/1.4 ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  background: rgba(36, 22, 46, 0.06);
+  border: 1.5px dashed rgba(36, 22, 46, 0.35);
+  border-radius: 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.about .buttons { display: flex; flex-direction: column; gap: 10px; }
+.about .buttons .btn { flex: none; width: 100%; }
+.about .btn:disabled { background: transparent; border-style: dashed; box-shadow: none; color: rgba(36, 22, 46, 0.6); }
+.app.readable .about p { letter-spacing: 0.03em; word-spacing: 0.12em; }
 
 /* Board talk (SPEC section 28): the board in words, a sentence a line; the heading and Done stay put */
 .talk { z-index: 8; display: flex; flex-direction: column; overflow: hidden; }

@@ -49,7 +49,7 @@ jobs:
           path: dist/glimmerdeep.html
 
   android:
-    name: Android app (lint, debug APK)
+    name: Android app (lint, debug APK, release bundle)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -67,9 +67,9 @@ jobs:
       - run: npm ci
       - name: Build the game and copy it into the app
         run: npm run android:sync
-      - name: Android lint and debug APK
+      - name: Android lint, the debug APK, and an unsigned release bundle (proves the release build works)
         working-directory: android
-        run: ./gradlew lintDebug assembleDebug
+        run: ./gradlew lintDebug assembleDebug bundleRelease
       - name: Signed with the project debug key, so builds can update each other
         run: tools/check-apk-key.sh
       - name: Upload lint reports

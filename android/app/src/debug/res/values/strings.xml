@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- Debug builds are their own app beside the Google Play copy (android/app/build.gradle), named so the two
+     can be told apart on the home screen. -->
+<resources>
+    <string name="app_name">Glimmerdeep Dev</string>
+    <string name="title_activity_main">Glimmerdeep Dev</string>
+</resources>

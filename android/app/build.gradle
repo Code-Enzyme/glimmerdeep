@@ -1,5 +1,15 @@
 apply plugin: 'com.android.application'
 
+// Release builds (docs/RELEASE.md). The upload key and its passwords come from the environment (the release
+// workflow's secrets) or from ~/.gradle/gradle.properties, never from the repo. Without them a release build
+// is left unsigned: it still proves the release build works, but Google Play will not take it.
+def setting = { String env, String prop -> System.getenv(env) ?: (project.findProperty(prop) ?: null) }
+def uploadStore = setting('GLIMMERDEEP_UPLOAD_STORE', 'glimmerdeepUploadStore')
+// Version code and name: 1 and "1.0" unless the release workflow passes its own (every upload to Google Play
+// needs a higher code). Debug builds keep 1, so any debug build can update any other.
+def versionCodeSetting = setting('GLIMMERDEEP_VERSION_CODE', 'glimmerdeepVersionCode')
+def versionNameSetting = setting('GLIMMERDEEP_VERSION_NAME', 'glimmerdeepVersionName')
+
 android {
     namespace = "com.codeenzyme.glimmerdeep"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +17,8 @@ android {
         applicationId "com.codeenzyme.glimmerdeep"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode versionCodeSetting ? Integer.parseInt(versionCodeSetting.toString()) : 1
+        versionName versionNameSetting ? versionNameSetting.toString() : "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -26,6 +36,14 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (uploadStore) {
+            release {
+                storeFile file(uploadStore.toString())
+                storePassword setting('GLIMMERDEEP_UPLOAD_STORE_PASSWORD', 'glimmerdeepUploadStorePassword')
+                keyAlias setting('GLIMMERDEEP_UPLOAD_KEY_ALIAS', 'glimmerdeepUploadKeyAlias') ?: 'upload'
+                keyPassword setting('GLIMMERDEEP_UPLOAD_KEY_PASSWORD', 'glimmerdeepUploadKeyPassword')
+            }
+        }
     }
     buildFeatures {
         buildConfig true
@@ -33,11 +51,15 @@ android {
     buildTypes {
         // PLAY_STORE: release builds sell through Google Play Billing; debug builds use the game's free
         // test store (SPEC section 14), so a sideloaded debug build never needs a Play account.
+        // Debug builds install as their own app, "Glimmerdeep Dev" (com.codeenzyme.glimmerdeep.debug), so a phone
+        // can hold one beside the copy Google Play installs, which carries Google's signing key, not the debug key.
         debug {
+            applicationIdSuffix ".debug"
             signingConfig signingConfigs.debug
             buildConfigField "boolean", "PLAY_STORE", "false"
         }
         release {
+            if (uploadStore) signingConfig signingConfigs.release
             buildConfigField "boolean", "PLAY_STORE", "true"
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

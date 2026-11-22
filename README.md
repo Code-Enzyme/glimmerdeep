@@ -108,7 +108,16 @@ cd android && ./gradlew assembleDebug
 
 Needs JDK 21 and the Android SDK. CI builds a debug APK on every push; download it from the run's
 artifacts (`glimmerdeep-debug-apk`) and install it with `adb install -r app-debug.apk`. All debug builds
-share one key (`android/app/debug.keystore`), so a new build updates the old one and keeps the save.
+share one key (`android/app/debug.keystore`), so a new build updates the old one and keeps the save. A debug
+build installs as **Glimmerdeep Dev**, its own app beside the copy from Google Play.
+
+## Releasing
+
+`docs/RELEASE.md` walks through a Google Play release: making the upload key (`tools/make-upload-key.sh`),
+the Release workflow that builds the signed app bundle, and every answer the Play Console asks for. The
+listing text, images and privacy policy are in `store/`; `node tools/store-art.cjs` redraws the feature
+graphic and screenshots from the game. The title's About sheet shows the version and the tester notes a
+tester copies into their feedback (SPEC section 33).
 
 ## Where things are
 
@@ -122,10 +131,10 @@ share one key (`android/app/debug.keystore`), so a new build updates the old one
 | `src/sprites.js` | Tiles, darkness and icons |
 | `src/audio.js` | Synthesised sound effects |
 | `src/game.js`, `src/ui/` | Screens, input, saving, tutorials (`ui/tutorial.js`), the story and Field Journal (`ui/story.js`), the store's rules (`ui/shop.js`), the Daily Glimmer's date rules (`ui/daily.js`), the Workshop's rules and share codes (`ui/workshop.js`, `ui/codes.js`), the board in words (`ui/talk.js`), the order caverns open in (`ui/paths.js`), What's new (`ui/news.js`), Bramble's flight (`ui/bramble.js`), the app-shell bridge (`ui/native.js`) |
-| `tools/` | Build, level verifier, icon maker |
+| `tools/` | Build, level verifier, icon maker, store art, upload key |
 | `dev/` | Browser and device checks, plus the level-design search scripts |
 | `android/` | The Capacitor Android project |
-| `store/` | Store listing assets |
+| `store/` | The Play listing: text, icon, feature graphic, screenshots, privacy policy (`docs/RELEASE.md`) |
 
 ## Working on it
 
