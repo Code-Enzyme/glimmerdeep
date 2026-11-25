@@ -17,23 +17,26 @@ an answer ready for every question the Play Console asks.
 `npm run build && node tools/store-art.cjs` redraws the feature graphic and screenshots from the game, and
 `test/store-kit.test.js` keeps the listing inside Play's limits and true to the game.
 
-## 1. The upload key (once)
+## 1. The upload key and its secrets (once)
 
 Google Play signs the app people install with its own key (Play App Signing). You sign each upload with an
-**upload key**, which only you hold. On your Mac, from the repository folder:
+**upload key**, which only you hold. On your Mac, in a terminal, from the repository folder (with `gh` signed
+in):
 
 ```sh
 tools/make-upload-key.sh
 ```
 
-It asks for a password (use the same one for the store and the key when keytool asks twice) and a name for
-the certificate, writes `~/glimmerdeep-upload.jks`, and prints its fingerprint. Put the `.jks` file and the
-password in your password manager. If the key is ever lost, Google can reset it, but that takes days.
+It asks you for a password (twice), makes `~/glimmerdeep-upload.jks`, prints its fingerprint, adds the four
+secrets below to the repository with `gh`, and starts the Release workflow. The password goes to keytool and
+to GitHub's encrypted secrets only, never onto a command line or into a file
+(`test/upload-key.test.js` checks that). Put the `.jks` file and the password in your password manager. If
+the key is ever lost, Google can reset it, but that takes days.
 
-## 2. The secrets (once)
+## 2. The secrets
 
-The script prints four `gh secret set` commands. Run them, or add the same four secrets by hand under the
-repository's Settings, Secrets and variables, Actions:
+The script adds them; to add them by hand instead, use the repository's Settings, Secrets and variables,
+Actions:
 
 | Secret | Value |
 | --- | --- |
