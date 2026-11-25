@@ -34,7 +34,10 @@ import { renderMap, layoutMap } from './ui/map.js';
 import {
   onBackButton, exitApp, haptic, onAppState, openStore, mirrorSave, readSaveMirror, speak, appVersion,
 } from './ui/native.js';
-import { PRODUCTS, CATALOG, FREE_CHAPTER, chapterOpen, hintCost, payHint, hintLabel, minutesWord, settle } from './ui/shop.js';
+import {
+  PRODUCTS, CATALOG, FREE_CHAPTER, chapterOpen, hintCost, payHint, hintLabel, minutesWord, settle,
+  REVIEW_HASH, redeemCode,
+} from './ui/shop.js';
 import { TitleArt } from './ui/title.js';
 import { Tutorial, resolvePoint, STUCK_AFTER } from './ui/tutorial.js';
 import { NOTES, storyDue, journal, pageById, speciesOf } from './ui/story.js';
@@ -1340,8 +1343,8 @@ function chooseLantern(style) {
 }
 
 // the Workshop's sheets go by short names
-const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet', talk: 'talk-sheet', news: 'news-sheet', about: 'about-sheet' };
-const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code', 'talk', 'news', 'about'];   // sheets over a screen, on the store's scrim
+const PANEL_EL = { cavern: 'cavern-sheet', share: 'share-sheet', code: 'code-sheet', talk: 'talk-sheet', news: 'news-sheet', about: 'about-sheet', redeem: 'redeem-sheet' };
+const SHEETS = ['shop', 'comfort', 'lanterns', 'cavern', 'share', 'code', 'talk', 'news', 'about', 'redeem'];   // sheets over a screen, on the store's scrim
 const panelEl = (name) => $(PANEL_EL[name] || name);
 
 function openPanel(name) {
@@ -1358,7 +1361,7 @@ function openPanel(name) {
     : name === 'card' ? $('card-close') : name === 'shop' ? $('shop-close') : name === 'comfort' ? $('comfort-close')
       : name === 'lanterns' ? $('lanterns-close') : name === 'cavern' ? $('cavern-close') : name === 'share' ? $('share-copy')
         : name === 'code' ? $('code-input') : name === 'talk' ? $('talk-close') : name === 'news' ? $('news-close')
-          : name === 'about' ? $('about-close') : $('confirm-no');
+          : name === 'about' ? $('about-close') : name === 'redeem' ? $('redeem-input') : $('confirm-no');
   try {
     focus.focus({ preventScroll: true });
   } catch (e) {
@@ -1448,6 +1451,7 @@ function renderShop() {
   setDisabled($('shop-restore'), !store || buying);
   $('shop-note').textContent = buying ? 'Waiting for the store…' : shopNote;
   $('shop-test').hidden = !store || store.kind !== 'test';
+  $('shop-code').hidden = owned;
 }
 
 // Grants what the store reports, saves, confirms with the store once the save is on disk (SPEC section 16), and
@@ -1510,6 +1514,43 @@ async function restorePurchases() {
   buying = false;
   shopNote = note;
   renderShop();
+}
+
+// ---------------------------------------------------------------- the reviewer code (SPEC section 14)
+
+let reviewHash = REVIEW_HASH;   // __gd.reviewHash puts a check's own code in its place
+
+function openRedeem() {
+  if (panel !== 'shop' || save.shop.full) return;
+  play('ui');
+  closePanel();
+  $('redeem-input').value = '';
+  $('redeem-why').hidden = true;
+  openPanel('redeem');
+}
+
+// Back to the Store, as it was (its note cleared unless a code just opened it)
+function closeRedeem(note = '') {
+  closePanel();
+  shopNote = note;
+  renderShop();
+  openPanel('shop');
+}
+
+function useCode() {
+  if (panel !== 'redeem') return;
+  const r = redeemCode(save.shop, $('redeem-input').value, reviewHash);
+  if (r === 'empty' || r === 'wrong') {
+    $('redeem-why').textContent = r === 'empty' ? 'Type the code first.' : 'That code does not open anything.';
+    $('redeem-why').hidden = false;
+    sfx('blocked');
+    return;
+  }
+  if (r === 'opened') writeSave(save);
+  sfx('solve');
+  if (screen === 'map') drawMap();
+  if (session) refreshHud();
+  closeRedeem('Code accepted. Every chapter is open now.');
 }
 
 // The second copy of the save was written more often (the app was killed before localStorage reached the disk):
@@ -1982,7 +2023,8 @@ onClick($('shop-close'), () => {
   closePanel();
 });
 shopScrim.addEventListener('click', () => {
-  if (SHEETS.includes(panel)) closePanel();
+  if (panel === 'redeem') closeRedeem();
+  else if (SHEETS.includes(panel)) closePanel();
 });
 onClick($('btn-lanterns'), () => {
   play('ui');
@@ -2521,6 +2563,19 @@ onClick($('code-close'), () => {
   closePanel();
 });
 
+onClick($('shop-code'), openRedeem);
+onClick($('redeem-use'), useCode);
+$('redeem-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    useCode();
+  }
+});
+onClick($('redeem-close'), () => {
+  play('ui');
+  closeRedeem();
+});
+
 
 // ---------------------------------------------------------------- input: Android back button
 
@@ -2530,7 +2585,10 @@ onBackButton(() => {
     play('ui');
     showMap();
   } else if (panel === 'result') leaveResult(backFromLevel);
-  else if (panel) closePanel();
+  else if (panel === 'redeem') {
+    play('ui');
+    closeRedeem();
+  } else if (panel) closePanel();
   else if (screen === 'level') {
     play('ui');
     backFromLevel();
@@ -2554,12 +2612,14 @@ document.addEventListener('keydown', (e) => {
     if (screen === 'story') closeBook();
     else if (screen === 'journal') showMap();
     else if (panel === 'result') leaveResult(backFromLevel);
+    else if (panel === 'redeem') closeRedeem();
     else if (panel) closePanel();
     else if (screen === 'editor') showWorkshop();
     else if (screen === 'workshop') showMap();
     else if (screen === 'map') showTitle();
     return;
   }
+  if (e.target && e.target.closest && e.target.closest('input, textarea')) return;   // typing in a box
   if (screen === 'title') {
     const onButton = e.target && e.target.closest && e.target.closest('button');
     if (!panel && !onButton && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {   // not under a sheet
@@ -2568,7 +2628,7 @@ document.addEventListener('keydown', (e) => {
     }
     return;
   }
-  if (screen !== 'level' || !session) return;
+  if (screen !== 'level' || !session || panel === 'redeem') return;   // the code sheet keeps the board still
   const onButton = e.target && e.target.closest && e.target.closest('button');
   if (onButton && (e.key === ' ' || e.key === 'Enter' || e.key === 'Spacebar')) return;   // the button's own click
   const what = KEYS[e.key];
@@ -2764,6 +2824,11 @@ window.__gd = {
   checking: () => checking > 0,
   // resolves true once every save so far is on disk (SPEC section 16)
   saved: () => savedDurably().then(() => true),
+  // the reviewer code's hash, in place of the real one (SPEC section 14): checks use a code of their own
+  reviewHash: (hash) => {
+    reviewHash = hash || REVIEW_HASH;
+    return true;
+  },
   // the Daily Glimmer's date, in place of the clock ('YYYY-MM-DD', or null for the clock again)
   setToday: (day) => {
     todayOverride = day || null;

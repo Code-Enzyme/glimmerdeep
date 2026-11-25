@@ -574,6 +574,22 @@ lives. Prices and amounts marked [PLACEHOLDER - PLAYTEST] are starting points, n
   Debug builds, browsers and every check use the **test store**: every purchase succeeds at once, free, and
   the panel says "Test build: purchases are free." `src/ui/native.js` picks the store; the rest of the
   game never knows which one it has.
+- **Reviewer code** (decided 25 Nov 2026): Google Play's reviewers must be able to reach the paid chapters,
+  so one code opens the Full Expedition without a payment. It is given only to Google, in the Play
+  Console's sign-in details; anyone who learns it plays the Full Expedition free.
+  - While the Full Expedition is not owned, the Store shows **Have a code?** under its buttons. It opens a
+    small sheet: "Enter a code", one box, **Use** and **Cancel**. Enter in the box is Use.
+  - `redeemCode(shop, text)` in `src/ui/shop.js` decides, with no DOM. Case, spaces and dashes in what is
+    typed do not matter. The right code sets `shop.full`, as a purchase would, so Reset progress keeps it
+    and Restore never takes it away.
+  - The right code closes the sheet. The Store then says "Code accepted. Every chapter is open now." and
+    plays `'solve'`. Nothing typed says "Type the code first."; any other code says "That code does not
+    open anything." and plays `'blocked'`. Neither changes the save.
+  - Cancel, Back, Escape or a tap outside goes back to the Store. Over a level, keys typed in the box
+    never reach the board.
+  - The code itself is never in the repository. `shop.js` keeps only the SHA-256 hash of
+    `glimmerdeep review code:` followed by the code (capitals and digits only), so a new code needs a new
+    build. Checks put a code of their own in its place with the `__gd.reviewHash(hash)` hook.
 
 ## 15. Daily Glimmer (decided 18 Nov 2026)
 

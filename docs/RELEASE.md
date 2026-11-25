@@ -84,7 +84,14 @@ Answer each task on the Dashboard as below.
 - **Privacy policy:** `https://github.com/Code-Enzyme/glimmerdeep/blob/main/store/privacy-policy.md`
   (the repository is public, so GitHub shows it to anyone). It names Code Enzyme as the maker; change that
   line if your Play developer name differs.
-- **App access:** All functionality is available without special access.
+- **App access (Sign in details):** Google counts the paid chapters as restricted, so reviewers get the
+  **reviewer code** (SPEC section 14): in the Store, **Have a code?** opens the Full Expedition when the code
+  is typed. Answer that some functionality is restricted, add one set of details with no username or
+  password and these instructions: "No account is needed. On the map, tap Store, then Have a code?, type
+  the code below and tap Use. Every chapter and the Night Garden open." followed by the code, and tick the
+  box that the details give full access, including paid content. The code is not in the repository (only
+  its hash, in `src/ui/shop.js`); keep it in your password manager. A new code needs a new hash and a new
+  build. Anyone who learns the code plays the Full Expedition free.
 - **Ads:** No, my app does not contain ads.
 - **Content rating:** start the questionnaire with your email; category **Game**. Answer **No** to
   violence, fear, sexuality, language, controlled substances, crude humour, gambling and simulated

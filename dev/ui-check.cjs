@@ -7,6 +7,7 @@
 //   node dev/ui-check.cjs --only=controls   only the controls' checks (SPEC section 27)
 //   node dev/ui-check.cjs --only=news       only What's new (SPEC section 30); also talk, paths, bramble
 //   node dev/ui-check.cjs --only=about      only About and the tester notes (SPEC section 33)
+//   node dev/ui-check.cjs --only=code       only the reviewer code in the Store (SPEC section 14)
 //
 // The page is opened from file://, in a 390 by 844 touch context. Any console error or page error fails
 // the run. Expectations about levels come from the real modules (levels, engine, solver) and the rule
@@ -3206,6 +3207,122 @@ async function main() {
   }
 
   // ------------------------------------------------------------------ About and tester notes (SPEC section 33)
+  // ------------------------------------------------------------------ the reviewer code (SPEC section 14)
+  async function codeChecks() {
+    console.log('reviewer code');
+    const { createHash } = require('crypto');
+    // the real code is never in the repository: this one stands in for it, through __gd.reviewHash
+    const CODE = 'TEST-CODE-2345';
+    const hash = createHash('sha256').update('glimmerdeep review code:' + CODE.replace(/-/g, '')).digest('hex');
+    // no Glimmer and a free hint taken just now, so Hint opens the Store over a level
+    const shop = { full: false, glimmer: 0, freeAt: Date.now(), paid: [] };
+    const c = await phone({ tag: 'code', seed: { levels: {}, seen: STORY.map((pg) => pg.id), critters: [], shop, settings: { tutorials: false } } });
+    const t = async (sel) => ((await c.page.locator(sel).textContent()) || '').trim();
+    const panelIs = (name) => c.page.waitForFunction((n) => window.__gd.panel() === n, name);
+    const last = async () => (await c.gd('heard')).slice(-1)[0];
+    const openCode = async () => {
+      await c.page.locator('#shop-code').tap();
+      await panelIs('redeem');
+    };
+    await c.open();
+
+    // over a level, what is typed in the box stays in the box
+    await c.gd('loadLevel', first.id);
+    await c.page.waitForFunction(() => window.__gd.screen() === 'level');
+    if ((await c.gd('panel')) === 'card') await c.page.keyboard.press('Escape');
+    await c.idle();
+    const before = await c.gd('key');
+    await c.page.locator('#btn-hint').tap();
+    await panelIs('shop');
+    await openCode();
+    await c.page.keyboard.type('wasdlrhcz.');
+    await c.page.keyboard.press('Backspace');
+    await c.page.keyboard.press('ArrowUp');
+    await c.page.keyboard.press('Space');
+    eq('code: over a level, keys typed in the box never reach the board',
+      [await c.gd('key'), await c.gd('moves'), await c.gd('panel'), await c.gd('screen')], [before, 0, 'redeem', 'level']);
+    // (Up moves the caret to the start of the box, so the space lands there)
+    eq('code: they go into the box', await c.page.locator('#redeem-input').inputValue(), ' wasdlrhcz');
+    await c.page.locator('#redeem-close').tap();
+    await panelIs('shop');
+    await c.page.locator('#shop-close').tap();
+    await c.page.locator('#back').tap();
+    await c.page.waitForFunction(() => window.__gd.screen() === 'map');
+
+    // the Store's Have a code?
+    await c.page.locator('#btn-shop').tap();
+    await panelIs('shop');
+    ok('code: the Store offers Have a code?', await c.page.locator('#shop-code').isVisible());
+    eq('code: its words and label', [await t('#shop-code'), await c.page.locator('#shop-code').getAttribute('aria-label')], ['Have a code?', 'Enter a code']);
+    {
+      const top = (await c.page.locator('#shop').boundingBox()).y;
+      ok('code: the Store still leaves room above it', top > 60, top);
+      const b = await c.page.locator('#shop-code').boundingBox();
+      const close = await c.page.locator('#shop-close').boundingBox();
+      ok('code: Have a code? is under the buttons, on screen, at least 44 px tall',
+        b && close && b.y >= close.y + close.height && b.y + b.height <= 844 && b.height >= 44, JSON.stringify(b));
+    }
+    await auditPage(c, 'store with a code');
+    await c.shot('store-code');
+
+    // the sheet
+    await openCode();
+    ok('code: the sheet shows', await c.page.locator('#redeem-sheet').isVisible());
+    ok('code: the Store hides under it', !(await c.page.locator('#shop').isVisible()));
+    eq('code: the sheet says what it is', await t('#redeem-title'), 'Enter a code');
+    eq('code: the box has the focus', await c.page.evaluate(() => document.activeElement && document.activeElement.id), 'redeem-input');
+    eq('code: Use and Cancel', [await t('#redeem-use'), await t('#redeem-close')], ['Use', 'Cancel']);
+    await auditPage(c, 'code sheet');
+    await c.shot('code-sheet');
+    await c.page.locator('#redeem-use').tap();
+    eq('code: nothing typed', [await t('#redeem-why'), await last(), await c.gd('panel')], ['Type the code first.', 'blocked', 'redeem']);
+    await c.page.locator('#redeem-input').fill('NOT-THE-CODE');
+    await c.page.locator('#redeem-use').tap();
+    eq('code: a wrong code', [await t('#redeem-why'), await last(), (await c.gd('shop')).full], ['That code does not open anything.', 'blocked', false]);
+    await c.page.locator('#redeem-input').fill(CODE);
+    await c.page.locator('#redeem-use').tap();
+    eq("code: the check's code is not the real one", [await t('#redeem-why'), (await c.gd('shop')).full], ['That code does not open anything.', false]);
+    eq('code: a wrong code changes nothing in the save', (await c.gd('save')).shop, { ...shop, freeAt: (await c.gd('save')).shop.freeAt });
+
+    // ways back to the Store
+    await c.page.locator('#redeem-close').tap();
+    eq('code: Cancel goes back to the Store',
+      [await c.gd('panel'), await c.page.locator('#redeem-sheet').isVisible(), await c.page.locator('#shop').isVisible()], ['shop', false, true]);
+    await openCode();
+    eq('code: the box opens again empty, with no message', [await c.page.locator('#redeem-input').inputValue(), await c.page.locator('#redeem-why').isVisible()], ['', false]);
+    await c.page.keyboard.press('Escape');
+    eq('code: Escape (Back) goes back to the Store', [await c.gd('panel'), await c.page.locator('#shop').isVisible()], ['shop', true]);
+    await openCode();
+    {
+      const top = (await c.page.locator('#redeem-sheet').boundingBox()).y;
+      ok('code: the sheet leaves room above it to tap', top >= 12, top);
+      await c.page.touchscreen.tap(195, Math.max(1, top / 2));
+      eq('code: a tap outside goes back to the Store', [await c.gd('panel'), await c.page.locator('#shop').isVisible()], ['shop', true]);
+    }
+
+    // the right code (the check's, standing in for the real one)
+    eq('code: __gd.reviewHash puts a code in place of the real one', await c.gd('reviewHash', hash), true);
+    await openCode();
+    await c.page.locator('#redeem-input').fill('test code 2345');
+    await c.page.keyboard.press('Enter');
+    await panelIs('shop');
+    eq('code: the right code opens the Full Expedition', (await c.gd('shop')).full, true);
+    eq('code: the Store says so', await t('#shop-note'), 'Code accepted. Every chapter is open now.');
+    eq('code: and plays the solve sound', await last(), 'solve');
+    eq('code: the Full Expedition shows as owned', await t('#shop-full'), 'Owned');
+    ok('code: Have a code? is gone once it is owned', !(await c.page.locator('#shop-code').isVisible()));
+    await c.shot('code-accepted');
+    await c.page.locator('#shop-close').tap();
+    eq('code: no chapter is marked as paid any more', await c.page.locator('.chapter.paid').count(), 0);
+    await c.reopen();
+    await c.toMap();
+    eq('code: it is kept when the app starts again', (await c.gd('shop')).full, true);
+    await c.page.locator('#set-reset').tap();
+    await c.page.locator('#confirm-yes').tap();
+    eq('code: Reset progress keeps it', (await c.gd('shop')).full, true);
+    await c.close();
+  }
+
   async function aboutChecks() {
     console.log('about');
     const PRIVACY = 'Glimmerdeep collects nothing and sends nothing. Your progress stays on this phone, and purchases go through Google Play.';
@@ -3585,6 +3702,7 @@ async function main() {
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'paths')) await pathsChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'news')) await newsChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'about')) await aboutChecks();
+  if (!SHOTS_ONLY && (!ONLY || ONLY === 'code')) await codeChecks();
   if (!SHOTS_ONLY && (!ONLY || ONLY === 'bramble')) await brambleChecks();
 
   // ------------------------------------------------------------------ screenshots

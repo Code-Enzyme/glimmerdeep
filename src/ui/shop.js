@@ -2,6 +2,8 @@
 // in Node tests. Which store sells (Google Play or the free test store) is src/ui/native.js's business;
 // this file only decides what a purchase is worth and what a hint costs.
 
+import { sha256Hex } from './sha256.js';
+
 export const PRODUCTS = { full: 'full_expedition', jar: 'glimmer_10' };
 
 // The prices here only show in the test store and until the real store's prices arrive.
@@ -105,4 +107,27 @@ export function settle(shop, purchases) {
     }
   }
   return { granted, confirm };
+}
+
+// ---------------------------------------------------------------- the reviewer code
+
+// Google Play's reviewers get one code that opens the Full Expedition (SPEC section 14). Only its hash is here: the
+// SHA-256 of REVIEW_SALT followed by the code in capitals and digits. A new code needs a new build.
+export const REVIEW_SALT = 'glimmerdeep review code:';
+export const REVIEW_HASH = '6b98f0176eaac1aa53cc5c4657b5833160e95b62ba71da4157b13d1782dab31d';
+
+// What was typed, with case, spaces and dashes (and anything else but letters and digits) left out.
+export function normalCode(text) {
+  return String(text == null ? '' : text).toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+// Tries a typed code. Mutates `shop` only when it opens the Full Expedition.
+// -> 'opened' | 'owned' (right code, already open) | 'wrong' | 'empty'
+export function redeemCode(shop, text, hash = REVIEW_HASH) {
+  const code = normalCode(text);
+  if (!code) return 'empty';
+  if (sha256Hex(REVIEW_SALT + code) !== hash) return 'wrong';
+  if (shop.full) return 'owned';
+  shop.full = true;
+  return 'opened';
 }

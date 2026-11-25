@@ -1086,6 +1086,21 @@ button { font: inherit; color: inherit; -webkit-appearance: none; appearance: no
 .shop-note:empty { display: none; }
 .shop-test { margin-top: 8px; font: 600 14px/1.3 var(--sans); color: #6B4B2A; }
 .hc .offer p, .hc .shop-test, .hc .shop-why, .hc .shop-note { color: var(--ink); }
+/* the reviewer code (SPEC section 14): quiet, under the buttons */
+.shop-code {
+  display: block;
+  min-height: 44px;
+  margin: 8px auto -6px;
+  padding: 8px 14px;
+  font: 600 15px/1.2 var(--sans);
+  color: #4B3856;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+}
+.shop-code[hidden] { display: none; }
+.hc .shop-code { color: var(--ink); }
 
 /* ------------------------------------------------------------------ the Workshop (SPEC section 26) */
 

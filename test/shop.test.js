@@ -4,8 +4,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   PRODUCTS, CATALOG, FREE_HINT_MS, START_GLIMMER, freshShop, readShop, chapterOpen, hintCost, payHint,
-  hintLabel, settle,
+  hintLabel, settle, REVIEW_SALT, REVIEW_HASH, normalCode, redeemCode,
 } from '../src/ui/shop.js';
+import { sha256Hex } from '../src/ui/sha256.js';
+import { createHash } from 'node:crypto';
 
 const MIN = 60 * 1000;
 const bought = (id, token, extra) => ({ products: [id], token, state: 'purchased', acknowledged: false, ...extra });
@@ -139,4 +141,62 @@ test('settle: junk in the report is ignored', () => {
   assert.deepEqual(settle(shop, null), { granted: [], confirm: [] });
   assert.deepEqual(settle(shop, [null, {}, { products: 'glimmer_10', token: 'Z', state: 'purchased' }]), { granted: [], confirm: [] });
   assert.deepEqual(shop, freshShop());
+});
+
+// ---------------------------------------------------------------- the reviewer code (SPEC section 14)
+
+test('sha256Hex: the standard test vectors', () => {
+  assert.equal(sha256Hex(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  assert.equal(sha256Hex('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  assert.equal(sha256Hex('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq'),
+    '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1');
+});
+
+test('sha256Hex: agrees with Node at every length around a block, and with letters beyond ASCII', () => {
+  for (let n = 0; n < 200; n++) {
+    const text = 'Wren\u2019s lantern \u00e9\u{1F56F}'.repeat(8).slice(0, n);
+    assert.equal(sha256Hex(text), createHash('sha256').update(text, 'utf8').digest('hex'), `length ${n}`);
+  }
+});
+
+test('normalCode: case, spaces and dashes do not matter', () => {
+  assert.equal(normalCode(' ab12-cd34 ef56 '), 'AB12CD34EF56');
+  assert.equal(normalCode('AB12CD34EF56'), 'AB12CD34EF56');
+  assert.equal(normalCode(''), '');
+  assert.equal(normalCode(null), '');
+  assert.equal(normalCode(undefined), '');
+});
+
+test('redeemCode: the right code opens the Full Expedition once; nothing else changes the shop', () => {
+  const hash = sha256Hex(REVIEW_SALT + 'TESTCODE2345');
+  const shop = freshShop();
+  assert.equal(redeemCode(shop, '', hash), 'empty');
+  assert.equal(redeemCode(shop, '  - ', hash), 'empty');
+  assert.equal(redeemCode(shop, 'TESTCODE2346', hash), 'wrong');
+  assert.equal(redeemCode(shop, 'TESTCODE234', hash), 'wrong');
+  assert.deepEqual(shop, freshShop(), 'a wrong or empty code changes nothing');
+  assert.equal(redeemCode(shop, 'test-code 2345', hash), 'opened');
+  assert.equal(shop.full, true);
+  assert.deepEqual({ ...shop, full: false }, freshShop(), 'only the Full Expedition changes');
+  assert.equal(redeemCode(shop, 'TESTCODE2345', hash), 'owned');
+  assert.equal(shop.full, true);
+});
+
+test('redeemCode: what it opens is kept like a purchase', () => {
+  const hash = sha256Hex(REVIEW_SALT + 'TESTCODE2345');
+  const shop = freshShop();
+  redeemCode(shop, 'TESTCODE2345', hash);
+  assert.equal(readShop(JSON.parse(JSON.stringify(shop))).full, true, 'it survives the save');
+  settle(shop, []);
+  assert.equal(shop.full, true, 'a Restore that finds no purchase never takes it away');
+});
+
+test('redeemCode: the real code is only a hash, and no short or obvious code opens it', () => {
+  assert.equal(REVIEW_SALT, 'glimmerdeep review code:');
+  assert.match(REVIEW_HASH, /^[0-9a-f]{64}$/);
+  const shop = freshShop();
+  for (const guess of ['', 'GLIMMERDEEP', 'REVIEW', 'REVIEWER', 'GOOGLE', 'WREN', 'LANTERN', 'TEST', '1234', '0000', 'FREE']) {
+    assert.notEqual(redeemCode(shop, guess), 'opened', guess);
+  }
+  assert.equal(shop.full, false);
 });

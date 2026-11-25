@@ -279,6 +279,19 @@
       <button id="shop-restore" class="btn" type="button" aria-label="Restore purchases">Restore</button>
       <button id="shop-close" class="btn" type="button" aria-label="Close the store">Close</button>
     </div>
+    <button id="shop-code" class="shop-code" type="button" aria-label="Enter a code">Have a code?</button>
+  </aside>
+
+  <!-- The reviewer code: opens the Full Expedition (SPEC section 14) -->
+  <aside id="redeem-sheet" class="sheet paper code-sheet" role="dialog" aria-modal="true" aria-labelledby="redeem-title" hidden>
+    <span class="kicker ink">Wren's satchel</span>
+    <h3 id="redeem-title">Enter a code</h3>
+    <input id="redeem-input" class="code-input" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" aria-label="Code" placeholder="Type the code">
+    <p id="redeem-why" class="shop-why" role="alert" hidden></p>
+    <div class="buttons">
+      <button id="redeem-use" class="btn primary" type="button" aria-label="Use this code">Use</button>
+      <button id="redeem-close" class="btn" type="button" aria-label="Cancel, back to the Store">Cancel</button>
+    </div>
   </aside>
 
   <!-- Lantern styles, earned with star moss (SPEC section 24) -->
