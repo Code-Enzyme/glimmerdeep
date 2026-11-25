@@ -27,8 +27,10 @@ in):
 tools/make-upload-key.sh
 ```
 
-It asks you for a password (twice), makes `~/glimmerdeep-upload.jks`, prints its fingerprint, adds the four
-secrets below to the repository with `gh`, and starts the Release workflow. The password goes to keytool and
+It first checks that `gh` may set the repository's secrets (if not, it says how to sign in as an admin of the
+repository, and changes nothing). Then it asks you for a password (twice), makes `~/glimmerdeep-upload.jks`,
+prints its fingerprint, adds the four secrets below with `gh`, and starts the Release workflow. If the key is
+already there from a run that stopped early, it keeps it and asks for its password once. The password goes to keytool and
 to GitHub's encrypted secrets only, never onto a command line or into a file
 (`test/upload-key.test.js` checks that). Put the `.jks` file and the password in your password manager. If
 the key is ever lost, Google can reset it, but that takes days.
